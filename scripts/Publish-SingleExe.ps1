@@ -153,6 +153,8 @@ function Resolve-OutputFile {
 function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
     $rid = "win-$Architecture"
     $platform = Get-MsbuildPlatform $Architecture
+    $readyToRunValue = 'false'
+    if ($ReadyToRun) { $readyToRunValue = 'true' }
     $publishArgs = @(
         'publish', $script:ProjectFile,
         '-c', $Configuration,
@@ -165,11 +167,11 @@ function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
         '-p:EnableCompressionInSingleFile=false',
         '-p:PublishTrimmed=false',
         '-p:EnableTrimAnalyzer=false',
-        '-p:PublishReadyToRun=' + ($(if ($ReadyToRun) { 'true' } else { 'false' })),
+        "-p:PublishReadyToRun=$readyToRunValue",
         '-p:DebugType=none',
         '-p:DebugSymbols=false',
         '-p:CopyOutputSymbolsToPublishDirectory=false',
-        '-p:SatelliteResourceLanguages=zh-CN;zh-Hans;zh-TW;zh-Hant;en;en-US;en-GB',
+        '-p:SatelliteResourceLanguages=zh-CN%3Bzh-Hans%3Bzh-TW%3Bzh-Hant%3Ben%3Ben-US%3Ben-GB',
         '-p:TieredCompilation=true',
         '-p:TieredCompilationQuickJit=true',
         '-p:TieredPGO=true',
@@ -178,7 +180,6 @@ function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
         "-p:RuntimeIdentifier=$rid",
         "-p:Platform=$platform",
         ('-p:OutputPath=' + (Join-Path $script:WorkRoot 'build\')),
-        ('-p:BaseIntermediateOutputPath=' + (Join-Path $script:WorkRoot 'obj\')),
         '-o', $OutDir,
         '--nologo',
         '--disable-build-servers'
@@ -346,7 +347,7 @@ function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe) {
     }
     $platform = if ($Architecture -eq 'arm64') { 'arm64' } else { 'x64' }
     $icon = Join-Path $script:ProjectDir 'Images\icon.ico'
-    $args = @(
+    $cscArgs = @(
         $csc,
         '/nologo', '/noconfig', '/nostdlib+', '/optimize+', '/deterministic+',
         '/target:winexe',
@@ -358,11 +359,11 @@ function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe) {
         ('/out:' + $OutExe)
     ) + $refArgs
     if (Test-Path -LiteralPath $icon -PathType Leaf) {
-        $args += ('/win32icon:' + $icon)
+        $cscArgs += ('/win32icon:' + $icon)
     }
-    $args += (Join-Path $script:StubDir 'Bootstrapper.cs')
+    $cscArgs += (Join-Path $script:StubDir 'Bootstrapper.cs')
     Write-Step "编译 .NET Framework 启动器（不链接 .NET 10）"
-    & $DotNetExe exec @args
+    & $DotNetExe exec @cscArgs
     Assert-LastExitCode 'csc'
     if (-not (Test-Path -LiteralPath $OutExe -PathType Leaf)) {
         Throw-Single "启动器没有生成: $OutExe"

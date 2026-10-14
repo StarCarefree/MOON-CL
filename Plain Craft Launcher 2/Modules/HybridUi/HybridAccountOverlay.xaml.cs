@@ -166,12 +166,12 @@ public partial class HybridAccountOverlay
         return row;
     }
 
-    private static UIElement CreateAvatar(McProfile profile)
+    private UIElement CreateAvatar(McProfile profile)
     {
         var letter = new TextBlock
         {
             Text = string.IsNullOrEmpty(profile.UserName) ? "?" : profile.UserName[..1],
-            Foreground = (Brush)Application.Current.FindResource("Hybrid.Accent"),
+            Foreground = (Brush)FindResource("Hybrid.Accent"),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 13
