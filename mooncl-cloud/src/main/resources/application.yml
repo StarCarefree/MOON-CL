@@ -1,0 +1,36 @@
+server:
+  port: ${MOONCL_PUBLIC_PORT:8080}
+  address: ${MOONCL_PUBLIC_BIND:0.0.0.0}
+  shutdown: graceful
+  max-http-request-header-size: 8KB
+  tomcat:
+    threads:
+      max: 64
+      min-spare: 4
+    max-connections: 2048
+    accept-count: 100
+    connection-timeout: 10s
+    keep-alive-timeout: 15s
+    max-keep-alive-requests: 100
+  error:
+    include-message: never
+    include-stacktrace: never
+spring:
+  main:
+    banner-mode: off
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  servlet:
+    multipart:
+      enabled: false
+  web:
+    resources:
+      add-mappings: false
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+mooncl:
+  admin-port: ${MOONCL_ADMIN_PORT:8081}
+  admin-bind: ${MOONCL_ADMIN_BIND:127.0.0.1}
+  admin-token: ${MOONCL_ADMIN_TOKEN:}
+  data-dir: ${MOONCL_DATA_DIR:./data}
