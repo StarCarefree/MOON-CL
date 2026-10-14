@@ -37,7 +37,6 @@ public partial class Application
             // 创建自定义跟踪监听器，用于检测是否存在 Binding 失败
             PresentationTraceSources.DataBindingSource.Listeners.Add(new BindingErrorTraceListener());
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
-            Thread.CurrentThread.Priority = ThreadPriority.Highest;
             StartupValidation.EnsureWpfFont();
 
             // 检查参数调用

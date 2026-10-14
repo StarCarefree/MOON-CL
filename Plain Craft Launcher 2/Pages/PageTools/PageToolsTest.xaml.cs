@@ -487,6 +487,11 @@ public partial class PageToolsTest
     {
         ModMain.MyMsgBox(Lang.Text("Tools.Test.LaunchCount.Message", States.System.LaunchCount), Lang.Text("Tools.Test.LaunchCount.Title"));
     }
+    private void BtnWebUi_Click(object sender, MouseButtonEventArgs e)
+    {
+        _ = ModMain.frmMain.ShowWebUiAsync();
+    }
+
 
     private async void BtnAchievementPreview_Click(object sender, MouseButtonEventArgs e)
     {

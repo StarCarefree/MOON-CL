@@ -324,7 +324,7 @@
     input.setCustomValidity(base ? '' : '请输入 HTTP(S) 服务地址，仅包含主机和可选端口，不含路径、凭据或查询参数。');
     $('copy-catalog').disabled = !base;
     $('copy-download').disabled = !base;
-    $('catalog-url').textContent = base ? `${base.origin}/catalog.json` : '请填写有效的公开服务地址';
+    $('catalog-url').textContent = base ? `${base.origin}/index.json` : '请填写有效的公开服务地址';
     $('download-url').textContent = base && linkPack
       ? `${base.origin}/api/v1/packs/${encodeURIComponent(linkPack.id)}/download?mirror=${$('mirror-select').value}` : '';
     if (base) publicOrigin = base.origin;

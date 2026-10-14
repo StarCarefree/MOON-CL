@@ -56,6 +56,9 @@ PCL CE 是基于 PCL 开源代码二次开发的社区版本，包括了主线�
 取决于部分问题的特殊性（如系统不完整），有时你仍然必须升级操作系统以继续获得支持。    
 PCL CE 始终建议使用最新版本的操作系统以获得最佳体验。    
 你仍然可以尝试在不受支持的系统上使用 PCL CE，但可能会遇到很多额外问题。
+ 
+ 便携压缩包不附带 .NET 10。解压后运行 `Start-PCL-CY.cmd`；只有同意后才会从微软官方地址下载并安装 .NET 10 Desktop Runtime。见 `docs/webview2-portable.md`。
+单个 exe 用 `scripts/Publish-SingleExe.bat` 双击生成，同样不附带 .NET 10；未安装时由窗口征求同意后再下载。
 
 ## 🔒 许可证
 

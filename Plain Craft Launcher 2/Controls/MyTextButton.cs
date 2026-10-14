@@ -60,6 +60,11 @@ public class MyTextButton : Label
     }
 
     public event ClickEventHandler? Click;
+    internal void WebClick()
+    {
+        Click?.Invoke(this, EventArgs.Empty);
+        ModMain.RaiseCustomEvent(this);
+    }
 
     private (string ForeName, int Time) GetVisualState()
     {

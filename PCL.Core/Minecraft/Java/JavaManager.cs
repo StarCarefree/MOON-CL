@@ -110,7 +110,7 @@ public class JavaManager
     {
         if (ShouldSkip()) return;
 
-        if (!await _scanLock.WaitAsync(TimeSpan.FromSeconds(7))) return;
+        await _scanLock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (ShouldSkip()) return;

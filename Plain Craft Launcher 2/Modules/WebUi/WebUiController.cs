@@ -1,0 +1,272 @@
+using System;
+using System.ComponentModel;
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
+using PCL.Core.App;
+using PCL.Core.App.Localization;
+using PCL.Core.UI.WebHost;
+
+namespace PCL;
+
+/// <summary>Optional browse/pack-services surface. The window, game launch and all original pages remain native.</summary>
+internal sealed class WebUiController : IDisposable
+{
+    private WebView2? _view;
+    private LauncherLibrary? _library;
+    private FormMain? _form;
+    private DispatcherTimer? _timer;
+    private Task? _initializing;
+    private DependencyPropertyDescriptor? _modalVisibility;
+    private int _generation;
+    private bool _ready;
+    private bool _disposed;
+    private string _runtimeVersion = "";
+    private bool _bundledRuntime;
+    private string _lastSnapshot = "";
+
+    public bool IsAttached => _view is not null;
+    public bool IsPresented { get; private set; }
+    public bool HasKeyboardFocus => IsPresented && _view?.Visibility == Visibility.Visible &&
+        ((_view?.IsKeyboardFocusWithin ?? false) || (_form is { } form && HybridBrowserFocus.HasNativeChildFocus(form)));
+    public static bool RequestedByArguments(System.Collections.Generic.IEnumerable<string> args) => WebView2RuntimePlan.UseWebUi(args.ToArray());
+
+    public async Task AttachAsync(FormMain form)
+    {
+        if (_disposed) return;
+        _form = form;
+        IsPresented = true;
+        form.SetBrowseVisible(true);
+        if (_view is null && _initializing is { IsCompleted: true }) _initializing = null;
+        _initializing ??= InitializeAsync(form);
+        await _initializing;
+        if (!_disposed)
+        {
+            UpdatePresentation();
+            if (_ready && IsPresented && form.PanMsgBackground.Visibility != Visibility.Visible && _view is { } view)
+            {
+                view.UpdateLayout();
+                await form.Dispatcher.InvokeAsync(() =>
+                {
+                    if (IsPresented && !_disposed)
+                    {
+                        view.Focus();
+                        System.Windows.Input.Keyboard.Focus(view);
+                    }
+                }, DispatcherPriority.Input);
+            }
+        }
+        Refresh(force: true);
+    }
+
+    private async Task InitializeAsync(FormMain form)
+    {
+        var generation = ++_generation;
+        try
+        {
+            var folder = WebView2RuntimePlan.FindBundledFolder(AppContext.BaseDirectory, File.Exists);
+            _bundledRuntime = folder is not null;
+            Environment.SetEnvironmentVariable(SystemWebView2Plan.LoaderOverride, folder);
+            _runtimeVersion = CoreWebView2Environment.GetAvailableBrowserVersionString(folder);
+            _library ??= new LauncherLibrary();
+            var view = new WebView2 { Focusable = true, DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 17, 19, 21) };
+            _view = view;
+            form.PanBrowse.Children.Add(view);
+            _modalVisibility = DependencyPropertyDescriptor.FromProperty(UIElement.VisibilityProperty, typeof(UIElement));
+            _modalVisibility.AddValueChanged(form.PanMsgBackground, OnModalChanged);
+            form.Closed += OnClosed;
+            UpdatePresentation();
+            var environment = await CoreWebView2Environment.CreateAsync(folder, WebUiAssets.UserDataFolder());
+            if (_disposed || generation != _generation) return;
+            await view.EnsureCoreWebView2Async(environment);
+            if (_disposed || generation != _generation || view.CoreWebView2 is null) return;
+            var core = view.CoreWebView2;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.AreDefaultContextMenusEnabled = ModBase.modeDebug;
+            core.Settings.AreDevToolsEnabled = ModBase.modeDebug;
+            core.Settings.IsWebMessageEnabled = true;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsBuiltInErrorPageEnabled = false;
+            core.SetVirtualHostNameToFolderMapping(WebUiAssets.HostName, WebUiAssets.Extract(), CoreWebView2HostResourceAccessKind.DenyCors);
+            core.NavigationStarting += (_, e) =>
+            {
+                if (WebView2RuntimePlan.IsTrustedSource(e.Uri, WebUiAssets.HostName)) return;
+                e.Cancel = true;
+                OpenExternal(e.Uri);
+            };
+            core.NewWindowRequested += (_, e) => { e.Handled = true; OpenExternal(e.Uri); };
+            core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+            core.WebMessageReceived += (_, e) =>
+            {
+                if (_disposed || generation != _generation || !WebView2RuntimePlan.IsTrustedSource(e.Source, WebUiAssets.HostName)) return;
+                var json = e.WebMessageAsJson;
+                form.Dispatcher.BeginInvoke(() =>
+                {
+                    if (!_disposed && generation == _generation) OnMessage(core, json, form);
+                });
+            };
+            core.NavigationCompleted += (_, e) =>
+            {
+                if (_disposed || generation != _generation || !e.IsSuccess) return;
+                _ready = true;
+                SendBootstrap(core);
+                Refresh(force: true);
+                if (IsPresented && form.PanMsgBackground.Visibility != Visibility.Visible) view.Focus();
+            };
+            _timer = new DispatcherTimer(DispatcherPriority.Background, form.Dispatcher) { Interval = TimeSpan.FromMilliseconds(500) };
+            _timer.Tick += OnTick;
+            _timer.Start();
+            core.Navigate("https://" + WebUiAssets.HostName + "/index.html");
+            ModBase.Log($"[WebUi] 浏览补充页已启动：{(_bundledRuntime ? "随包固定运行时" : "系统运行时")} {_runtimeVersion}");
+        }
+        catch (Exception ex)
+        {
+            if (_disposed || generation != _generation) return;
+            Hide();
+            ReleaseView();
+            _initializing = null;
+            ModBase.Log(ex, "浏览补充页启动失败，原生界面保持可用");
+            ModMain.MyMsgBox(Lang.Text("Hybrid.BrowserFailed") + "\n\n" + ex.Message, Lang.Text("Hybrid.Browse"));
+        }
+    }
+
+    public void Hide()
+    {
+        IsPresented = false;
+        _form?.SetBrowseVisible(false);
+        UpdatePresentation();
+        if (_form is { } form && form.PanMsgBackground.Visibility != Visibility.Visible)
+            System.Windows.Input.Keyboard.Focus(form.PanMain);
+    }
+
+    private void OnModalChanged(object? sender, EventArgs e) => UpdatePresentation();
+    private void UpdatePresentation()
+    {
+        if (_view is null || _form is null) return;
+        // A WPF overlay cannot cover WebView2's child HWND. Hide the browser during native modal dialogs.
+        _view.Visibility = IsPresented && _form.PanMsgBackground.Visibility != Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnTick(object? sender, EventArgs e)
+    {
+        if (_disposed || !IsPresented || _form is not { } form || form.PanMsgBackground.Visibility == Visibility.Visible) return;
+        try
+        {
+            Refresh();
+            if (_library is not null) await _library.RefreshIfNeededAsync(form);
+        }
+        catch (Exception ex) { ModBase.Log(ex, "刷新浏览补充页失败", ModBase.LogLevel.Debug); }
+    }
+
+    public async Task CheckPackUpdatesOnceAsync()
+    {
+        if (_disposed) return;
+        _library ??= new LauncherLibrary();
+        await _library.CheckManagedOnceAsync();
+    }
+
+    public bool TakeUpdateHint(bool deliver)
+    {
+        if (_library is not { HasUpdateHint: true }) return false;
+        if (!deliver) return false;
+        _library.ClearUpdateHint();
+        return true;
+    }
+
+    public void ClearUpdateHint() => _library?.ClearUpdateHint();
+
+    private void Refresh(bool force = false)
+    {
+        if (!_ready || !IsPresented || _form is null || _library is null || _view?.CoreWebView2 is not { } core || _form.WindowState == WindowState.Minimized) return;
+        try
+        {
+            var snapshot = new JsonObject { ["type"] = "browse", ["launcher"] = _library.Capture() };
+            var json = snapshot.ToJsonString();
+            if (!force && json == _lastSnapshot) return;
+            _lastSnapshot = json;
+            core.PostWebMessageAsJson(json);
+        }
+        catch (Exception ex) { ModBase.Log(ex, "浏览数据同步失败", ModBase.LogLevel.Debug); }
+    }
+
+    private async void OnMessage(CoreWebView2 core, string json, FormMain form)
+    {
+        if (_disposed || json.Length > 131072) return;
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonObject message) return;
+            var type = ReadString(message, "type");
+            if (type == "status") { core.PostWebMessageAsJson(form.HybridStatus().ToJsonString()); return; }
+#if DEBUG
+            if (Basics.CommandLineArguments.Contains("--hybrid-smoke"))
+            {
+                if (type == "testNavigate") { await form.NavigateHybridForTestAsync(ReadString(message, "page"), ReadString(message, "id")); return; }
+                if (type == "testCaptureNative") { form.CaptureHybridNativeForTest(); core.PostWebMessageAsJson(form.HybridStatus().ToJsonString()); return; }
+            }
+#endif
+            if (!IsPresented || form.PanMsgBackground.Visibility == Visibility.Visible) return;
+            switch (type)
+            {
+                case "bootstrap": SendBootstrap(core); Refresh(force: true); break;
+                case "launcher" when _library is not null:
+                    await _library.HandleAsync(message, form);
+                    Refresh(force: true);
+                    break;
+                case "native": await form.NavigateHybridAsync(ReadString(message, "page")); break;
+                case "openExternal": OpenExternal(ReadString(message, "url")); break;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModBase.Log(ex, "浏览补充页消息处理失败", ModBase.LogLevel.Debug);
+            if (!_disposed && _view?.CoreWebView2 is not null)
+                core.PostWebMessageAsJson(new JsonObject { ["type"] = "error", ["message"] = ex.Message }.ToJsonString());
+        }
+    }
+
+    private void SendBootstrap(CoreWebView2 core) => core.PostWebMessageAsJson(new JsonObject
+    {
+        ["type"] = "bootstrap", ["primaryUi"] = "native", ["view"] = "browse",
+        ["language"] = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName,
+        ["version"] = Basics.VersionName, ["branch"] = Basics.VersionBranch,
+        ["runtimeVersion"] = _runtimeVersion, ["bundledRuntime"] = _bundledRuntime
+    }.ToJsonString());
+
+    private static string? ReadString(JsonObject message, string name) => message[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+    private static void OpenExternal(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !ChromeLinkPlan.IsHttp(url)) return;
+        if (!SystemChromeLink.TryOpenHttp(url)) ModBase.OpenWebsite(url);
+    }
+
+    private void OnClosed(object? sender, EventArgs e) => Dispose();
+    private void ReleaseView()
+    {
+        ++_generation;
+        _ready = false;
+        _lastSnapshot = "";
+        if (_timer is not null) { _timer.Stop(); _timer.Tick -= OnTick; _timer = null; }
+        if (_form is not null)
+        {
+            _form.Closed -= OnClosed;
+            _modalVisibility?.RemoveValueChanged(_form.PanMsgBackground, OnModalChanged);
+            if (_view is not null) _form.PanBrowse.Children.Remove(_view);
+        }
+        _modalVisibility = null;
+        _view?.Dispose();
+        _view = null;
+    }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        ReleaseView();
+        _library?.Dispose();
+        _library = null;
+        _form = null;
+    }
+}

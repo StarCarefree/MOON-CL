@@ -96,6 +96,17 @@ public partial class PageToolsGameLink
         HintAnnounce.Text = Lang.Text("Tools.GameLink.Loading.ConnectingServer");
         HintAnnounce.Theme = MyHint.Themes.Blue;
 
+        if (!Secrets.LinkServers.Any(root => Uri.TryCreate(root, UriKind.Absolute, out var uri) &&
+            uri.Scheme is "http" or "https"))
+        {
+            _announcementLoadState = AnnouncementLoadState.Failed;
+            HintAnnounce.Theme = MyHint.Themes.Red;
+            HintAnnounce.Text = Lang.Text("Tools.GameLink.Error.ConnectFailed");
+            LobbyInfoProvider.IsLobbyAvailable = false;
+            ModBase.Log("[Link] 此构建未配置有效的联机服务器，跳过联机公告和服务初始化。");
+            return;
+        }
+
         if (_linkAnnounceUpdateCancelSource is not null)
             _linkAnnounceUpdateCancelSource.Cancel();
         _linkAnnounceUpdateCancelSource = new CancellationTokenSource();

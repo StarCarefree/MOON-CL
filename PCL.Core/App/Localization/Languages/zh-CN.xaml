@@ -1013,6 +1013,13 @@
     <sys:String x:Key="Instance.Overall.Info.LaunchCount.Count">已启动 {0} 次</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LaunchCount.Never">从未启动</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LaunchCount.Title">启动次数</sys:String>
+    <sys:String x:Key="Instance.Overall.Info.PlayTime.None">尚未游玩</sys:String>
+    <sys:String x:Key="Instance.Overall.Info.PlayTime.Title">游玩时间</sys:String>
+    <sys:String x:Key="Hybrid.Running">已启动:{0}</sys:String>
+    <sys:String x:Key="Hybrid.PlayTime">游玩 {0}</sys:String>
+    <sys:String x:Key="Hybrid.PlayUnderMinute">不足1分钟</sys:String>
+    <sys:String x:Key="Hybrid.PlayMinutes">{0}分钟</sys:String>
+    <sys:String x:Key="Hybrid.PlayHours">{0}小时{1}分</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LoadInstanceInfoTask">获取实例信息</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LoadModpackInfoTask">获取可能的整合包信息</sys:String>
     <sys:String x:Key="Instance.Overall.Info.Loading">正在获取信息</sys:String>
@@ -3475,6 +3482,9 @@
     <sys:String x:Key="Tools.Test.Error.OperationFailed">测试工具操作失败。请查看错误详情。</sys:String>
     <sys:String x:Key="Tools.Test.LaunchCount.Message">PCL CE 已经为你启动了 {0} 次游戏了。</sys:String>
     <sys:String x:Key="Tools.Test.LaunchCount.Title">查看启动计数</sys:String>
+    <sys:String x:Key="Tools.Test.WebUi.Failed">系统 WebView2 页面打不开。请确认 Windows 已安装 WebView2 运行时。</sys:String>
+    <sys:String x:Key="Tools.Test.WebUi.Title">系统 WebView2 页面</sys:String>
+    <sys:String x:Key="WebUi.Page.Host">页面宿主</sys:String>
     <sys:String x:Key="Tools.Test.ServerQuery.Title">瞅眼服务器</sys:String>
     <sys:String x:Key="Tools.Test.Title">百宝箱</sys:String>
 
@@ -3636,4 +3646,37 @@
     <sys:String x:Key="Watcher.WindowLoaded">Minecraft 窗口已加载：{0}（{1}）</sys:String>
     <sys:String x:Key="Watcher.WindowMaximized">已最大化 Minecraft 窗口：{0}</sys:String>
 
+    <sys:String x:Key="Hybrid.Browse">浏览</sys:String>
+    <sys:String x:Key="Hybrid.Games">我的游戏</sys:String>
+    <sys:String x:Key="Hybrid.LocalVersions">本地版本</sys:String>
+    <sys:String x:Key="Hybrid.LaunchingPrefix">启动中</sys:String>
+    <sys:String x:Key="Hybrid.NoVersions">暂无本地版本</sys:String>
+    <sys:String x:Key="Hybrid.VersionList">版本列表</sys:String>
+    <sys:String x:Key="Hybrid.VersionSettings">版本设置</sys:String>
+    <sys:String x:Key="Hybrid.Account">账号与登录</sys:String>
+    <sys:String x:Key="Hybrid.NotLoggedIn">未登录</sys:String>
+    <sys:String x:Key="Hybrid.EmptyGameTitle">下一段旅程，从这里开始</sys:String>
+    <sys:String x:Key="Hybrid.EmptyGameDetail">选择本地版本，或通过下载页安装 Minecraft。启动、账号与版本配置继续由原生 PCL CE 管理。</sys:String>
+    <sys:String x:Key="Hybrid.Ready">本地版本已就绪</sys:String>
+    <sys:String x:Key="Hybrid.NativeHintTitle">熟悉的启动器，更清晰的工作空间</sys:String>
+    <sys:String x:Key="Hybrid.NativeHintDetail">右侧保留原生启动和版本操作。浏览页为额外的整合包与服务提供入口，SRE 在其中作为测试下载条目。</sys:String>
+    <sys:String x:Key="Hybrid.BrowserFailed">浏览页暂时无法打开。请使用带 WebView2Runtime 目录的完整便携包；原生游戏、设置和下载页面仍然可用。</sys:String>
+    <sys:String x:Key="Hybrid.Account.Title">账号与登录</sys:String>
+    <sys:String x:Key="Hybrid.Account.SwitchHint">左侧切换已有账号，右侧新建账号。</sys:String>
+    <sys:String x:Key="Hybrid.Account.Existing">已有账号</sys:String>
+    <sys:String x:Key="Hybrid.Account.Empty">还没有账号。在右侧选择 LittleSkin、正版、离线或自定义皮肤站。</sys:String>
+    <sys:String x:Key="Hybrid.Account.Create">新建账号</sys:String>
+    <sys:String x:Key="Hybrid.Account.CreateHint">四种方式都交给启动器原有登录流程，不会在这里另写一套验证。</sys:String>
+    <sys:String x:Key="Hybrid.Account.LittleSkin">LittleSkin</sys:String>
+    <sys:String x:Key="Hybrid.Account.LittleSkinHint">littleskin.cn</sys:String>
+    <sys:String x:Key="Hybrid.Account.Microsoft">正版</sys:String>
+    <sys:String x:Key="Hybrid.Account.MicrosoftHint">Microsoft 账号</sys:String>
+    <sys:String x:Key="Hybrid.Account.Offline">离线</sys:String>
+    <sys:String x:Key="Hybrid.Account.OfflineHint">不联网验证</sys:String>
+    <sys:String x:Key="Hybrid.Account.Custom">自定义皮肤站</sys:String>
+    <sys:String x:Key="Hybrid.Account.CustomHint">Yggdrasil / Authlib</sys:String>
+    <sys:String x:Key="Hybrid.Account.CustomTitle">自定义皮肤站登录</sys:String>
+    <sys:String x:Key="Hybrid.Account.Current">当前账号</sys:String>
+    <sys:String x:Key="Hybrid.Account.Delete">删除</sys:String>
+    <sys:String x:Key="Hybrid.Account.Back">返回</sys:String>
 </ResourceDictionary>

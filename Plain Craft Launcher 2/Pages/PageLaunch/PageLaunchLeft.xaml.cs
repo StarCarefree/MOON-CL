@@ -201,15 +201,19 @@ public partial class PageLaunchLeft
     // 实例选择按钮
     private void BtnInstance_Click(object sender, MouseButtonEventArgs e)
     {
-        if (ModLaunch.mcLaunchLoader.State == ModBase.LoadState.Loading)
-            return;
+        // 启动中仍可打开版本列表，以便再选一个实例。
         ModMain.frmMain.PageChange(FormMain.PageType.InstanceSelect);
     }
 
     // 启动按钮
     public void LaunchButtonClick()
     {
-        if (ModLaunch.mcLaunchLoader.State == ModBase.LoadState.Loading || !BtnLaunch.IsEnabled ||
+        if (LauncherLibrary.PackWorkInProgress)
+        {
+            HintService.Hint("整合包正在检查或更新，请稍后再启动。", HintType.Warning);
+            return;
+        }
+        if (!BtnLaunch.IsEnabled ||
             (ModMain.frmMain.pageRight is not null &&
              ModMain.frmMain.pageRight.PageState != MyPageRight.PageStates.ContentStay &&
              ModMain.frmMain.pageRight.PageState != MyPageRight.PageStates.ContentEnter))
@@ -339,39 +343,28 @@ public partial class PageLaunchLeft
                 ? Visibility.Collapsed
                 : Visibility.Visible;
         if (currentState == 3) ModMain.frmLaunchLeft.BtnMore.Visibility = ModMain.frmLaunchLeft.BtnInstance.Visibility;
+        ModMain.frmLaunchLeft.BtnMore.IsEnabled = currentState == 3;
+        ModMain.frmLaunchLeft.BtnMore.Visibility = ModMain.frmLaunchLeft.BtnInstance.Visibility;
+        ModMain.frmLaunchLeft.BtnMore.ToolTip = currentState == 3 ? null : Lang.Text("Launch.Home.Instance.NotFound");
     }
 
     // 取消按钮
     private void BtnCancel_Click(object sender, MouseButtonEventArgs e)
     {
-        if (ModLaunch.mcLaunchLoaderReal is not null)
-        {
-            ModLaunch.mcLaunchLoaderReal.Abort();
-            ModLaunch.McLaunchLog("已取消启动");
-            try
-            {
-                if (ModLaunch.mcLaunchWatcher is not null)
-                    ModLaunch.mcLaunchWatcher.Kill();
-                else if (ModLaunch.mcLaunchProcess is not null)
-                    if (!ModLaunch.mcLaunchProcess.HasExited)
-                        ModLaunch.mcLaunchProcess.Kill();
-            }
-            catch (Exception ex)
-            {
-                ModBase.Log(
-                    ex,
-                    Lang.Text("Minecraft.Launch.Error.CancelProcess"),
-                    ModBase.LogLevel.Hint,
-                    userSummary: Lang.Text("Minecraft.Launch.Error.CancelProcess"));
-            }
-        }
+        var selected = ModInstanceList.McMcInstanceSelected;
+        if (selected is not null && ModLaunch.IsInstanceLaunching(selected))
+            ModLaunch.AbortInstance(selected);
+        else
+            ModLaunch.AbortActiveLaunches();
+        ModLaunch.McLaunchLog("已取消启动");
     }
 
     // 实例设置按钮
     private void BtnMore_Click(object sender, MouseButtonEventArgs e)
     {
-        if (ModLaunch.mcLaunchLoader.State == ModBase.LoadState.Loading)
+        if (ModInstanceList.McMcInstanceSelected is { } launching && ModLaunch.IsInstanceLaunching(launching))
             return;
+        if (ModInstanceList.McMcInstanceSelected is null) return;
         ModInstanceList.McMcInstanceSelected.Load();
         PageInstanceLeft.McInstance = ModInstanceList.McMcInstanceSelected;
         if (File.Exists(ModInstanceList.McMcInstanceSelected.PathInstance + ".pclignore"))
@@ -677,6 +670,38 @@ public partial class PageLaunchLeft
     ///     当前页面的种类。
     /// </summary>
     private PageType pageCurrent = PageType.None;
+    internal Panel? ExternalLoginHost { get; set; }
+    internal event EventHandler? ExternalLoginEnded;
+
+    internal void ShowCreateLogin(ModLaunch.McLoginType type)
+    {
+        pageCurrent = PageType.None;
+        RefreshPage(true, type);
+    }
+
+    internal void CancelCreateLogin()
+    {
+        ProfileService.IsCreatingProfile = false;
+        ExternalLoginHost = null;
+        pageCurrent = PageType.None;
+        RefreshPage(false);
+    }
+
+    private static void DetachVisual(FrameworkElement element)
+    {
+        switch (element.Parent)
+        {
+            case Panel panel:
+                panel.Children.Remove(element);
+                break;
+            case ContentControl content when ReferenceEquals(content.Content, element):
+                content.Content = null;
+                break;
+            case Decorator decorator when ReferenceEquals(decorator.Child, element):
+                decorator.Child = null;
+                break;
+        }
+    }
 
     private object PageGet(PageType type)
     {
@@ -741,35 +766,41 @@ public partial class PageLaunchLeft
             #region 切换页面
 
             ModAnimation.AniStop("FrmLogin PageChange");
-            // 清除页面关联性
-            if (pageNew is FrameworkElement element && element.Parent is not null)
+            var host = ExternalLoginHost ?? PanLogin;
+            if (ExternalLoginHost is not null && type is PageType.Profile or PageType.ProfileSkin)
             {
-                element.SetValue(ContentPresenter.ContentProperty, null);
+                host = PanLogin;
+                ExternalLoginHost = null;
+                ExternalLoginEnded?.Invoke(this, EventArgs.Empty);
+            }
+            if (pageNew is FrameworkElement element)
+                DetachVisual(element);
+            void Place()
+            {
+                ModAnimation.AniControlEnabled += 1;
+                host.Children.Clear();
+                if (pageNew is FrameworkElement visual)
+                {
+                    visual.Opacity = 1;
+                    visual.Visibility = Visibility.Visible;
+                    if (visual.Parent is null)
+                        host.Children.Add(visual);
+                }
+                ModAnimation.AniControlEnabled -= 1;
             }
             if (anim)
             {
-                // 动画
-                // 执行动画
                 Dispatcher.Invoke(() => ModAnimation.AniStart(new[]
                 {
-                    ModAnimation.AaOpacity(PanLogin, -PanLogin.Opacity, 100, ease: new ModAnimation.AniEaseOutFluent()),
-                    ModAnimation.AaCode(() =>
-                    {
-                        ModAnimation.AniControlEnabled += 1;
-                        PanLogin.Children.Clear();
-                        PanLogin.Children.Add((UIElement)pageNew);
-                        ModAnimation.AniControlEnabled -= 1;
-                    }, 100),
-                    ModAnimation.AaOpacity(PanLogin, 1d, 100, 120, new ModAnimation.AniEaseInFluent())
+                    ModAnimation.AaOpacity(host, -host.Opacity, 100, ease: new ModAnimation.AniEaseOutFluent()),
+                    ModAnimation.AaCode(Place, 100),
+                    ModAnimation.AaOpacity(host, 1d, 100, 120, new ModAnimation.AniEaseInFluent())
                 }, "FrmLogin PageChange"), DispatcherPriority.Render);
             }
             else
             {
-                // 无动画
-                ModAnimation.AniControlEnabled += 1;
-                PanLogin.Children.Clear();
-                PanLogin.Children.Add((UIElement)pageNew);
-                ModAnimation.AniControlEnabled -= 1;
+                Place();
+                host.Opacity = 1;
             }
 
             #endregion

@@ -74,10 +74,20 @@ public class CacheService : ICacheService, IAsyncDisposable
 
 
         await _schemaManager.EnsureCurrentSchemaAsync().ConfigureAwait(false);
-
-        await _db.CleanupStartupAsync().ConfigureAwait(false);
-
         _eviction.Start();
+        _ = CleanupLater();
+
+        async Task CleanupLater()
+        {
+            try
+            {
+                await _db.CleanupStartupAsync().ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // 过期清理和 WAL checkpoint 不该挡住窗口。
+            }
+        }
 
     }
 

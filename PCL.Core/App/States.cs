@@ -188,12 +188,14 @@ public static partial class States
         /// <summary>
         /// 窗口高度。
         /// </summary>
-        [ConfigItem<double>("WindowHeight", 550, ConfigSource.Local)] public partial double WindowHeight { get; set; }
+        [ConfigItem<double>("WindowHeight", 1014, ConfigSource.Local)] public partial double WindowHeight { get; set; }
 
         /// <summary>
         /// 窗口宽度。
         /// </summary>
-        [ConfigItem<double>("WindowWidth", 900, ConfigSource.Local)] public partial double WindowWidth { get; set; }
+        [ConfigItem<double>("WindowWidth", 1664, ConfigSource.Local)] public partial double WindowWidth { get; set; }
+
+        [ConfigItem<int>("HybridLayoutRevision", 0, ConfigSource.Local)] public partial int HybridLayoutRevision { get; set; }
 
     }
 
@@ -330,6 +332,7 @@ public static partial class States
     [ConfigGroup("Instance", ConfigSource.GameInstance)] partial class InstanceStatesGroup
     {
         [ConfigItem<int>("VersionLaunchCount", 0)] public partial ArgConfig<int> LaunchCount { get; }
+        [ConfigItem<int>("VersionPlaySeconds", 0)] public partial ArgConfig<int> PlaySeconds { get; }
         [ConfigItem<bool>("IsStar", false)] public partial ArgConfig<bool> Starred { get; }
         [ConfigItem<int>("DisplayType", 0)] public partial ArgConfig<int> CardType { get; }
         [ConfigItem<string>("Logo", "")] public partial ArgConfig<string> LogoPath { get; }

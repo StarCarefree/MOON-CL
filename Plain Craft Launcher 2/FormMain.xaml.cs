@@ -54,6 +54,8 @@ public partial class FormMain
     // 窗口加载
     private bool isWindowLoadFinished;
     private readonly DragHelper _helper = new();
+    private readonly WebUiController _webUi = new();
+
 
     public FormMain()
     {
@@ -65,6 +67,7 @@ public partial class FormMain
         ThemeService.ColorThemeChanged += theme => ThemeManager.ThemeRefresh((int)theme);
         // 窗体参数初始化
         ModMain.frmMain = this;
+        ThemeService.UseUnifiedDesktopPalette = true;
         ModMain.frmLaunchLeft = new PageLaunchLeft();
         ModMain.frmLaunchRight = new PageLaunchRight();
         // 版本号改变
@@ -100,8 +103,20 @@ public partial class FormMain
         Opacity = 0d;
         try
         {
-            Height = States.UI.WindowHeight;
-            Width = States.UI.WindowWidth;
+            var work = SystemParameters.WorkArea;
+            var savedWidth = States.UI.WindowWidth;
+            var savedHeight = States.UI.WindowHeight;
+            if (States.UI.HybridLayoutRevision < 1)
+            {
+                if (savedWidth < 1664) savedWidth = Math.Max(1664, savedWidth * 1.3);
+                if (savedHeight < 1014) savedHeight = Math.Max(1014, savedHeight * 1.3);
+                States.UI.HybridLayoutRevision = 1;
+            }
+            // Fit high-DPI and smaller displays without losing the user's subsequent resize preference.
+            MinWidth = Math.Min(1120, Math.Max(640, work.Width - 32));
+            MinHeight = Math.Min(760, Math.Max(480, work.Height - 32));
+            Width = Math.Clamp(savedWidth, MinWidth, Math.Max(MinWidth, work.Width - 32));
+            Height = Math.Clamp(savedHeight, MinHeight, Math.Max(MinHeight, work.Height - 32));
         }
         catch (Exception ex) // 修复 #2019
         {
@@ -137,6 +152,7 @@ public partial class FormMain
         PanMainRight.Child = ModMain.frmLaunchRight;
         pageRight = ModMain.frmLaunchRight;
         ModMain.frmLaunchRight.PageState = MyPageRight.PageStates.ContentStay;
+        InitializeHybridShell();
         // 调试模式提醒
         if (ModBase.modeDebug)
             HintService.Hint(Lang.Text("Main.DebugMode.Hint"));
@@ -156,7 +172,7 @@ public partial class FormMain
         ModBase.frmHandle = new WindowInteropHelper(this).Handle;
         // 读取设置
         PageSetupUI.BackgroundRefresh(false, true);
-        ModMusic.MusicRefreshPlay(false, true);
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () => ModMusic.MusicRefreshPlay(false, true));
         // 扩展按钮
         BtnExtraUpdateRestart.showCheck = BtnExtraUpdateRestart_ShowCheck;
         BtnExtraDownload.showCheck = BtnExtraDownload_ShowCheck;
@@ -191,7 +207,7 @@ public partial class FormMain
         // #End If
         Topmost = false;
         if (ModMain.frmStart is not null)
-            ModMain.frmStart.Close(new TimeSpan(0, 0, 0, 0, (int)Math.Round(400d / ModAnimation.aniSpeed)));
+            ModMain.frmStart.Close(new TimeSpan(0, 0, 0, 0, (int)Math.Round(120d / ModAnimation.aniSpeed)));
         // 更改窗口
         // Top = (GetWPFSize(My.Computer.Screen.WorkingArea.Height) - Height) / 2
         // Left = (GetWPFSize(My.Computer.Screen.WorkingArea.Width) - Width) / 2
@@ -202,17 +218,22 @@ public partial class FormMain
         ModAnimation.AniStart(new[]
         {
             ModAnimation.AaCode(() => ModAnimation.AniControlEnabled -= 1, 50),
-            ModAnimation.AaOpacity(this, Config.Preference.Theme.WindowOpacity / 1000d + 0.4d, 250, 100),
-            ModAnimation.AaDouble(i => TransformPos.Y += (double)i, -TransformPos.Y, 600,
-                100, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak)),
+            ModAnimation.AaOpacity(this, Config.Preference.Theme.WindowOpacity / 1000d + 0.4d, 140, 0),
+            ModAnimation.AaDouble(i => TransformPos.Y += (double)i, -TransformPos.Y, 240,
+                0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak)),
             ModAnimation.AaDouble(i => TransformRotate.Angle += (double)i,
-                -TransformRotate.Angle, 500, 100, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak)),
+                -TransformRotate.Angle, 200, 0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak)),
             ModAnimation.AaCode(() =>
             {
                 RenderTransform = null;
                 isWindowLoadFinished = true;
                 ModBase.Log(
                     $"[System] DPI：{ModBase.dpi}，系统版本：{Environment.OSVersion.VersionString}，PCL 位置：{Basics.ExecutablePath}");
+                if (WebUiController.RequestedByArguments(Basics.CommandLineArguments))
+                    _ = ShowWebUiAsync();
+#if DEBUG
+                if (Basics.CommandLineArguments.Contains("--hybrid-smoke")) _ = StartHybridSmokeAsync();
+#endif
             }, after: true)
         }, "Form Show");
         // Timer 启动
@@ -635,14 +656,14 @@ public partial class FormMain
 
             PanForm.Width = formWidth;
             PanForm.Height = formHeight;
-            PanMain.Width = formWidth;
+            PanMain.Width = Math.Max(0, formWidth - (ColHybridSidebar?.Width.Value ?? 0));
 
             if (PanTitle is not null)
                 PanMain.Height = Math.Max(0d, formHeight - PanTitle.ActualHeight);
             else
                 PanMain.Height = formHeight;
 
-            VideoBack.Width = formWidth;
+            VideoBack.Width = PanMain.Width;
             VideoBack.Height = formHeight;
         }
 
@@ -737,6 +758,11 @@ public partial class FormMain
                 escapeAction?.Invoke();
                 return;
             }
+        }
+        if (_webUi.IsPresented)
+        {
+            if (e.Key == Key.Escape) _webUi.Hide();
+            return; // HTML text entry must never trigger the native game's Enter-to-launch shortcut.
         }
 
         // 按 ESC 返回上一级
@@ -1350,6 +1376,8 @@ public partial class FormMain
 
     #endregion
 
+    public Task ShowWebUiAsync() => _webUi.AttachAsync(this);
+
     #region 切换页面
 
     // 页面种类与属性
@@ -1565,6 +1593,12 @@ public partial class FormMain
                     return ModMain.frmSetupLeft.pageID;
                 }
 
+                case PageType.Tools:
+                {
+                    ModMain.frmToolsLeft ??= new PageToolsLeft();
+                    return ModMain.frmToolsLeft.pageID;
+                }
+
                 case PageType.InstanceSetup:
                 {
                     if (ModMain.frmInstanceLeft is null)
@@ -1667,6 +1701,7 @@ public partial class FormMain
     /// </summary>
     public void PageChange(PageStackData stack, PageSubType subType = PageSubType.Default)
     {
+        _webUi.Hide();
         if (string.IsNullOrEmpty(PageNameGet(stack)))
         {
             // 切换到主页面
@@ -1703,11 +1738,25 @@ public partial class FormMain
                             break;
                         }
 
-                    break;
-                }
-            }
+                     break;
+                 }
+                 case PageType.Tools:
+                 {
+                     if (ModMain.frmToolsLeft is null)
+                         ModMain.frmToolsLeft = new PageToolsLeft();
+                     foreach (var item in ModMain.frmToolsLeft.PanItem.Children)
+                         if (item is MyListItem listItem &&
+                             ModBase.Val(listItem.Tag) == (double)subType)
+                         {
+                             listItem.SetChecked(true, true, stack == pageCurrent);
+                             break;
+                         }
 
-            PageChangeActual(stack, subType);
+                     break;
+                 }
+             }
+
+             PageChangeActual(stack, subType);
         }
         else
         {
@@ -1753,9 +1802,9 @@ public partial class FormMain
     /// </summary>
     private void BtnTitleSelect_Click(MyRadioButton sender, bool raiseByMouse)
     {
-        if (isChangingPage)
-            return;
-        var pageType = (PageType)int.Parse(sender.Tag.ToString());
+         if (isChangingPage)
+             return;
+         var pageType = (PageType)int.Parse(sender.Tag.ToString());
         PageChangeActual(pageType, PageSubType.Default);
         }
 
@@ -2194,6 +2243,7 @@ public partial class FormMain
     {
         try
         {
+            ModLaunch.AbortActiveLaunches();
             if (ModLaunch.mcLaunchLoaderReal is not null)
                 ModLaunch.mcLaunchLoaderReal.Abort();
             foreach (var Watcher in ModWatcher.mcWatcherList)

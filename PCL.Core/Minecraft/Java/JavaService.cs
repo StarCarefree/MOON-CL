@@ -1,5 +1,6 @@
 using PCL.Core.Minecraft.Java.Parser;
 using PCL.Core.Minecraft.Java.Scanner;
+using System;
 using System.Threading.Tasks;
 using PCL.Core.App.IoC;
 
@@ -14,14 +15,13 @@ public sealed partial class JavaService
     public static JavaManager JavaManager => _javaManager!;
 
     [LifecycleStart]
-    private static async Task _StartAsync()
+    private static Task _StartAsync()
     {
-        if (_javaManager is not null) return;
+        if (_javaManager is not null) return Task.CompletedTask;
 
         Context.Info("Initializing Java Manager...");
-
         _javaManager = new JavaManager(
-            new PeHeaderParser(), 
+            new PeHeaderParser(),
             [
             new RegistryJavaScanner(),
             new DefaultPathsScanner(),
@@ -30,12 +30,23 @@ public sealed partial class JavaService
             new WhereCommandScanner()
         ]);
         _javaManager.ReadConfig();
+        // 扫描磁盘会挡住窗口出现。先返回，启动按钮自己的 ScanJavaAsync 会等同一把锁。
+        _ = ScanInBackground();
+        return Task.CompletedTask;
 
-        Context.Info("Lookup for local Java...");
-        await _javaManager.ScanJavaAsync();
-
-        var logInfo = string.Join("\n\t", _javaManager.GetSortedJavaList());
-        Context.Info($"Finished to scan java: \n\t{logInfo}");
+        async Task ScanInBackground()
+        {
+            try
+            {
+                await _javaManager.ScanJavaAsync().ConfigureAwait(false);
+                var logInfo = string.Join("\n\t", _javaManager.GetSortedJavaList());
+                Context.Info($"Finished to scan java: \n\t{logInfo}");
+            }
+            catch (Exception ex)
+            {
+                Context.Warn("后台扫描 Java 失败", ex);
+            }
+        }
     }
 
     [LifecycleStop]

@@ -19,10 +19,8 @@ public partial class CacheServiceManager
     private static async Task _StartAsync()
     {
         Context.Debug("正在初始化缓存服务...");
-
         _service = new CacheService();
         await _service.InitializeAsync().ConfigureAwait(false);
-
         Context.Info("缓存服务初始化成功");
     }
 

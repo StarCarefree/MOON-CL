@@ -1,0 +1,135 @@
+<UserControl x:Class="PCL.HybridSidebar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Width="224">
+    <UserControl.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="HybridTheme.xaml" /></ResourceDictionary.MergedDictionaries></ResourceDictionary></UserControl.Resources>
+    <Border Background="{StaticResource Hybrid.Sidebar}" BorderBrush="{StaticResource Hybrid.Line}" BorderThickness="0,0,1,0">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="66" /><RowDefinition Height="Auto" /><RowDefinition Height="*" MinHeight="160" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0">
+                 <TextBlock Text="MOONCL" Foreground="{StaticResource Hybrid.Text}" FontSize="22" FontWeight="Bold" />
+            </StackPanel>
+            <StackPanel Grid.Row="1" x:Name="Nav">
+                <Button x:Name="Browse" Tag="browse" Click="Navigate_Click" Style="{StaticResource Hybrid.Nav}" AutomationProperties.AutomationId="Hybrid.Browse"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE721;" Width="30" FontSize="18" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource Hybrid.Browse}" VerticalAlignment="Center" /></StackPanel></Button>
+                <Button x:Name="Games" Tag="games" Click="Navigate_Click" Style="{StaticResource Hybrid.Nav}" AutomationProperties.AutomationId="Hybrid.Games"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7FC;" Width="30" FontSize="18" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource Hybrid.Games}" VerticalAlignment="Center" /></StackPanel></Button>
+                <Border Height="1" Background="{StaticResource Hybrid.Line}" Margin="22,8,22,8" />
+                <Button x:Name="Settings" Tag="settings" Click="Navigate_Click" Style="{StaticResource Hybrid.Nav}" AutomationProperties.AutomationId="Hybrid.Settings"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" Width="30" FontSize="18" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource Main.Tab.Settings}" VerticalAlignment="Center" /></StackPanel></Button>
+                <Button x:Name="Download" Tag="download" Click="Navigate_Click" Style="{StaticResource Hybrid.Nav}" AutomationProperties.AutomationId="Hybrid.Download"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE896;" Width="30" FontSize="18" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource Main.Tab.Download}" VerticalAlignment="Center" /></StackPanel></Button>
+                <Button x:Name="Tools" Tag="tools" Click="Navigate_Click" Style="{StaticResource Hybrid.Nav}" AutomationProperties.AutomationId="Hybrid.Tools"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE90F;" Width="30" FontSize="18" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource Main.Tab.Tools}" VerticalAlignment="Center" /></StackPanel></Button>
+            </StackPanel>
+            <Grid Grid.Row="2" Margin="0,6,0,6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Border Height="1" Background="{StaticResource Hybrid.Line}" Margin="22,2,22,10" />
+                <TextBlock Grid.Row="1" Text="{DynamicResource Hybrid.LocalVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" Margin="56,0,18,8" />
+                <ListBox x:Name="Versions" Grid.Row="2" Background="Transparent" BorderThickness="0" Padding="0" SelectionChanged="Version_SelectionChanged"
+                         ItemContainerStyle="{StaticResource Hybrid.VersionItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                         AutomationProperties.AutomationId="Hybrid.LocalVersions">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ScrollViewer x:Name="VersionScroll" Focusable="False" Padding="{TemplateBinding Padding}"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                          CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ListBox.Template>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="30" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Image Width="16" Height="16" Source="{Binding Icon}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="NearestNeighbor" IsHitTestVisible="False" />
+                                <StackPanel Grid.Column="1" Margin="0,0,26,0">
+                                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" FontSize="12" />
+                                    <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" FontSize="10" Opacity="0.65" Margin="0,3,0,0" />
+                                    <TextBlock Text="{Binding PlayText}" TextTrimming="CharacterEllipsis" FontSize="10" Opacity="0.55" Margin="0,2,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding PlayText}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                                <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,26,0" Background="#242629" CornerRadius="8" Padding="6,1" IsHitTestVisible="False">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding RunningCount}" Value="0">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <TextBlock Text="{Binding RunningCount}" FontSize="10" Foreground="{StaticResource Hybrid.Accent}" HorizontalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding RunningLabel}" FontSize="10" Foreground="{StaticResource Hybrid.Accent}" HorizontalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </Border>
+                                <Button Grid.Column="1" Style="{StaticResource Hybrid.VersionGear}" ToolTip="{DynamicResource Hybrid.VersionSettings}"
+                                        PreviewMouseLeftButtonDown="VersionSettings_PreviewMouseDown">
+                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="Empty" Grid.Row="2" Text="{DynamicResource Hybrid.NoVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" TextWrapping="Wrap" Margin="56,4,18,0" VerticalAlignment="Top" IsHitTestVisible="False" />
+                <Button x:Name="VersionList" Grid.Row="3" Tag="versions" Click="Navigate_Click" Style="{StaticResource Hybrid.QuietButton}" Margin="14,8,14,0" HorizontalContentAlignment="Stretch" MouseEnter="VersionList_MouseEnter" MouseLeave="VersionList_MouseLeave">
+                    <Grid>
+                        <TextBlock Text="{DynamicResource Hybrid.VersionList}" VerticalAlignment="Center" HorizontalAlignment="Left" />
+                        <Border x:Name="VersionListRunning" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#242629" CornerRadius="8" Padding="6,1" Visibility="Collapsed" IsHitTestVisible="False">
+                            <TextBlock x:Name="VersionListRunningText" FontSize="10" Foreground="{StaticResource Hybrid.Accent}" />
+                        </Border>
+                    </Grid>
+                </Button>
+            </Grid>
+            <StackPanel Grid.Row="3" Margin="14,0,14,10">
+                <Border Height="1" Background="{StaticResource Hybrid.Line}" Margin="8,0,8,10" />
+                <Button x:Name="AccountButton" Tag="account" Click="Navigate_Click" Style="{StaticResource Hybrid.QuietButton}" Height="46" Padding="8,0" AutomationProperties.AutomationId="Hybrid.Account">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="38" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Border Background="#282B30" CornerRadius="5" Width="30" Height="30"><Grid><TextBlock x:Name="AvatarLetter" Text="?" Foreground="{StaticResource Hybrid.Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="15" /><Image x:Name="Avatar" Stretch="Uniform" /></Grid></Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"><TextBlock x:Name="Account" Foreground="{StaticResource Hybrid.Text}" FontSize="12" TextTrimming="CharacterEllipsis" /><TextBlock Text="{DynamicResource Hybrid.Account}" FontSize="10" Opacity="0.65" /></StackPanel>
+                    </Grid>
+                </Button>
+                <TextBlock x:Name="Runtime" Foreground="#707781" FontSize="9" Margin="8,8,0,0" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

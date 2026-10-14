@@ -27,7 +27,7 @@ printf '%s\n' "$MOONCL_ADMIN_TOKEN" # 保存后输入到管理网页
 java -Xms64m -Xmx256m -jar build/libs/mooncl-cloud-1.0.0.jar
 ```
 
-- 获取端口：`http://服务器:8080/catalog.json`，只允许 GET/HEAD。
+- 获取端口：`http://服务器:8080/index.json`（兼容 `/catalog.json`），只允许 GET/HEAD。
 - 管理网页：`http://127.0.0.1:8081/`，默认只在服务器本机监听。
 - 远程管理推荐 SSH 隧道：`ssh -L 8081:127.0.0.1:8081 用户@服务器`，然后打开本机 `http://127.0.0.1:8081/`。
 - 未配置有效令牌会拒绝启动。令牌需 32–256 位随机字母/数字/下划线/连字符。网页仅在内存持有令牌，不使用 Cookie、浏览器存储或 URL 保存它；刷新网页需要重新登录。
@@ -59,12 +59,14 @@ URL 必须是完整 HTTP(S) 地址，不得包含用户名、密码或片段。�
 
 | 方法 | 路径 | 返回 |
 | --- | --- | --- |
-| GET/HEAD | `/catalog.json` 或 `/api/v1/packs` | `{ "packs": [...] }`，仅已发布条目 |
+| GET/HEAD | `/index.json`、`/catalog.json` 或 `/api/v1/packs` | `{ "packs": [...] }`，仅已发布条目 |
 | GET/HEAD | `/api/v1/packs/{id}` | 单个已发布条目 |
 | GET/HEAD | `/api/v1/packs/{id}/download?mirror=0` | 302 到主地址；`mirror=1..8` 为备用地址 |
 | GET/HEAD | `/healthz` | `{ "status": "ok" }` |
 
-公开目录保留现有 `PackCatalog.Parse` 所需 `icon/background/downloadUrl/fileName/shareUrl/sharePath` 字段；旧启动器忽略扩展字段。**旧启动器尚不使用 `backupUrls` 自动回退，本次未修改客户端。**
+公开目录保留现有 `PackCatalog.Parse` 所需 `icon/background/downloadUrl/fileName/shareUrl/sharePath` 字段；旧启动器忽略扩展字段。**包下载的 `backupUrls` 与目录源备用不是同一功能，此改动不新增包下载镜像自动回退。**
+
+启动器中打开「整合包 → 服务配置」，在预设目录源里每行填写一个 `index.json` 地址，第一项为主源，后续为备用（最多 8 个）。旧单个 `CatalogUrl` 自动迁移。网络错误、超时或目录格式错误会按序回退，不合并多个源；每个源最多等待 8 秒。全部失败保留本次运行中上次成功目录并显示错误。支持压缩、ETag/304；格式示例见 `../docs/catalog-sources.md`。
 
 管理端口 API 必须带 `Authorization: Bearer <令牌>`，不启用跨域：
 

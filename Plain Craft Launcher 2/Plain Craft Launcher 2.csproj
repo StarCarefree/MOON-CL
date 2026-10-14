@@ -10,6 +10,10 @@
         <PublishUrl>publish\</PublishUrl>
         <PublishSingleFile>true</PublishSingleFile>
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+         <!-- 便携包不自包含 .NET 10。运行时由 Start-PCL-CY.cmd 在用户同意后下载安装。 -->
+         <SelfContained>false</SelfContained>
+        <PublishTrimmed>false</PublishTrimmed>
+        <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
         <RuntimeIdentifier Condition="'$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
         <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
         <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -24,9 +28,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Images\icon.ico</ApplicationIcon>
-        <AssemblyTitle>Plain Craft Launcher Community Edition</AssemblyTitle>
+         <AssemblyTitle>MOONCL</AssemblyTitle>
         <Description>Minecraft 启动器 (作者: 龙腾猫跃; 经社区二次开发版本)</Description>
-        <Product>Plain Craft Launcher Community Edition</Product>
+         <Product>MOONCL</Product>
         <Copyright>Copyright © 龙腾猫跃 2016. All Rights Reserved.</Copyright>
         <AssemblyVersion>2.15.1.0</AssemblyVersion>
         <FileVersion>2.15.1.0</FileVersion>
@@ -76,6 +80,7 @@
         <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
         <PackageReference Include="System.Net.Http" Version="4.3.4" />
         <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\PCL.Core\PCL.Core.csproj" />
@@ -115,6 +120,20 @@
         <Resource Include="Images\**" />
         <Resource Include="Resources\**" />
         <EmbeddedResource Include="metadata.json" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Modules\WebUi\www\index.html">
+            <LogicalName>PCL.WebUi.www.index.html</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Modules\WebUi\www\app.css">
+            <LogicalName>PCL.WebUi.www.app.css</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Modules\WebUi\www\app.js">
+            <LogicalName>PCL.WebUi.www.app.js</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Modules\WebUi\www\sre-cover.png">
+            <LogicalName>PCL.WebUi.www.sre-cover.png</LogicalName>
+        </EmbeddedResource>
     </ItemGroup>
     <ItemGroup>
         <Content Include="LICENCE" />

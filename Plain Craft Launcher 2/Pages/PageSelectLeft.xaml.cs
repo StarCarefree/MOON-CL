@@ -723,10 +723,11 @@ public partial class PageSelectLeft : IRefreshable
     {
         if (!e.raiseByMouse || !sender.Checked)
             return;
-        // 检查是否有下载任务
-        if (ModNet.HasDownloadingTask(true))
+        if (ModNet.HasDownloadingTask(true) || LauncherLibrary.PackWorkInProgress)
         {
-            HintService.Hint(Lang.Text("Select.Folder.SwitchBlockedByDownload"), HintType.Error);
+            HintService.Hint(LauncherLibrary.PackWorkInProgress
+                ? "整合包正在检查或更新，请稍后再切换游戏目录。"
+                : Lang.Text("Select.Folder.SwitchBlockedByDownload"), HintType.Error);
             e.handled = true;
             return;
         }

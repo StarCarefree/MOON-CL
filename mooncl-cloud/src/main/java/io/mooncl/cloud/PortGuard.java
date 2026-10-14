@@ -40,7 +40,7 @@ final class PortGuard extends OncePerRequestFilter {
         String method = request.getMethod();
         boolean read = method.equals("GET") || method.equals("HEAD");
         if (!ports.isAdmin(request.getLocalPort())) {
-            boolean publicPath = path.equals("/catalog.json") || path.equals("/healthz") || path.equals("/api/v1/packs")
+            boolean publicPath = path.equals("/index.json") || path.equals("/catalog.json") || path.equals("/healthz") || path.equals("/api/v1/packs")
                     || path.matches("/api/v1/packs/[a-z0-9][a-z0-9_-]{0,63}(/download)?");
             if (!publicPath) { error(response, 404, "资源不存在"); return; }
             if (!read) { response.setHeader("Allow", "GET, HEAD"); error(response, 405, "获取端口仅支持 GET/HEAD"); return; }

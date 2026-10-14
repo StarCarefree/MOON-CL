@@ -21,6 +21,11 @@ public static class ThemeManager
 
     public static void ThemeRefresh(int newTheme = -1)
     {
+        if (ThemeService.UseUnifiedDesktopPalette)
+        {
+            ThemeService.ApplyGrayResources();
+            ThemeService.ApplyColorResources();
+        }
         colorGray1 = new ModBase.MyColor(AppResources["ColorObjectGray1"]);
         colorGray4 = new ModBase.MyColor(AppResources["ColorObjectGray4"]);
         colorGray5 = new ModBase.MyColor(AppResources["ColorObjectGray5"]);
@@ -41,6 +46,11 @@ public static class ThemeManager
     // 主页面背景
     private static void RefreshBackground()
     {
+        if (ThemeService.UseUnifiedDesktopPalette)
+        {
+            ModMain.frmMain.PanForm.Background = (Brush)AppResources["ColorBrushBackground"];
+            return;
+        }
         if (Config.Preference.Background.BackgroundColorful)
         {
             var brush = new LinearGradientBrush

@@ -12,8 +12,8 @@ namespace PCL;
 public class MyCard : AnimatedBackgroundGrid
 {
     // 动画
-    private const double dropShadowIdleOpacity = 0.07d;
-    private const double dropShadowHoverOpacity = 0.4d;
+    private const double dropShadowIdleOpacity = 0.04d;
+    private const double dropShadowHoverOpacity = 0.10d;
 
     public static readonly DependencyProperty TitleProperty =
         DependencyProperty.Register("Title", typeof(string), typeof(MyCard), new PropertyMetadata(""));
@@ -31,11 +31,17 @@ public class MyCard : AnimatedBackgroundGrid
         MainChrome = new MyDropShadow
         {
             Margin = new Thickness(-3, -3, -3, -3 - ModBase.GetWPFSize(1d)), ShadowRadius = 3d,
-            Opacity = dropShadowIdleOpacity, CornerRadius = new CornerRadius(5d)
+            Opacity = dropShadowIdleOpacity, CornerRadius = new CornerRadius(6d)
         };
-        MainChrome.SetResourceReference(MyDropShadow.ColorProperty, "ColorObject1");
+        MainChrome.SetResourceReference(MyDropShadow.ColorProperty,
+            PCL.Core.UI.Theme.ThemeService.UseUnifiedDesktopPalette ? "ColorObjectShadow" : "ColorObject1");
         Children.Insert(0, MainChrome);
-        mainBorder = new BlurBorder { CornerRadius = new CornerRadius(5d), IsHitTestVisible = false };
+        mainBorder = new BlurBorder { CornerRadius = new CornerRadius(6d), IsHitTestVisible = false };
+        if (PCL.Core.UI.Theme.ThemeService.UseUnifiedDesktopPalette)
+        {
+            mainBorder.BorderThickness = new Thickness(1);
+            mainBorder.SetResourceReference(Border.BorderBrushProperty, "ColorBrushControlBorder");
+        }
         Children.Insert(1, mainBorder);
         mainGrid = new Grid();
         Children.Add(mainGrid);
@@ -401,6 +407,17 @@ public class MyCard : AnimatedBackgroundGrid
     public event SwapEventHandler? Swap;
 
     public delegate void SwapEventHandler(object sender, ModBase.RouteEventArgs e);
+
+    internal void WebToggle()
+    {
+        ModMain.RaiseCustomEvent(this);
+        if (!CanSwap && SwapControl is null) return;
+        var e = new ModBase.RouteEventArgs(true);
+        PreviewSwap?.Invoke(this, e);
+        if (e.handled) return;
+        IsSwapped = !IsSwapped;
+        Swap?.Invoke(this, e);
+    }
 
     public const int SwapedHeight = 40;
 

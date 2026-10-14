@@ -1,23 +1,55 @@
 <local:MyPageRight x:Class="PCL.PageLaunchRight"
                    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                   xmlns:local="clr-namespace:PCL"> <!-- 不知道为啥只有这个文件不能在 XAML 设置 PanScroll -->
-    <local:MyScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" x:Name="PanBack">
-        <StackPanel Name="PanMain" Margin="25,25,25,10" Grid.IsSharedSizeScope="True">
-            <StackPanel x:Name="PanCustom" />
-            <local:MyCard Margin="0,0,0,15" Title="{DynamicResource Launch.Right.CommunityHint.Title}" x:Name="PanHint">
-                <local:MyIconButton LogoScale="1.1"
-                                    SvgIcon="lucide/x"
-                                    Height="20" Width="20" Margin="10" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    x:Name="BtnHintClose"
-                                    Click="BtnHintClose_Click" />
-                <StackPanel Margin="25,38,23,15">
-                    <TextBlock x:Name="LabHint1" TextWrapping="Wrap" Margin="0,0,0,2" FontSize="13.5" />
-                    <TextBlock x:Name="LabHint2" TextWrapping="Wrap" Margin="0,0,0,2" FontSize="13.5" />
+                   xmlns:local="clr-namespace:PCL">
+    <local:MyPageRight.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="../../Modules/HybridUi/HybridTheme.xaml" /></ResourceDictionary.MergedDictionaries></ResourceDictionary></local:MyPageRight.Resources>
+    <local:MyScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" x:Name="PanBack" Padding="0,0,14,0">
+        <StackPanel Name="PanMain" Margin="32,28,28,24" Grid.IsSharedSizeScope="True" MaxWidth="1120" HorizontalAlignment="Stretch">
+            <Grid Margin="0,0,0,22">
+                <TextBlock Text="{DynamicResource Hybrid.Games}" Foreground="{StaticResource Hybrid.Text}" FontSize="24" FontWeight="SemiBold" />
+                <TextBlock Text="MINECRAFT / MOONCL" Foreground="{StaticResource Hybrid.Muted}" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <Border x:Name="HeroCard" CornerRadius="8" BorderBrush="#34302A" BorderThickness="1" Margin="0,0,0,18" ClipToBounds="True">
+                <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#252B2D" Offset="0" /><GradientStop Color="#171B1E" Offset="0.65" /><GradientStop Color="#302A20" Offset="1" /></LinearGradientBrush></Border.Background>
+                <Grid MinHeight="290">
+                    <Path Data="M0,170 L95,80 170,130 270,15 380,95 490,30 620,150 730,85 900,180 900,350 0,350 Z" Stretch="Fill" Fill="#2C4541" Opacity="0.26" Margin="150,55,-40,-10" IsHitTestVisible="False" />
+                    <Path Data="M0,190 L100,120 230,160 330,70 440,150 580,80 680,135 790,100 900,170 900,300 0,300 Z" Stretch="Fill" Fill="#0A0E12" Opacity="0.4" Margin="80,125,-40,-10" IsHitTestVisible="False" />
+                    <Grid Margin="28">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <TextBlock Text="MINECRAFT JAVA EDITION" Foreground="#D6B372" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,22" />
+                        <Grid Grid.Row="1" Margin="0,0,0,24">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="78" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Border Background="#252F2D" BorderBrush="#52614A" BorderThickness="1" CornerRadius="8" Width="60" Height="60" HorizontalAlignment="Left" VerticalAlignment="Top"><TextBlock Text="M" FontSize="30" FontWeight="Bold" Foreground="#D5DFBD" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="LabNativeGameName" Foreground="{StaticResource Hybrid.Text}" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="84" />
+                                <TextBlock x:Name="LabNativeGameDetail" Foreground="#B6BBC1" FontSize="13" LineHeight="22" TextWrapping="Wrap" Margin="0,10,0,0" MaxWidth="660" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Border Background="#242C25" BorderBrush="#3D493C" BorderThickness="1" CornerRadius="4" Padding="10,6" HorizontalAlignment="Left" VerticalAlignment="Center"><TextBlock x:Name="LabNativeGameStatus" Foreground="#C6D4B1" FontSize="11" /></Border>
+                            <Button Grid.Column="1" Click="NativeVersions_Click" Content="{DynamicResource Hybrid.VersionList}" Style="{StaticResource Hybrid.QuietButton}" Foreground="{StaticResource Hybrid.Accent}" />
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+            <Border x:Name="NativeHintCard" Background="#1A1C20" BorderBrush="#303237" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,0,0,22">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center"><TextBlock Text="{DynamicResource Hybrid.NativeHintTitle}" Foreground="{StaticResource Hybrid.Text}" FontSize="14" FontWeight="SemiBold" /><TextBlock Text="{DynamicResource Hybrid.NativeHintDetail}" Foreground="{StaticResource Hybrid.Muted}" FontSize="12" LineHeight="20" TextWrapping="Wrap" Margin="0,6,22,0" MaxWidth="720" HorizontalAlignment="Left" /></StackPanel>
+                    <Button Grid.Column="1" Click="NativeBrowse_Click" Content="{DynamicResource Hybrid.Browse}" Style="{StaticResource Hybrid.QuietButton}" Foreground="{StaticResource Hybrid.Accent}" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+            <StackPanel x:Name="PanCustom" Margin="0,0,0,6" />
+            <local:MyCard Margin="0,0,0,16" Title="{DynamicResource Launch.Right.CommunityHint.Title}" x:Name="PanHint">
+                <local:MyIconButton SvgIcon="lucide/x" Height="20" Width="20" Margin="10" HorizontalAlignment="Right" VerticalAlignment="Top" x:Name="BtnHintClose" Click="BtnHintClose_Click" />
+                <StackPanel Margin="22,42,22,20">
+                    <TextBlock x:Name="LabHint1" TextWrapping="Wrap" Margin="0,0,0,6" FontSize="13" LineHeight="22" />
+                    <TextBlock x:Name="LabHint2" TextWrapping="Wrap" FontSize="13" LineHeight="22" />
                 </StackPanel>
             </local:MyCard>
-            <local:MyCard Margin="0,0,0,15" Title="{DynamicResource Launch.Right.Log.Title}" x:Name="PanLog">
-                <TextBlock x:Name="LabLog" Margin="20,38,20,18" TextTrimming="None" TextWrapping="Wrap" />
+            <local:MyCard Margin="0,0,0,16" Title="{DynamicResource Launch.Right.Log.Title}" x:Name="PanLog">
+                <TextBlock x:Name="LabLog" Margin="22,42,22,20" TextWrapping="Wrap" FontSize="13" LineHeight="22" />
             </local:MyCard>
         </StackPanel>
     </local:MyScrollViewer>

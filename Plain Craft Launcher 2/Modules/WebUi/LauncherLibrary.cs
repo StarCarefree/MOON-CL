@@ -1,0 +1,472 @@
+using System.IO;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Windows.Media.Imaging;
+using PCL.Core.App;
+using PCL.Core.Minecraft.Launcher;
+using PCL.Core.Minecraft.Profile;
+using PCL.Core.Minecraft.Profile.Models;
+
+namespace PCL;
+
+/// <summary>UI-thread owned coordinator; native launcher remains the installer/login/launch authority.</summary>
+internal sealed class LauncherLibrary : IDisposable
+{
+    private sealed record Settings(string CatalogUrl = "", string QuarkServiceUrl = "", string[]? CatalogUrls = null);
+    private sealed record Installed(string Id, string Version);
+    private readonly string _settingsPath = Path.Combine(AppContext.BaseDirectory, "PCL", "launcher-library.json");
+    private readonly HttpClient _http = new(new HttpClientHandler { UseCookies = false }) { Timeout = TimeSpan.FromMinutes(30) };
+    private readonly PackTransfer _transfer;
+    private readonly HttpClient _catalogHttp = new(new HttpClientHandler
+    {
+        UseCookies = false, AutomaticDecompression = System.Net.DecompressionMethods.All, MaxAutomaticRedirections = 5
+    }) { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly PackCatalogClient _catalogClient;
+    private string _catalogSource = "";
+    private Settings _settings = new(CatalogUrls: []);
+    private List<PackDefinition> _packs = [PackCatalog.BuiltIn];
+    private readonly Dictionary<string, (McInstance Instance, string Version)> _installed = new();
+    private readonly Dictionary<string, ExternalUpdatePlan> _updates = new();
+    private readonly Dictionary<string, PackDefinition> _managed = new();
+    private readonly HashSet<string> _publishedManaged = new(StringComparer.Ordinal);
+    private readonly ExternalPackCheckOnce _once = new();
+    private bool _updateHint;
+    private bool _autoFinished;
+    private string _autoFolder = "";
+    public static bool PackWorkInProgress { get; private set; }
+    public bool HasUpdateHint => _updateHint;
+    public void ClearUpdateHint() => _updateHint = false;
+    private CancellationTokenSource? _work;
+    private ModLoader.LoaderCombo<string>? _installer;
+    private string _selected = PackCatalog.StarRailId;
+    private string _phase = "就绪";
+    private string _error = "";
+    private double _progress;
+    private DateTime _nextScan;
+    private string _lastDirectory = "";
+    private BitmapSource? _avatarSource;
+    private DateTime _nextRefresh = DateTime.UtcNow.AddSeconds(4);
+    private string _avatar = "";
+    private bool _disposed;
+    public bool IsBusy => _work is not null;
+
+    public LauncherLibrary()
+    {
+        _transfer = new PackTransfer(_http);
+        _catalogClient = new PackCatalogClient(_catalogHttp);
+        try
+        {
+            if (File.Exists(_settingsPath)) _settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(_settingsPath)) ?? new();
+            var urls = PackCatalogSources.Normalize(_settings.CatalogUrls, _settings.CatalogUrl);
+            _settings = new Settings(urls.FirstOrDefault() ?? "", _settings.QuarkServiceUrl ?? "", urls);
+        }
+        catch (Exception ex)
+        {
+            _settings = new(CatalogUrls: []);
+            ModBase.Log(ex, "读取整合包服务配置失败", ModBase.LogLevel.Debug);
+        }
+    }
+
+    public JsonObject Capture()
+    {
+        ScanInstalled();
+        var account = ProfileService.Current;
+        var source = ModMain.frmLoginProfileSkin?.Skin?.ImgBack?.Source as BitmapSource;
+        if (!ReferenceEquals(source, _avatarSource))
+        {
+            _avatarSource = source;
+            _avatar = "";
+            if (source is not null)
+            {
+                using var stream = new MemoryStream();
+                var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(source)); png.Save(stream);
+                _avatar = "data:image/png;base64," + Convert.ToBase64String(stream.ToArray());
+            }
+        }
+        var instances = new JsonArray();
+        foreach (var instance in Instances())
+            instances.Add(new JsonObject { ["id"] = "instance:" + instance.Name, ["name"] = instance.Name,
+                ["version"] = instance.Desc, ["selected"] = _selected == "instance:" + instance.Name });
+        var presets = new JsonArray();
+        foreach (var pack in _packs)
+        {
+            _installed.TryGetValue(pack.Id, out var installed);
+            presets.Add(new JsonObject
+            {
+                ["id"] = pack.Id, ["name"] = pack.Name, ["description"] = pack.Description,
+                ["version"] = pack.Version,
+                ["updateVersion"] = _updates.TryGetValue(pack.Id, out var update) ? update.Version : "",
+                ["installedVersion"] = installed.Version ?? "", ["minecraft"] = pack.Minecraft,
+                ["icon"] = pack.Icon, ["background"] = pack.Background, ["installed"] = installed.Instance is not null,
+                ["updateAvailable"] = _updates.ContainsKey(pack.Id)
+            });
+        }
+        var type = account?.ProfileType switch
+        {
+            ProfileType.Microsoft => "Microsoft / Mojang",
+            ProfileType.Authlib or ProfileType.YggdrasilConnect => account.ServerName ?? "LittleSkin / Authlib",
+            ProfileType.Offline => "离线账号",
+            _ => "点击登录"
+        };
+        return new JsonObject
+        {
+            ["account"] = new JsonObject { ["name"] = account?.UserName ?? "未登录", ["type"] = type, ["avatar"] = account is null ? "" : _avatar },
+            ["directory"] = ModFolder.mcFolderSelected ?? "", ["instances"] = instances, ["presets"] = presets, ["selected"] = _selected,
+            ["task"] = new JsonObject { ["busy"] = _work is not null || ModLaunch.isLaunching,
+                ["gameRunning"] = ModWatcher.hasRunningMinecraft,
+                ["phase"] = ModLaunch.isLaunching ? "正在启动游戏" : ModWatcher.hasRunningMinecraft ? "游戏运行中" : _phase,
+                ["indeterminate"] = _work is not null && _installer is null && !_phase.StartsWith("下载整合包", StringComparison.Ordinal),
+                ["progress"] = ModLaunch.isLaunching ? ModLaunch.mcLaunchLoader.Progress : _installer is not null ? .25 + .75 * _installer.Progress : _progress, ["error"] = _error },
+            ["config"] = new JsonObject { ["catalogUrl"] = _settings.CatalogUrl,
+                ["catalogUrls"] = new JsonArray(_settings.CatalogUrls!.Select(url => (JsonNode?)JsonValue.Create(url)).ToArray()),
+                ["catalogSource"] = _catalogSource, ["quarkServiceUrl"] = _settings.QuarkServiceUrl }
+        };
+    }
+
+    private static McInstance[] Instances()
+    {
+        if (string.IsNullOrEmpty(ModFolder.mcFolderSelected)) return [];
+        var versions = Path.GetFullPath(Path.Combine(ModFolder.mcFolderSelected, "versions")) + Path.DirectorySeparatorChar;
+        return ModInstanceList.mcInstanceList.ToArray().SelectMany(pair => pair.Value.ToArray())
+            .Where(i => i.PathInstance.StartsWith(versions, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(i => i.Name).Select(g => g.First()).ToArray();
+    }
+
+    private void ScanInstalled(bool force = false)
+    {
+        var folder = ModFolder.mcFolderSelected ?? "";
+        if (!force && folder == _lastDirectory && DateTime.UtcNow < _nextScan) return;
+        if (folder != _lastDirectory)
+        {
+            _updates.Clear();
+            _once.Clear();
+            _autoFinished = false;
+            _nextRefresh = DateTime.UtcNow.AddSeconds(2);
+        }
+        _lastDirectory = folder; _nextScan = DateTime.UtcNow.AddSeconds(3);
+        _installed.Clear();
+        _managed.Clear();
+        foreach (var instance in Instances().OrderBy(i => File.GetLastWriteTimeUtc(Path.Combine(i.PathInstance, "PCL", "launcher-pack.json"))))
+        {
+            if (!File.Exists(Path.Combine(instance.PathInstance, instance.Name + ".json")) || File.Exists(Path.Combine(instance.PathInstance, ".pclignore"))) continue;
+            try
+            {
+                var marker = Path.Combine(instance.PathInstance, "PCL", "launcher-pack.json");
+                var saved = File.Exists(marker) ? JsonSerializer.Deserialize<Installed>(File.ReadAllText(marker)) : null;
+                if (saved is not null) _installed[saved.Id] = (instance, saved.Version);
+                else if (!_installed.ContainsKey(PackCatalog.StarRailId) && instance.Name.Contains("StarRailHarpyExpress", StringComparison.OrdinalIgnoreCase))
+                    _installed[PackCatalog.StarRailId] = (instance, ExternalPackUpdater.ReadLocalVersion(instance.PathIndie));
+            }
+            catch (Exception ex) { ModBase.Log(ex, "读取整合包实例标记失败", ModBase.LogLevel.Debug); }
+            TryRegisterManaged(instance);
+        }
+        foreach (var id in _updates.Keys.Where(id => !_installed.ContainsKey(id)).ToArray()) _updates.Remove(id);
+        PublishManaged();
+        _selected = PackCatalog.ResolveSelection(_selected, _packs.Select(p => p.Id), Instances().Select(i => "instance:" + i.Name));
+    }
+
+    private void TryRegisterManaged(McInstance instance)
+    {
+        string root;
+        try { root = ExternalPackCheckOnce.Normalize(instance.PathIndie); }
+        catch (Exception ex) { ModBase.Log(ex, "读取实例隔离目录失败", ModBase.LogLevel.Debug); return; }
+        ExternalUpdateSource? source;
+        try { source = SourceFor(root, instance); }
+        catch (Exception ex) { ModBase.Log(ex, "读取更新配置失败", ModBase.LogLevel.Debug); return; }
+        if (source is not { Enabled: true }) return;
+        if (_installed.Values.Any(item => SameRoot(item.Instance, root))) return;
+        var id = ExternalPackCheckOnce.ManagedPackId(instance.Name, root);
+        var version = "";
+        try { version = ExternalPackUpdater.ReadLocalVersion(root); }
+        catch (Exception ex) { ModBase.Log(ex, "读取整合包内部版本失败", ModBase.LogLevel.Debug); }
+        if (string.IsNullOrWhiteSpace(version)) version = instance.Desc;
+        _installed[id] = (instance, version);
+        _managed[id] = new PackDefinition
+        {
+            Id = id, Name = instance.Name, Version = string.IsNullOrWhiteSpace(version) ? "Packwiz" : version,
+            Description = "已启用 mod-loading-screen 更新。启动器只比较 Packwiz 清单，不把它当成整包版本。"
+        };
+    }
+
+    private static bool SameRoot(McInstance instance, string root)
+    {
+        try { return string.Equals(ExternalPackCheckOnce.Normalize(instance.PathIndie), root, StringComparison.OrdinalIgnoreCase); }
+        catch (Exception) { return false; }
+    }
+
+    private static ExternalUpdateSource? SourceFor(string root, McInstance instance)
+    {
+        var local = ExternalPackUpdater.ReadSource(root);
+        if (local is not null) return local;
+        var marker = Path.Combine(instance.PathInstance, "PCL", "launcher-pack.json");
+        var pack = instance.Name.Contains("StarRailHarpyExpress", StringComparison.OrdinalIgnoreCase) || File.Exists(marker);
+        return pack ? ExternalPackUpdater.ReadArchiveConfig(PackCatalog.TestArchive) : null;
+    }
+
+    private void PublishManaged()
+    {
+        foreach (var id in _publishedManaged.Where(id => !_managed.ContainsKey(id)).ToArray())
+        {
+            _packs.RemoveAll(pack => pack.Id == id);
+            _publishedManaged.Remove(id);
+        }
+        foreach (var pack in _managed.Values)
+        {
+            if (_packs.All(item => item.Id != pack.Id)) _packs.Add(pack);
+            _publishedManaged.Add(pack.Id);
+        }
+    }
+
+    public async Task CheckManagedOnceAsync()
+    {
+        var folder = ModFolder.mcFolderSelected ?? "";
+        if (_autoFinished && string.Equals(folder, _autoFolder, StringComparison.OrdinalIgnoreCase)) return;
+        if (_disposed || _work is not null || folder.Length == 0 || ModLaunch.isLaunching) return;
+        if (ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Finished) return;
+        await RunAsync(token => CheckInstalledAsync(token, false));
+        if (_error.Length == 0 && _phase != "已取消" && string.Equals(ModFolder.mcFolderSelected, folder, StringComparison.OrdinalIgnoreCase))
+        {
+            _autoFinished = true;
+            _autoFolder = folder;
+        }
+    }
+
+    private async Task CheckInstalledAsync(CancellationToken token, bool manual)
+    {
+        ScanInstalled(true);
+        _phase = "检查整合包更新";
+        foreach (var (id, installed) in _installed.ToArray())
+        {
+            string root;
+            try { root = ExternalPackCheckOnce.Normalize(installed.Instance.PathIndie); }
+            catch (Exception ex) { ModBase.Log(ex, "读取实例目录失败", ModBase.LogLevel.Debug); continue; }
+            if (!manual && _once.IsDone(root)) continue;
+            ExternalUpdateSource? source;
+            try { source = SourceFor(root, installed.Instance); }
+            catch (Exception ex) { ModBase.Log(ex, "读取更新配置失败", ModBase.LogLevel.Debug); continue; }
+            if (source is not { Enabled: true })
+            {
+                _updates.Remove(id);
+                if (!manual) _once.MarkDone(root);
+                continue;
+            }
+            var plan = await new ExternalPackUpdater(_http).CheckAsync(root, token, source);
+            if (!manual) _once.MarkDone(root);
+            if (plan is null) _updates.Remove(id);
+            else
+            {
+                _updates[id] = plan;
+                if (!manual) _updateHint = true;
+            }
+        }
+        _phase = "已刷新";
+    }
+
+    public async Task RefreshIfNeededAsync(FormMain form)
+    {
+        if (_disposed || _work is not null || DateTime.UtcNow < _nextRefresh || string.IsNullOrEmpty(ModFolder.mcFolderSelected) ||
+            ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Finished || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
+        _nextRefresh = DateTime.UtcNow.AddMinutes(5);
+        await HandleAsync(new JsonObject { ["operation"] = "refresh" }, form);
+    }
+
+    public async Task HandleAsync(JsonObject message, FormMain form)
+    {
+        var operation = message["operation"]?.GetValue<string>() ?? "";
+        if (operation == "cancel")
+        {
+            _work?.Cancel(); _installer?.Abort();
+            if (_work is null && ModLaunch.isLaunching) ModLaunch.AbortActiveLaunches();
+            return;
+        }
+        if (_disposed || _work is not null || (ModLaunch.isLaunching && operation is not ("primary" or "select"))) return;
+        _error = "";
+        if (operation == "select")
+        {
+            var id = message["id"]?.GetValue<string>() ?? "";
+            if (_packs.Any(p => p.Id == id)) _selected = id;
+            else if (Instances().FirstOrDefault(i => "instance:" + i.Name == id) is { } instance)
+            { SelectInstance(instance); _selected = id; }
+            return;
+        }
+        if (operation == "login") { form.ShowHybridAccount(); return; }
+        if (operation == "directory") { form.PageChange(FormMain.PageType.InstanceSelect); return; }
+        if (operation == "import") { ModModpack.ModpackInstall(); return; }
+        if (operation == "configure")
+        {
+            string[]? sources = null;
+            if (message.TryGetPropertyValue("catalogUrls", out var sourceNode))
+            {
+                if (sourceNode is not JsonArray sourceArray) throw new InvalidDataException("目录源必须是地址数组。");
+                sources = sourceArray.Select(item => item?.GetValue<string>() ?? "").ToArray();
+            }
+            var urls = PackCatalogSources.Normalize(sources, message["catalogUrl"]?.GetValue<string>() ?? "");
+            var quark = message["quarkServiceUrl"]?.GetValue<string>()?.Trim() ?? "";
+            if (quark.Length > 0) PackCatalog.HttpUri(quark);
+            var settings = new Settings(urls.FirstOrDefault() ?? "", quark, urls);
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            File.WriteAllText(_settingsPath + ".tmp", JsonSerializer.Serialize(settings));
+            File.Move(_settingsPath + ".tmp", _settingsPath, true); _settings = settings;
+            if (urls.Length == 0) { _packs = [PackCatalog.BuiltIn]; _catalogSource = ""; }
+        }
+        if (operation is "refresh" or "configure" or "checkUpdates")
+        {
+            await RunAsync(async token =>
+            {
+                if (operation != "checkUpdates" && _settings.CatalogUrls!.Length > 0)
+                {
+                    _phase = "获取预设目录";
+                    var result = await _catalogClient.FetchAsync(_settings.CatalogUrls, token,
+                        (index, count, _) => _phase = $"获取预设目录源 {index}/{count}");
+                    var packs = result.Packs.ToList();
+                    if (packs.All(p => p.Id != PackCatalog.StarRailId)) packs.Insert(0, PackCatalog.BuiltIn);
+                    _packs = packs;
+                    _catalogSource = result.SourceUrl;
+                    _phase = result.NotModified ? "预设目录未改变（304）" : "预设目录已刷新";
+                    if (!_packs.Any(p => p.Id == _selected) && !_selected.StartsWith("instance:")) _selected = _packs[0].Id;
+                }
+                await CheckInstalledAsync(token, operation == "checkUpdates");
+            });
+            return;
+        }
+        if (operation is not ("primary" or "installQuark")) return;
+        if (!(operation == "primary" && _selected.StartsWith("instance:")) && (ModWatcher.hasRunningMinecraft || ModLaunch.isLaunching)) throw new InvalidOperationException("请先关闭游戏，再执行下载、更新或切换启动。");
+        ScanInstalled(true);
+        if (operation == "primary" && _selected.StartsWith("instance:"))
+        {
+            if (Instances().FirstOrDefault(i => "instance:" + i.Name == _selected) is { } instance)
+            { SelectInstance(instance); Launch(form); return; }
+            _selected = _packs[0].Id;
+        }
+        var pack = _packs.FirstOrDefault(p => p.Id == _selected) ?? throw new InvalidOperationException("请先选择整合包。");
+        if (operation == "primary" && _installed.TryGetValue(pack.Id, out var existing))
+        {
+            if (_updates.TryGetValue(pack.Id, out var plan))
+            {
+                var prompt = "将按配置文件中的 Packwiz 地址更新。目标没有 mod-loading-screen 或本地配置文件时，仍使用整合包配置，不因文件不存在而跳过。\n来源：" + plan.Url +
+                    "\n此更新不等同于整包版本升级。将备份 mods、config、resourcepacks 等受管状态，不处理存档。";
+                if (ModMain.MyMsgBox(prompt + (plan.Url.StartsWith("http:", StringComparison.OrdinalIgnoreCase) ? "\n注意：当前更新源使用未加密 HTTP，请确认信任该来源。" : ""),
+                    "更新整合包", "更新游戏", "取消", isWarn: true) != 1) return;
+                await RunAsync(async token =>
+                {
+                    _phase = "备份并运行整合包更新器";
+                    var java = await Task.Run(() =>
+                    {
+                        lock (ModJava.javaLock) return ModJava.JavaSelect("更新需要 Java 21 或更高版本。", new Version(21, 0), relatedInstance: existing.Instance, enforceVersionRange: true);
+                    }, token);
+                    if (java is null) throw new InvalidOperationException("未找到 Java 21，请在设置中添加 Java。");
+                    await new ExternalPackUpdater(_http, java.Installation.JavaExePath).ApplyAsync(existing.Instance.PathIndie, plan, new Progress<double>(p => _progress = p), token, PackCatalog.TestArchive);
+                    _updates.Remove(pack.Id); _phase = "更新完成";
+                });
+            }
+            else { SelectInstance(existing.Instance); Launch(form); }
+            return;
+        }
+        await RunAsync(token => InstallAsync(pack, operation == "installQuark", token));
+    }
+
+    internal static void SelectInstance(McInstance instance)
+    {
+        if (!instance.Check()) throw new InvalidDataException("所选实例不可启动，请在实例管理中修复。");
+        ModInstanceList.McMcInstanceSelected = instance; States.Game.SelectedInstance = instance.Name;
+        ModMain.frmLaunchLeft?.RefreshButtonsUI();
+    }
+
+    private static void Launch(FormMain form)
+    {
+        form.PageChange(FormMain.PageType.Launch);
+        var launch = ModMain.frmLaunchLeft ?? throw new InvalidOperationException("启动页面尚未就绪，请稍后重试。");
+        launch.RefreshButtonsUI();
+        if (ProfileService.Current is null) throw new InvalidOperationException("请点击左上角头像，先登录或创建离线账号。");
+        launch.LaunchButtonClick();
+    }
+
+    private async Task RunAsync(Func<CancellationToken, Task> work)
+    {
+        using var cts = new CancellationTokenSource(); _work = cts; PackWorkInProgress = true; _progress = 0; _error = "";
+        try { await work(cts.Token); }
+        catch (OperationCanceledException) { _phase = "已取消"; }
+        catch (ModBase.CancelledException) { _phase = "已取消"; }
+        catch (ThreadInterruptedException) when (cts.IsCancellationRequested) { _phase = "已取消"; }
+        catch (Exception ex) { _phase = "操作失败"; _error = ex.Message; ModBase.Log(ex, "整合包服务操作失败", ModBase.LogLevel.Debug); }
+        finally { _installer = null; _work = null; PackWorkInProgress = false; _nextScan = DateTime.MinValue; }
+    }
+
+    private async Task InstallAsync(PackDefinition pack, bool quark, CancellationToken token)
+    {
+        var folder = ModFolder.mcFolderSelected;
+        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) throw new InvalidOperationException("请先在底部选择游戏目录。");
+        var instanceName = pack.Id + "-" + Guid.NewGuid().ToString("N")[..6];
+        var target = Path.Combine(folder, "versions", instanceName);
+        var archive = pack.LocalArchive;
+        var version = pack.Version;
+        var temp = Path.Combine(Path.GetTempPath(), "PCL-PackDownloads", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        try
+        {
+            if (quark || string.IsNullOrEmpty(archive) || !File.Exists(archive))
+            {
+                _phase = quark ? "解析夸克分享文件" : "下载整合包";
+                var url = pack.DownloadUrl;
+                IReadOnlyDictionary<string, string>? headers = null;
+                var fileName = pack.FileName;
+                if (quark || string.IsNullOrEmpty(url))
+                {
+                    if (string.IsNullOrEmpty(pack.ShareUrl)) throw new InvalidOperationException("此预设未配置下载地址或夸克链接。");
+                    var resolved = await new QuarkPackClient(_http).ResolveAsync(_settings.QuarkServiceUrl, pack.ShareUrl, pack.SharePath, token);
+                    url = resolved.Url; headers = resolved.Headers; fileName = resolved.FileName;
+                }
+                archive = PackCatalog.SafePath(temp, fileName);
+                _phase = "下载整合包";
+                 try
+                 {
+                     await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, HashAlgorithmName.SHA256,
+                         new Progress<double>(p => _progress = p * .25), token, headers);
+                 }
+                 catch (HttpRequestException ex) when (quark && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+                 {
+                     var openedDrive = QuarkClientLaunch.TryOpenDriveShare(pack.ShareUrl);
+                     var openedBrowser = !openedDrive && QuarkClientLaunch.TryOpenShare(pack.ShareUrl);
+                     throw new InvalidOperationException(openedDrive
+                         ? "夸克 CDN 拒绝了匿名直链。已唤起夸克网盘客户端分享窗口，但该窗口没有下载接口，也没有保存目标文件。请在窗口中手动下载后再导入。"
+                         : openedBrowser
+                         ? "夸克 CDN 拒绝了匿名直链。已打开夸克分享窗口，请在窗口中进入目标文件后下载，再手动导入。"
+                         : ex.Message, ex);
+                 }
+            }
+            token.ThrowIfCancellationRequested();
+            if (ModFolder.mcFolderSelected != folder) throw new InvalidOperationException("游戏目录已改变，请重新安装。");
+            var metadata = await Task.Run(() => PackArchive.ReadMetadata(archive), token);
+            if (!string.IsNullOrWhiteSpace(metadata?.Version)) version = metadata.Version;
+            _phase = "调用启动器导入整合包";
+            _installer = await Task.Run(() => ModModpack.ModpackInstall(archive, instanceName), token);
+            if (_installer is null) throw new InvalidOperationException("此包的原生安装器未返回任务，请使用手动导入。");
+            using var registration = token.Register(() => _installer?.Abort());
+            await Task.Run(() => _installer.WaitForExit());
+            token.ThrowIfCancellationRequested();
+            if (_installer.State != ModBase.LoadState.Finished) throw _installer.Error ?? new IOException("整合包安装未成功。");
+            // Native installers may choose a different name for legacy formats; never mark a guessed path installed.
+            if (!File.Exists(Path.Combine(target, instanceName + ".json"))) throw new IOException("原生导入未生成预期实例；请从实例管理检查导入结果。");
+            var instance = new McInstance(target);
+            WriteMarker(instance, pack.Id, version);
+            ModInstanceList.mcInstanceListForceRefresh = true;
+            await Task.Run(() => ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, folder, ModLoader.LoaderFolderRunType.ForceRun, 1, @"versions\", true));
+            SelectInstance(instance); _selected = pack.Id; _progress = 1; _phase = "安装完成";
+        }
+        finally { try { Directory.Delete(temp, true); } catch (IOException) { } }
+    }
+
+    private static void WriteMarker(McInstance instance, string id, string version)
+    {
+        var path = Path.Combine(instance.PathInstance, "PCL", "launcher-pack.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(new Installed(id, version)));
+        File.Move(path + ".tmp", path, true);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return; _disposed = true;
+        _work?.Cancel(); _installer?.Abort(); _http.Dispose(); _catalogHttp.Dispose();
+    }
+}

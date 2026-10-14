@@ -145,6 +145,12 @@ public partial class PageInstanceOverall
                     Info = Lang.Text("Instance.Overall.Info.LaunchCount.Count", States.Instance.LaunchCount[instance.PathInstance]),
                     Logo = "pack://application:,,,/images/Blocks/RedstoneLampOn.png"
                 });
+            items.Add(new MyListItem
+            {
+                Title = Lang.Text("Instance.Overall.Info.PlayTime.Title"),
+                Info = InstanceActivity.PlayDetail(instance.PathInstance),
+                Logo = "pack://application:,,,/images/Blocks/GoldBlock.png"
+            });
             if (!string.IsNullOrWhiteSpace(States.Instance.ModpackVersion[instance.PathInstance]))
                 items.Add(new MyListItem
                 {
@@ -546,7 +552,7 @@ public partial class PageInstanceOverall
             if (string.IsNullOrEmpty(savePath))
                 return;
             // 检查中断（等玩家选完弹窗指不定任务就结束了呢……）
-            if (ModLaunch.mcLaunchLoader.State == ModBase.LoadState.Loading)
+            if (ModLaunch.IsInstanceLaunching(PageInstanceLeft.McInstance))
             {
                 HintService.Hint(Lang.Text("Instance.Overall.Script.WaitForLaunchTask"), HintType.Error);
                 return;

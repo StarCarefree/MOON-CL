@@ -24,6 +24,12 @@ public class MyScrollBar : ScrollBar
     {
         try
         {
+            if (PCL.Core.UI.Theme.ThemeService.UseUnifiedDesktopPalette)
+            {
+                ModAnimation.AniStop("MyScrollBar Color " + Uuid);
+                Opacity = IsEnabled ? 1 : 0.25;
+                return; // The shared template owns hover and drag colors.
+            }
             // 判断当前颜色
             double newOpacity;
             string newColor;

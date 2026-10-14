@@ -15,7 +15,7 @@ final class CloudController {
 
     CloudController(PackStore store, Ports ports) { this.store = store; this.ports = ports; }
 
-    @GetMapping({"/catalog.json", "/api/v1/packs"})
+    @GetMapping({"/index.json", "/catalog.json", "/api/v1/packs"})
     ResponseEntity<byte[]> catalog(HttpServletRequest request) {
         return store.current().catalog().respond(request, PUBLIC_CACHE);
     }

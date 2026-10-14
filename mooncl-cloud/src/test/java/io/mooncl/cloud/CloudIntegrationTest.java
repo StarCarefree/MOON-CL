@@ -89,6 +89,11 @@ class CloudIntegrationTest {
         assertThat(draft.statusCode()).isEqualTo(200);
         next = etag(draft);
         var catalog = request(ports.publicPort(), "/catalog.json", "GET", null, Map.of());
+        var indexCatalog = request(ports.publicPort(), "/index.json", "GET", null, Map.of());
+        assertThat(indexCatalog.statusCode()).isEqualTo(200);
+        assertThat(indexCatalog.body()).isEqualTo(catalog.body());
+        assertThat(etag(indexCatalog)).isEqualTo(etag(catalog));
+        assertThat(request(ports.adminPort(), "/index.json", "GET", null, Map.of()).statusCode()).isEqualTo(404);
         assertThat(json(catalog).get("packs")).hasSize(1);
         assertThat(json(catalog).at("/packs/0/icon").asText()).isEqualTo("https://cdn.example.com/cover.webp");
         var compressed = request(ports.publicPort(), "/catalog.json", "GET", null, Map.of("Accept-Encoding", "gzip"));

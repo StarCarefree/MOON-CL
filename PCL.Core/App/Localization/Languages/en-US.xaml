@@ -1013,6 +1013,13 @@
     <sys:String x:Key="Instance.Overall.Info.LaunchCount.Count">Launched {0} times</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LaunchCount.Never">Never launched</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LaunchCount.Title">Times launched</sys:String>
+    <sys:String x:Key="Instance.Overall.Info.PlayTime.None">Not played yet</sys:String>
+    <sys:String x:Key="Instance.Overall.Info.PlayTime.Title">Play time</sys:String>
+    <sys:String x:Key="Hybrid.Running">Running:{0}</sys:String>
+    <sys:String x:Key="Hybrid.PlayTime">Played {0}</sys:String>
+    <sys:String x:Key="Hybrid.PlayUnderMinute">Under 1 minute</sys:String>
+    <sys:String x:Key="Hybrid.PlayMinutes">{0} min</sys:String>
+    <sys:String x:Key="Hybrid.PlayHours">{0} h {1} min</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LoadInstanceInfoTask">Loading instance info</sys:String>
     <sys:String x:Key="Instance.Overall.Info.LoadModpackInfoTask">Loading modpack info</sys:String>
     <sys:String x:Key="Instance.Overall.Info.Loading">Loading information...</sys:String>
@@ -3475,6 +3482,9 @@
     <sys:String x:Key="Tools.Test.Error.OperationFailed">A test utility operation failed. See the details below.</sys:String>
     <sys:String x:Key="Tools.Test.LaunchCount.Message">PCL CE has launched games for you {0} times.</sys:String>
     <sys:String x:Key="Tools.Test.LaunchCount.Title">View launch count</sys:String>
+    <sys:String x:Key="Tools.Test.WebUi.Failed">The system WebView2 page failed to open. Install the WebView2 Runtime and try again.</sys:String>
+    <sys:String x:Key="Tools.Test.WebUi.Title">System WebView2 pages</sys:String>
+    <sys:String x:Key="WebUi.Page.Host">Page host</sys:String>
     <sys:String x:Key="Tools.Test.ServerQuery.Title">Check server</sys:String>
     <sys:String x:Key="Tools.Test.Title">Utilities</sys:String>
 
@@ -3636,4 +3646,37 @@
     <sys:String x:Key="Watcher.WindowLoaded">Minecraft window loaded: {0} ({1})</sys:String>
     <sys:String x:Key="Watcher.WindowMaximized">Minecraft window maximized: {0}</sys:String>
 
+    <sys:String x:Key="Hybrid.Browse">Browse</sys:String>
+    <sys:String x:Key="Hybrid.Games">My games</sys:String>
+    <sys:String x:Key="Hybrid.LocalVersions">Local versions</sys:String>
+    <sys:String x:Key="Hybrid.LaunchingPrefix">Starting</sys:String>
+    <sys:String x:Key="Hybrid.NoVersions">No local versions yet</sys:String>
+    <sys:String x:Key="Hybrid.VersionList">Version list</sys:String>
+    <sys:String x:Key="Hybrid.VersionSettings">Version settings</sys:String>
+    <sys:String x:Key="Hybrid.Account">Account and login</sys:String>
+    <sys:String x:Key="Hybrid.NotLoggedIn">Not signed in</sys:String>
+    <sys:String x:Key="Hybrid.EmptyGameTitle">Your next journey starts here</sys:String>
+    <sys:String x:Key="Hybrid.EmptyGameDetail">Choose a local version or install Minecraft from Downloads. Native PCL CE continues to manage launch, accounts and version settings.</sys:String>
+    <sys:String x:Key="Hybrid.Ready">Local version is ready</sys:String>
+    <sys:String x:Key="Hybrid.NativeHintTitle">A familiar launcher, a clearer workspace</sys:String>
+    <sys:String x:Key="Hybrid.NativeHintDetail">Native launch and version controls stay on the right. Browse supplements them with pack services, including SRE as a test download.</sys:String>
+    <sys:String x:Key="Hybrid.BrowserFailed">Browse is temporarily unavailable. Use the complete portable package with WebView2Runtime. Native games, settings and downloads remain available.</sys:String>
+    <sys:String x:Key="Hybrid.Account.Title">Account and login</sys:String>
+    <sys:String x:Key="Hybrid.Account.SwitchHint">Switch an existing account on the left, or create one on the right.</sys:String>
+    <sys:String x:Key="Hybrid.Account.Existing">Accounts</sys:String>
+    <sys:String x:Key="Hybrid.Account.Empty">No accounts yet. Choose LittleSkin, official, offline, or a custom skin server.</sys:String>
+    <sys:String x:Key="Hybrid.Account.Create">New account</sys:String>
+    <sys:String x:Key="Hybrid.Account.CreateHint">All four methods use the launcher's existing login flow.</sys:String>
+    <sys:String x:Key="Hybrid.Account.LittleSkin">LittleSkin</sys:String>
+    <sys:String x:Key="Hybrid.Account.LittleSkinHint">littleskin.cn</sys:String>
+    <sys:String x:Key="Hybrid.Account.Microsoft">Official</sys:String>
+    <sys:String x:Key="Hybrid.Account.MicrosoftHint">Microsoft account</sys:String>
+    <sys:String x:Key="Hybrid.Account.Offline">Offline</sys:String>
+    <sys:String x:Key="Hybrid.Account.OfflineHint">No online verification</sys:String>
+    <sys:String x:Key="Hybrid.Account.Custom">Custom skin server</sys:String>
+    <sys:String x:Key="Hybrid.Account.CustomHint">Yggdrasil / Authlib</sys:String>
+    <sys:String x:Key="Hybrid.Account.CustomTitle">Custom skin server</sys:String>
+    <sys:String x:Key="Hybrid.Account.Current">Current</sys:String>
+    <sys:String x:Key="Hybrid.Account.Delete">Delete</sys:String>
+    <sys:String x:Key="Hybrid.Account.Back">Back</sys:String>
 </ResourceDictionary>

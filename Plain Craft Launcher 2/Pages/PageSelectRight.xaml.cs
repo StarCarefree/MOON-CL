@@ -424,6 +424,28 @@ public partial class PageSelectRight
     private static void McVersionListContent(MyListItem sender, EventArgs e)
     {
         var version = (McInstance)sender.Tag;
+        var expanded = false;
+        var badge = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = new SolidColorBrush(Color.FromRgb(255, 185, 66)),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 112, 0),
+            IsHitTestVisible = false
+        };
+        Grid.SetColumnSpan(badge, 10);
+        Grid.SetRowSpan(badge, 10);
+        sender.Children.Add(badge);
+        var path = version.PathInstance;
+        InstanceActivity.Track(new InstanceActivity.RunningBadge
+        {
+            Text = badge,
+            Path = () => path,
+            Expanded = () => expanded
+        });
+        sender.MouseEnter += (_, _) => { expanded = true; InstanceActivity.RefreshBadges(); };
+        sender.MouseLeave += (_, _) => { expanded = false; InstanceActivity.RefreshBadges(); };
         // 注册点击事件
         sender.Click += (a, b) => Item_Click((MyListItem)a, b);
         // 图标按钮

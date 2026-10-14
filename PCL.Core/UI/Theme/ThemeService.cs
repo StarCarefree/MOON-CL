@@ -25,6 +25,9 @@ public sealed partial class ThemeService
     [AnyConfigItem<ToneProfileConfig>("UiToneProfiles", ConfigSource.Local)]
     public static partial ToneProfileConfig ToneProfiles { get; set; }
 
+    /// <summary>Keep native pages aligned with the launcher's charcoal/gold hybrid shell.</summary>
+    public static bool UseUnifiedDesktopPalette { get; set; }
+
     [RegisterConfigEvent]
     public static ConfigEventRegistry OnColorModeConfigChanged => new(
         scope: Config.Preference.Theme.ColorModeConfig,
@@ -68,13 +71,13 @@ public sealed partial class ThemeService
         Context.Debug($"当前状态: {(IsDarkMode ? "Dark" : "Light")}, {CurrentTheme}");
     }
 
-    private static bool _IsDarkMode() => Config.Preference.Theme.ColorMode switch
+    private static bool _IsDarkMode() => UseUnifiedDesktopPalette || (Config.Preference.Theme.ColorMode switch
     {
         ColorMode.Light => false,
         ColorMode.Dark => true,
         ColorMode.System => SystemThemeHelper.IsSystemInDarkMode(),
         _ => false
-    };
+    });
 
     /// <summary>
     /// 当前是否为深色主题。
@@ -233,6 +236,7 @@ public sealed partial class ThemeService
     {
         var cache = IsDarkMode ? DarkGrayCache : LightGrayCache;
         foreach (var c in cache) c.Apply();
+        if (UseUnifiedDesktopPalette) UnifiedDesktopPalette.ApplyNeutral(Lifecycle.CurrentApplication.Resources);
     }
 
     /// <summary>
@@ -242,5 +246,6 @@ public sealed partial class ThemeService
     {
         var colors = _CalculateColors(CurrentTone, GetCurrentThemeArgs());
         foreach (var c in colors) c.Apply();
+        if (UseUnifiedDesktopPalette) UnifiedDesktopPalette.ApplyAccent(Lifecycle.CurrentApplication.Resources);
     }
 }
