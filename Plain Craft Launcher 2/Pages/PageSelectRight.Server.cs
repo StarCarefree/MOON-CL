@@ -1,10 +1,11 @@
 using System.Windows;
+using System.Windows.Input;
 
 namespace PCL;
 
 public partial class PageSelectRight
 {
-    private void ClientList_Click(object sender, RoutedEventArgs e)
+    private void ClientList_Click(object sender, MouseButtonEventArgs e)
     {
         PanClientContent.Visibility = Visibility.Visible;
         PanServers.Visibility = Visibility.Collapsed;
@@ -12,7 +13,7 @@ public partial class PageSelectRight
         BtnClientList.Text = "客户端版本";
     }
 
-    private void ServerList_Click(object sender, RoutedEventArgs e)
+    private void ServerList_Click(object sender, MouseButtonEventArgs e)
     {
         ServerUi.DownloadSource = () => PCL.Core.App.Config.Download.FileSource;
         PanServers.Content ??= new ServerManagementView();

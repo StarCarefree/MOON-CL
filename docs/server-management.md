@@ -45,6 +45,9 @@
 ```powershell
 dotnet build '.\Plain Craft Launcher 2\Plain Craft Launcher 2.csproj' -c Debug -p:Platform=x64
 dotnet test '.\PCL.Core.Test\PCL.Core.Test.csproj' -c Debug -p:Platform=x64 --filter 'FullyQualifiedName~ServerManagementTest'
+dotnet run --project '.\scripts\ui-smoke\VersionListEvents.csproj' -- '.\Plain Craft Launcher 2\bin\Debug\net10.0-windows\win-x64\Plain Craft Launcher 2.dll' --page
 ```
 
 专项测试无需下载 Minecraft 或联网，使用隔离目录、假服务端 ZIP 和真实的模拟脚本进程，覆盖加载器参数、下载源顺序、属性转义、路径隔离、EULA 门槛、安装成功/失败/取消、重复启动、命令输入、停止/重启及配置快照。真实整合包的模组兼容性仍需服主在对应包上验证。
+
+版本页检查针对实际编译程序集，验证自定义 `MyButton.Click` 的运行时委托绑定、`PageSelectRight` 的 BAML 加载及客户端/服务端列表往返切换。宿主只使用内存默认配置，不启动完整启动器生命周期；因此既能捕捉编译通过但 XAML 事件签名不兼容的问题，也不会读取用户配置或启动游戏。
