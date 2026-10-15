@@ -340,6 +340,13 @@ public static class ModLaunch
         lock (_launchSessionsLock) return _launchSessions.Count(static session => session.Active);
     }
 
+    private static bool OtherLaunchActive(ModLoader.LoaderTask<McLaunchOptions, object> loader)
+    {
+        lock (_launchSessionsLock)
+            return _launchSessions.Exists(session => session.Active && !ReferenceEquals(session.Loader, loader));
+    }
+
+
     public static bool IsInstanceLaunching(McInstance instance)
     {
         if (instance?.PathInstance is not { Length: > 0 } path) return false;
@@ -377,6 +384,8 @@ public static class ModLaunch
 
     private static void AbortSession(LaunchSession session)
     {
+        session.Active = false;
+        lock (_launchSessionsLock) _launchSessions.Remove(session);
         try
         {
             session.Real?.Abort();
@@ -389,7 +398,14 @@ public static class ModLaunch
             ModBase.Log(ex, Lang.Text("Minecraft.Launch.Error.CancelProcess"), ModBase.LogLevel.Hint,
                 userSummary: Lang.Text("Minecraft.Launch.Error.CancelProcess"));
         }
+        ModBase.RunInUi(() =>
+        {
+            ModMain.frmMain?.RefreshHybridVersions();
+            if (!isLaunching && ModMain.frmLaunchLeft?.PanLaunching.Visibility == Visibility.Visible)
+                ModMain.frmLaunchLeft.PageChangeToLogin();
+        });
     }
+
 
     public class McLaunchOptions
     {
@@ -487,6 +503,18 @@ public static class ModLaunch
             ModMain.frmLaunchRight.LabLog.Text += "\r\n" + "[" + TimeUtils.GetTimeNow() + "] " + text);
         ModBase.Log("[Launch] " + text);
     }
+    private static bool GameProcessIsRunning()
+    {
+        try
+        {
+            var process = _launchSession.Value?.Process ?? LatestActive()?.Process ?? _processFallback;
+            return process is { HasExited: false };
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
 
     private static void McLaunchState(ModLoader.LoaderTask<McLaunchOptions, object> loader)
     {
@@ -497,7 +525,7 @@ public static class ModLaunch
             case ModBase.LoadState.Waiting:
             case ModBase.LoadState.Aborted:
             {
-                if (isLaunching || ModMain.frmLaunchLeft?.PanLaunching.Visibility != Visibility.Visible) break;
+                if (OtherLaunchActive(loader) || ModMain.frmLaunchLeft?.PanLaunching.Visibility != Visibility.Visible) break;
                 ModMain.frmLaunchLeft.PageChangeToLogin();
                 break;
             }
@@ -605,6 +633,12 @@ public static class ModLaunch
         }
         catch (Exception ex)
         {
+            if (GameProcessIsRunning())
+            {
+                McLaunchLog("游戏进程已启动，不再弹出启动失败：" + ex.Message);
+                return;
+            }
+
             var currentEx = ex;
             while (currentEx is not null)
             {

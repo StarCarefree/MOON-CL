@@ -169,15 +169,12 @@ internal sealed class WebUiController : IDisposable
         await _library.CheckManagedOnceAsync();
     }
 
-    public bool TakeUpdateHint(bool deliver)
+    public bool TryTakeCheckNotice(out string text, out HintType type)
     {
-        if (_library is not { HasUpdateHint: true }) return false;
-        if (!deliver) return false;
-        _library.ClearUpdateHint();
-        return true;
+        text = "";
+        type = HintType.Info;
+        return _library?.TryTakeCheckNotice(out text, out type) == true;
     }
-
-    public void ClearUpdateHint() => _library?.ClearUpdateHint();
 
     private void Refresh(bool force = false)
     {

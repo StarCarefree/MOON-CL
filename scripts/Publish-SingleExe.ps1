@@ -3,11 +3,11 @@
 .SYNOPSIS
   把 PCL-CY 打成一个框架依赖的单 exe。本脚本不会在被点源时发布。
 
-.DESCRIPTION
-  产物只有一个 exe：前面是 .NET Framework 4.8 启动器（不依赖 .NET 10），后面附加压缩后的启动器载荷。
-  未安装对应架构的 .NET 10 Desktop Runtime 时，先弹出窗口；只有点「同意并下载」才会从微软官方地址下载并安装。
-  体积靠「不打包 .NET 10、不压进单文件内部、外层只压缩一次」来减。WPF 不修剪，原生库必须进包，缺了就失败。
-  WebView2 Fixed Version 不是编译库。传入 -FixedRuntimeDirectory 才会打进同一个 exe；不传则 exe 更小，浏览页需要下次再带上。
+  产物只有一个 exe。启动文件作为普通嵌入资源放进 PE，不再把压缩包接到文件尾。
+  文件尾大段附加载荷是银狐加载器的典型形状（小壳 + 超大 overlay），单包导出会被报成 Trojan.Win64.SilverFox。
+  未安装对应架构的 .NET 10 Desktop Runtime、Visual C++ 2015-2022，或（未随包时）WebView2 时，先弹出缺少的组件；只有点「同意并下载」才会从微软官方地址下载并安装。
+  体积靠「不打包 .NET 10、不压进单文件内部、外层 zip 不再二次压缩」来减。WPF 不修剪，原生库必须进包，缺了就失败。
+  WebView2 Fixed Version 不是编译库。传入 -FixedRuntimeDirectory 才会打进同一个 exe；不传则 exe 更小，浏览页缺少时由同意下载补上。
 
   不要在其它 dotnet build / publish 还在跑时执行本脚本。
 
@@ -19,9 +19,9 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidateSet('x64', 'arm64')]
-    [string]$Architecture,
+    [string]$Architecture = '',
+
+    [switch]$SelfCheck,
 
     [ValidateSet('Debug', 'Release', 'Beta', 'CI')]
     [string]$Configuration = 'Release',
@@ -39,14 +39,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$Architecture = $Architecture.ToLowerInvariant()
+if (-not [string]::IsNullOrWhiteSpace($Architecture)) { $Architecture = $Architecture.ToLowerInvariant() }
 $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $script:ProjectDir = Join-Path $script:RepoRoot 'Plain Craft Launcher 2'
 $script:ProjectFile = Join-Path $script:ProjectDir 'Plain Craft Launcher 2.csproj'
 $script:StubDir = Join-Path $PSScriptRoot 'single-exe'
-$script:Magic = 'MOONCLPKGv1'
-$script:FooterSize = 80
 
+. (Join-Path $PSScriptRoot 'single-exe\PackageLayout.ps1')
 function Write-Step([string]$Message) { Write-Host "[single-exe] $Message" }
 function Throw-Single([string]$Message) { throw "Publish-SingleExe: $Message" }
 
@@ -271,37 +270,35 @@ function Copy-FixedRuntime([string]$Stage) {
 function New-PayloadZip([string]$Stage, [string]$ZipPath) {
     if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # Stored, not deflated. A second compression pass looks like a packer and barely shrinks the already-packed launcher.
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
         $Stage,
         $ZipPath,
-        [System.IO.Compression.CompressionLevel]::Optimal,
+        [System.IO.Compression.CompressionLevel]::NoCompression,
         $false)
 }
 
-function Add-MoonclFooter([string]$ExePath, [string]$ZipPath, [string]$Arch) {
-    $zipLength = (Get-Item -LiteralPath $ZipPath).Length
+function Get-FileSha256([string]$Path) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    $zipStream = [System.IO.File]::OpenRead($ZipPath)
-    try { $hash = $sha.ComputeHash($zipStream) }
-    finally { $zipStream.Dispose(); $sha.Dispose() }
-    $start = (Get-Item -LiteralPath $ExePath).Length
-    $out = [System.IO.File]::Open($ExePath, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-    $input = [System.IO.File]::OpenRead($ZipPath)
-    try {
-        $input.CopyTo($out)
-        $footer = New-Object byte[] $script:FooterSize
-        $magic = [System.Text.Encoding]::ASCII.GetBytes($script:Magic)
-        [Array]::Copy($magic, $footer, $magic.Length)
-        [Array]::Copy([BitConverter]::GetBytes([int64]$start), 0, $footer, 16, 8)
-        [Array]::Copy([BitConverter]::GetBytes([int64]$zipLength), 0, $footer, 24, 8)
-        [Array]::Copy($hash, 0, $footer, 32, 32)
-        $footer[64] = if ($Arch -eq 'arm64') { 2 } else { 1 }
-        $out.Write($footer, 0, $footer.Length)
-    }
-    finally {
-        $input.Dispose()
-        $out.Dispose()
-    }
+    $stream = [System.IO.File]::OpenRead($Path)
+    try { return ([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
+
+function Write-BuildInfo([string]$Path, [string]$Arch, [string]$Hash, [bool]$WebViewBundled) {
+    if ($Hash -notmatch '^[0-9a-f]{64}$') { Throw-Single '启动文件哈希无效' }
+    if ($Arch -ne 'x64' -and $Arch -ne 'arm64') { Throw-Single "架构无效: $Arch" }
+    $flag = if ($WebViewBundled) { 'true' } else { 'false' }
+    $text = @"
+internal static class BuildInfo
+{
+    internal const string Arch = "$Arch";
+    internal const string PayloadSha256 = "$Hash";
+    internal const bool WebViewBundled = $flag;
+}
+"@
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $text.Trim() + "`n", $utf8)
 }
 
 function Find-RoslynCsc([string]$DotNetExe) {
@@ -328,7 +325,7 @@ function Find-RoslynCsc([string]$DotNetExe) {
     return @($hits | Sort-Object -Descending)[0]
 }
 
-function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe) {
+function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe, [string]$ZipPath, [string]$Hash, [bool]$WebViewBundled) {
     $csc = Find-RoslynCsc $DotNetExe
     $fx = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
     $refs = @(
@@ -346,7 +343,16 @@ function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe) {
         $refArgs += ('/r:' + $path)
     }
     $platform = if ($Architecture -eq 'arm64') { 'arm64' } else { 'x64' }
-    $icon = Join-Path $script:ProjectDir 'Images\icon.ico'
+    $info = Join-Path $script:WorkRoot 'BuildInfo.cs'
+    $res = Join-Path $script:WorkRoot 'app.res'
+    Write-BuildInfo $info $Architecture $Hash $WebViewBundled
+    Write-Win32Resource $res '2.15.1.0' 'MOONCL' (Join-Path $script:ProjectDir 'Images\icon.ico') (Join-Path $script:StubDir 'app.manifest')
+    $obj = Join-Path $script:WorkRoot 'app.obj'
+    $cvtres = Join-Path $fx 'cvtres.exe'
+    if (-not (Test-Path -LiteralPath $cvtres -PathType Leaf)) { Throw-Single "缺少 cvtres.exe: $cvtres" }
+    $machine = if ($Architecture -eq 'arm64') { 'ARM64' } else { 'X64' }
+    & $cvtres /nologo ('/machine:' + $machine) ('/out:' + $obj) $res
+    Assert-LastExitCode 'cvtres'
     $cscArgs = @(
         $csc,
         '/nologo', '/noconfig', '/nostdlib+', '/optimize+', '/deterministic+',
@@ -355,22 +361,59 @@ function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe) {
         '/langversion:7.3',
         '/codepage:65001',
         '/utf8output',
-        ('/win32manifest:' + (Join-Path $script:StubDir 'app.manifest')),
+        ('/win32res:' + $obj),
+        ('/resource:' + $ZipPath + ',MOONCL.App'),
         ('/out:' + $OutExe)
     ) + $refArgs
-    if (Test-Path -LiteralPath $icon -PathType Leaf) {
-        $cscArgs += ('/win32icon:' + $icon)
-    }
     $cscArgs += (Join-Path $script:StubDir 'Bootstrapper.cs')
-    Write-Step "编译 .NET Framework 启动器（不链接 .NET 10）"
+    $cscArgs += $info
+    Write-Step '编译 .NET Framework 启动器（资源内嵌，不在文件尾附加数据，不链接 .NET 10）'
     & $DotNetExe exec @cscArgs
     Assert-LastExitCode 'csc'
     if (-not (Test-Path -LiteralPath $OutExe -PathType Leaf)) {
         Throw-Single "启动器没有生成: $OutExe"
     }
+    Set-PeChecksum $OutExe
+    $overlay = Assert-NoPeOverlay $OutExe
+    Write-Step "PE overlay=$overlay（必须接近 0，启动文件在资源里）"
+}
+
+function Invoke-SingleExeSelfCheck {
+    if ([string]::IsNullOrWhiteSpace($script:Architecture)) { $script:Architecture = 'x64' }
+    $dotnet = Resolve-DotNetExe
+    $stage = Join-Path $script:WorkRoot 'stage'
+    $zip = Join-Path $script:WorkRoot 'payload.zip'
+    $stub = Join-Path $script:WorkRoot 'stub.exe'
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $stage 'Plain Craft Launcher 2.exe'), 'mooncl-self-check')
+    New-PayloadZip $stage $zip
+    Compile-Bootstrapper $dotnet $stub $zip (Get-FileSha256 $zip) $false
+    $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($stub)
+    if ($info.ProductName -ne 'MOONCL' -or $info.FileDescription -ne 'MOONCL') {
+        Throw-Single "版本信息资源未写入: Product=$($info.ProductName) Description=$($info.FileDescription)"
+    }
+    $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($stub))
+    if ($ascii.Contains('MOONCLPKGv1')) { Throw-Single '产物仍含旧的尾部标记' }
+    $bad = Join-Path $script:WorkRoot 'overlay.exe'
+    Copy-Item -LiteralPath $stub -Destination $bad -Force
+    $extra = [System.IO.File]::Open($bad, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write)
+    try {
+        $pad = New-Object byte[] 4096
+        $extra.Write($pad, 0, $pad.Length)
+    }
+    finally { $extra.Dispose() }
+    $rejected = $false
+    try { Assert-NoPeOverlay $bad } catch { $rejected = $true }
+    if (-not $rejected) { Throw-Single '尾部载荷守卫没有拒绝 4 KiB overlay' }
+    $proc = Start-Process -FilePath $stub -ArgumentList '--self-check' -Wait -PassThru -WindowStyle Hidden
+    if ($proc.ExitCode -ne 0) { Throw-Single "嵌入资源自检失败，exit=$($proc.ExitCode)" }
+    Write-Host 'SELF-CHECK OK'
 }
 
 function Main {
+    if ($Architecture -ne 'x64' -and $Architecture -ne 'arm64') {
+        Throw-Single '必须指定 -Architecture x64 或 arm64'
+    }
     if (-not (Test-Path -LiteralPath $script:ProjectFile -PathType Leaf)) {
         Throw-Single "找不到工程: $script:ProjectFile"
     }
@@ -382,35 +425,46 @@ function Main {
     $stub = Join-Path $script:WorkRoot 'stub.exe'
     New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
     Write-Step "dotnet=$dotnet"
-    Write-Step '框架依赖单文件：不自包含、不修剪、原生库打进启动器，单文件内部不压缩以加快二次启动。'
+    Write-Step '框架依赖单文件：不自包含、不修剪、原生库打进启动器。外层不再压缩，也不把数据接到 exe 尾部。'
     Invoke-DotNetPublish $dotnet $publishDir
     $launcher = Join-Path $publishDir 'Plain Craft Launcher 2.exe'
     Assert-NoMissingLibraries $publishDir $launcher
     Copy-PublishPayload $publishDir $stage
     Copy-FixedRuntime $stage
     New-PayloadZip $stage $zip
-    Compile-Bootstrapper $dotnet $stub
+    $webview = Test-Path -LiteralPath (Join-Path $stage 'WebView2Runtime\msedgewebview2.exe') -PathType Leaf
+    Compile-Bootstrapper $dotnet $stub $zip (Get-FileSha256 $zip) ([bool]$webview)
     $outFile = Resolve-OutputFile
     if (Test-Path -LiteralPath $outFile) { Remove-Item -LiteralPath $outFile -Force }
     Copy-Item -LiteralPath $stub -Destination $outFile -Force
-    Add-MoonclFooter $outFile $zip $Architecture
+    $overlay = Assert-NoPeOverlay $outFile
     $size = (Get-Item -LiteralPath $outFile).Length
     Write-Host ''
     Write-Host 'Single exe OK'
     Write-Host "  output : $outFile"
     Write-Host ("  size   : {0:N1} MiB" -f ($size / 1MB))
-    Write-Host '  runtime: not bundled; consent UI downloads .NET 10 Desktop Runtime'
+    Write-Host "  layout : embedded resource, PE overlay=$overlay"
+    Write-Host '  runtime: not bundled; missing libraries are listed before launch'
+    Write-Host '  consent: download only after 同意并下载'
     Write-Host '  trim   : false; native libraries required'
 }
 
+function Clear-SingleExeWork {
+    if ($script:WorkRoot -and (Test-Path -LiteralPath $script:WorkRoot)) {
+        try { Remove-Item -LiteralPath $script:WorkRoot -Recurse -Force -ErrorAction SilentlyContinue } catch { }
+    }
+}
+
 $script:ScratchRoot = Get-ScratchRoot
-$script:WorkRoot = Join-Path $script:ScratchRoot ("pcl-cy-single-exe\{0}-{1}" -f $Architecture, $PID)
+$archFolder = if ([string]::IsNullOrWhiteSpace($Architecture)) { 'self-check' } else { $Architecture }
+$script:WorkRoot = Join-Path $script:ScratchRoot ("pcl-cy-single-exe\{0}-{1}" -f $archFolder, $PID)
 $script:DotSource = $MyInvocation.InvocationName -eq '.' -or $MyInvocation.Line -match '^\s*\.\s+'
+if ($SelfCheck) {
+    try { Invoke-SingleExeSelfCheck }
+    finally { Clear-SingleExeWork }
+    return
+}
 if (-not $script:DotSource) {
     try { Main }
-    finally {
-        if ($script:WorkRoot -and (Test-Path -LiteralPath $script:WorkRoot)) {
-            try { Remove-Item -LiteralPath $script:WorkRoot -Recurse -Force -ErrorAction SilentlyContinue } catch { }
-        }
-    }
+    finally { Clear-SingleExeWork }
 }

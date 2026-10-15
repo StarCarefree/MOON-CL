@@ -24,7 +24,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Border Height="1" Background="{StaticResource Hybrid.Line}" Margin="22,2,22,10" />
-                <TextBlock Grid.Row="1" Text="{DynamicResource Hybrid.LocalVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" Margin="56,0,18,8" />
+                <TextBlock Grid.Row="1" Text="{DynamicResource Hybrid.LocalVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" HorizontalAlignment="Left" TextAlignment="Left" Margin="26,0,18,8" />
                 <ListBox x:Name="Versions" Grid.Row="2" Background="Transparent" BorderThickness="0" Padding="0" SelectionChanged="Version_SelectionChanged"
                          ItemContainerStyle="{StaticResource Hybrid.VersionItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
@@ -110,7 +110,7 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-                <TextBlock x:Name="Empty" Grid.Row="2" Text="{DynamicResource Hybrid.NoVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" TextWrapping="Wrap" Margin="56,4,18,0" VerticalAlignment="Top" IsHitTestVisible="False" />
+                <TextBlock x:Name="Empty" Grid.Row="2" Text="{DynamicResource Hybrid.NoVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" TextWrapping="Wrap" HorizontalAlignment="Left" TextAlignment="Left" Margin="26,4,18,0" VerticalAlignment="Top" IsHitTestVisible="False" />
                 <Button x:Name="VersionList" Grid.Row="3" Tag="versions" Click="Navigate_Click" Style="{StaticResource Hybrid.QuietButton}" Margin="14,8,14,0" HorizontalContentAlignment="Stretch" MouseEnter="VersionList_MouseEnter" MouseLeave="VersionList_MouseLeave">
                     <Grid>
                         <TextBlock Text="{DynamicResource Hybrid.VersionList}" VerticalAlignment="Center" HorizontalAlignment="Left" />

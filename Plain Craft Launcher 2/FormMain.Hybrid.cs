@@ -64,9 +64,8 @@ public partial class FormMain
         try
         {
             await _webUi.CheckPackUpdatesOnceAsync();
-            if (_webUi.IsPresented) _webUi.ClearUpdateHint();
-            else if (_webUi.TakeUpdateHint(true))
-                HintService.Hint("发现整合包的 Packwiz 更新。打开浏览页后可更新游戏；这不是整包版本号升级。");
+            if (_webUi.TryTakeCheckNotice(out var notice, out var noticeType))
+                HintService.Hint(notice, noticeType);
         }
         catch (Exception ex) { ModBase.Log(ex, "检查整合包更新失败", ModBase.LogLevel.Debug); }
         finally { _packCheckRunning = false; }
@@ -163,8 +162,8 @@ public partial class FormMain
         _hybridVersionPath = versionPath;
         if (ModMain.frmLaunchRight is { } home)
         {
-            home.LabNativeGameName.Text = selected?.Name ?? Lang.Text("Hybrid.EmptyGameTitle");
-            home.LabNativeGameDetail.Text = selected?.Desc ?? Lang.Text("Hybrid.EmptyGameDetail");
+            home.ShowSelectedVersion(selected);
+            ModMain.frmLaunchLeft?.ApplyVersionUpdateChrome();
             home.LabNativeGameStatus.Text = selected is not null && ModLaunch.IsInstanceLaunching(selected)
                 ? Lang.Text("Launch.Status.Title.Launching")
                 : selected is null ? Lang.Text("Hybrid.NoVersions") : Lang.Text("Hybrid.Ready");

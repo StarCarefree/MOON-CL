@@ -1520,10 +1520,10 @@
     <sys:String x:Key="Launch.Error.ExportScriptTitle">Failed to export launch script</sys:String>
     <sys:String x:Key="Launch.Error.OperationFailed">A launch page operation failed. See the details below.</sys:String>
     <sys:String x:Key="Launch.Error.Title">Launch failed</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.HidePrompt">To permanently hide this notice, enter the correct PCL CE development organization name.</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.InputTitle">Enter the PCL CE development organization name</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.Message">You are using PCL CE (PCL Community Edition)! This version is independently developed and maintained, and differs from the original version in its development path and user experience.&#xA;&#xA;If you downloaded the PCL CE by accident, we strongly recommend downloading the original PCL version for long-term use, as this distribution may not be user-friendly for newcomers.&#xA;Additionally, please submit PCL CE issues to the PCL CE repository, and do not report PCL CE issues to the original repository!</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.Title">PCL CE notice</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.HidePrompt">To permanently hide this notice, enter MOON CL.</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.InputTitle">Enter MOON CL</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.Message">You are using MOON CL. It continues development on top of upstream PCL CE (PCL Community Edition). It is not original PCL, and it is not PCL CE itself.&#xA;&#xA;Upstream PCL CE is maintained separately from original PCL, so some behavior differs. MOON CL keeps that launch, account, and version capability, and adds its own home, browse, and modpack services.&#xA;Report MOON CL issues to MOON CL. Do not file them against original PCL or the upstream PCL CE repository.</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.Title">MOON CL notice</sys:String>
     <sys:String x:Key="Launch.Right.CommunityHint.WrongInput">Not quite right...</sys:String>
     <sys:String x:Key="Launch.Right.Log.Title">Launch log</sys:String>
 
@@ -3650,16 +3650,17 @@
     <sys:String x:Key="Hybrid.Games">My games</sys:String>
     <sys:String x:Key="Hybrid.LocalVersions">Local versions</sys:String>
     <sys:String x:Key="Hybrid.LaunchingPrefix">Starting</sys:String>
+    <sys:String x:Key="Hybrid.Updating">Updating</sys:String>
     <sys:String x:Key="Hybrid.NoVersions">No local versions yet</sys:String>
     <sys:String x:Key="Hybrid.VersionList">Version list</sys:String>
     <sys:String x:Key="Hybrid.VersionSettings">Version settings</sys:String>
     <sys:String x:Key="Hybrid.Account">Account and login</sys:String>
     <sys:String x:Key="Hybrid.NotLoggedIn">Not signed in</sys:String>
     <sys:String x:Key="Hybrid.EmptyGameTitle">Your next journey starts here</sys:String>
-    <sys:String x:Key="Hybrid.EmptyGameDetail">Choose a local version or install Minecraft from Downloads. Native PCL CE continues to manage launch, accounts and version settings.</sys:String>
+    <sys:String x:Key="Hybrid.EmptyGameDetail">Choose a local version or install Minecraft from Downloads. Launch, accounts, and version settings still use upstream PCL CE, called by MOON CL.</sys:String>
     <sys:String x:Key="Hybrid.Ready">Local version is ready</sys:String>
     <sys:String x:Key="Hybrid.NativeHintTitle">A familiar launcher, a clearer workspace</sys:String>
-    <sys:String x:Key="Hybrid.NativeHintDetail">Native launch and version controls stay on the right. Browse supplements them with pack services, including SRE as a test download.</sys:String>
+    <sys:String x:Key="Hybrid.NativeHintDetail">Start game is on the right, with version settings beside it. Those actions come from upstream PCL CE. Browse adds pack services, and SRE is a labeled test download.</sys:String>
     <sys:String x:Key="Hybrid.BrowserFailed">Browse is temporarily unavailable. Use the complete portable package with WebView2Runtime. Native games, settings and downloads remain available.</sys:String>
     <sys:String x:Key="Hybrid.Account.Title">Account and login</sys:String>
     <sys:String x:Key="Hybrid.Account.SwitchHint">Switch an existing account on the left, or create one on the right.</sys:String>

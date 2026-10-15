@@ -172,8 +172,10 @@ Fixed Version **不会**像 Evergreen 那样随系统自动升级。分发者/�
 
 ## 单个 exe
 
-双击 `scripts/Publish-SingleExe.bat`（或运行 `scripts/Publish-SingleExe.ps1`）打出一个 `MOONCL.exe`。不要在其它编译还在跑时执行。它不自包含、不修剪，原生库缺失会直接失败。外层压缩只解一次；二次启动跳过解压，并把 .NET 单文件原生库解到固定目录，避免每次冷启动再解一遍。
+双击 `scripts/Publish-SingleExe.bat`（或运行 `scripts/Publish-SingleExe.ps1 -Architecture x64`）打出一个 `MOONCL.exe`。不要在其它编译还在跑时执行。它不自包含、不修剪，原生库缺失会直接失败。
 
-未安装对应架构的 .NET 10 Desktop Runtime 时，这个 exe 自己弹出窗口。只有点「同意并下载」才会从微软官方地址下载安装。取消不会下载。已安装则不弹窗。
+这个 exe 不再把压缩包接在 PE 尾部。银狐类规则会把「很小的壳 + 文件尾超大 overlay」报成 `Trojan.Win64.SilverFox`。启动文件改成普通嵌入资源，并写入版本信息和图标。这不能代替代码签名；未签名的新文件仍可能被个别引擎误报，需要向该引擎提交误报。
 
-默认不把 WebView2 Fixed Version 打进去，以免单 exe 变成几百 MB。需要浏览页随包时再传 `-FixedRuntimeDirectory`。`WebView2Loader.dll` 和 `e_sqlite3.dll` 仍然必须在包里。
+启动前会列出缺少的组件。必要项是对应架构的 .NET 10 Desktop Runtime，以及 `vcruntime140.dll`、`vcruntime140_1.dll`、`msvcp140.dll`。未随包 Fixed Version、且系统也没有 WebView2 时，浏览页组件也会列出来。只有点「同意并下载」才会从微软官方地址下载安装。取消不会下载。只缺浏览页组件时可以跳过并启动。已装齐则不弹窗。
+
+外层 zip 不再二次压缩。二次启动跳过解压，并把 .NET 单文件原生库解到固定目录，避免每次冷启动再解一遍。默认不把 WebView2 Fixed Version 打进去，以免单 exe 变成几百 MB。需要浏览页随包时再传 `-FixedRuntimeDirectory`。`WebView2Loader.dll` 和 `e_sqlite3.dll` 仍然必须在包里。

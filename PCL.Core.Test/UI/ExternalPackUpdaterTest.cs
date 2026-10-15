@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -147,6 +148,39 @@ public sealed class ExternalPackUpdaterTest
         Assert.IsFalse(plan.ConfigExistenceOnly);
         await updater.ApplyAsync(_root, plan, null, CancellationToken.None);
         Assert.IsNull(await updater.CheckAsync(_root, CancellationToken.None, fallback));
+
+    }
+    [TestMethod]
+    public async Task HungManifestReturnsTimeoutInsteadOfHanging()
+    {
+        using var handler = new IgnoreCancelHandler();
+        using var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        var watch = Stopwatch.StartNew();
+        var ex = await Assert.ThrowsExactlyAsync<TimeoutException>(() => new ExternalPackUpdater(http).CheckAsync(_root, CancellationToken.None, manifestTimeout: TimeSpan.FromMilliseconds(200)));
+        Assert.IsTrue(watch.Elapsed < TimeSpan.FromSeconds(3), watch.Elapsed.ToString());
+        Assert.AreEqual("读取 Packwiz 清单超时。", ex.Message);
+        Assert.AreEqual(Timeout.InfiniteTimeSpan, http.Timeout);
+    }
+
+    [TestMethod]
+    public async Task ManifestCheckHonorsCallerCancellation()
+    {
+        using var handler = new IgnoreCancelHandler();
+        using var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => new ExternalPackUpdater(http).CheckAsync(_root, cts.Token, manifestTimeout: TimeSpan.FromSeconds(30)));
+    }
+
+    private sealed class IgnoreCancelHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource<HttpResponseMessage> _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => _gate.Task;
+        protected override void Dispose(bool disposing)
+        {
+            _gate.TrySetCanceled();
+            base.Dispose(disposing);
+        }
     }
 
 }

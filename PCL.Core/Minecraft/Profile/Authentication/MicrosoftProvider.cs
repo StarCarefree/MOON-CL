@@ -53,12 +53,12 @@ public sealed class MicrosoftProvider : IAuthenticateProvider
     {
         ArgumentNullException.ThrowIfNull(data);
         using var response = await HttpRequest.CreatePost(TokenEndpoint)
-            .WithContent(new FormUrlEncodedContent(new Dictionary<string, string>
+            .WithContent(new FormUrlEncodedContent(WithSecret(new Dictionary<string, string>
             {
                 ["client_id"] = _clientId,
                 ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
                 ["device_code"] = data.DeviceCode ?? string.Empty
-            }))
+            })))
             .SendAsync(NetworkService.GetClient(NetworkService.MicrosoftEntraId), cancellationToken: token)
             .ConfigureAwait(false);
         var result = await response.AsJsonAsync<AuthorizeResult>(cancellationToken: token).ConfigureAwait(false);
@@ -102,13 +102,13 @@ public sealed class MicrosoftProvider : IAuthenticateProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
         using var response = await HttpRequest.CreatePost(TokenEndpoint)
-            .WithContent(new FormUrlEncodedContent(new Dictionary<string, string>
+            .WithContent(new FormUrlEncodedContent(WithSecret(new Dictionary<string, string>
             {
                 ["client_id"] = _clientId,
                 ["grant_type"] = "refresh_token",
                 ["refresh_token"] = refreshToken,
                 ["scope"] = "XboxLive.signin offline_access"
-            }))
+            })))
             .SendAsync(NetworkService.GetClient(NetworkService.MicrosoftEntraId), cancellationToken: token)
             .ConfigureAwait(false);
         var result = await response.AsJsonAsync<AuthorizeResult>(cancellationToken: token).ConfigureAwait(false)
@@ -118,6 +118,12 @@ public sealed class MicrosoftProvider : IAuthenticateProvider
         return result with { RefreshToken = result.RefreshToken ?? refreshToken };
     }
 
+    private static Dictionary<string, string> WithSecret(Dictionary<string, string> fields)
+    {
+        if (!string.IsNullOrWhiteSpace(Secrets.MSOAuthClientSecret))
+            fields["client_secret"] = Secrets.MSOAuthClientSecret;
+        return fields;
+    }
     public async Task<AuthenticationResult> CompleteAsync(AuthorizeResult oauth, CancellationToken token)
     {
         if (oauth.IsError) throw new IdentityModelAuthenticationException(oauth.Error, oauth.ErrorDescription);

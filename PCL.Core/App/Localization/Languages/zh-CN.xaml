@@ -1520,10 +1520,10 @@
     <sys:String x:Key="Launch.Error.ExportScriptTitle">导出启动脚本失败</sys:String>
     <sys:String x:Key="Launch.Error.OperationFailed">启动页操作失败。请查看错误详情。</sys:String>
     <sys:String x:Key="Launch.Error.Title">启动失败</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.HidePrompt">若要永久隐藏此提示，请输入正确的 PCL CE 开发组织名称。</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.InputTitle">输入 PCL CE 开发组织名称</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.Message">你正在使用 PCL CE（PCL 社区版）！此版本为独立开发和维护，与原版维护路线不同，体验有所出入。&#xA;&#xA;如果你是意外下载到了 PCL CE ，我们十分建议您下载原版 PCL 长期使用，此发行版本对新手用户体验可能不友好。&#xA;此外， PCL CE 的问题请向 PCL CE 的仓库提交 Issue，不要向官方仓库反馈 PCL CE 的问题哦！</sys:String>
-    <sys:String x:Key="Launch.Right.CommunityHint.Title">PCL CE 提示</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.HidePrompt">若要永久隐藏此提示，请输入 MOON CL。</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.InputTitle">输入 MOON CL</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.Message">你正在使用 MOON CL。它基于上游 PCL CE（PCL 社区版）继续开发，不是原版 PCL，也不是 PCL CE 本体。&#xA;&#xA;上游 PCL CE 相对原版 PCL 是独立维护路线，体验会有出入。MOON CL 沿用它的启动、账号与版本能力，并加上自己的主界面、浏览和整合包服务。&#xA;MOON CL 的问题请向 MOON CL 反馈，不要提交到原版 PCL 或上游 PCL CE 仓库。</sys:String>
+    <sys:String x:Key="Launch.Right.CommunityHint.Title">MOON CL 提示</sys:String>
     <sys:String x:Key="Launch.Right.CommunityHint.WrongInput">不太对哦……</sys:String>
     <sys:String x:Key="Launch.Right.Log.Title">启动日志</sys:String>
 
@@ -3650,16 +3650,17 @@
     <sys:String x:Key="Hybrid.Games">我的游戏</sys:String>
     <sys:String x:Key="Hybrid.LocalVersions">本地版本</sys:String>
     <sys:String x:Key="Hybrid.LaunchingPrefix">启动中</sys:String>
+    <sys:String x:Key="Hybrid.Updating">更新中</sys:String>
     <sys:String x:Key="Hybrid.NoVersions">暂无本地版本</sys:String>
     <sys:String x:Key="Hybrid.VersionList">版本列表</sys:String>
     <sys:String x:Key="Hybrid.VersionSettings">版本设置</sys:String>
     <sys:String x:Key="Hybrid.Account">账号与登录</sys:String>
     <sys:String x:Key="Hybrid.NotLoggedIn">未登录</sys:String>
     <sys:String x:Key="Hybrid.EmptyGameTitle">下一段旅程，从这里开始</sys:String>
-    <sys:String x:Key="Hybrid.EmptyGameDetail">选择本地版本，或通过下载页安装 Minecraft。启动、账号与版本配置继续由原生 PCL CE 管理。</sys:String>
+    <sys:String x:Key="Hybrid.EmptyGameDetail">选择本地版本，或通过下载页安装 Minecraft。启动、账号与版本配置沿用上游 PCL CE，由 MOON CL 调用。</sys:String>
     <sys:String x:Key="Hybrid.Ready">本地版本已就绪</sys:String>
     <sys:String x:Key="Hybrid.NativeHintTitle">熟悉的启动器，更清晰的工作空间</sys:String>
-    <sys:String x:Key="Hybrid.NativeHintDetail">右侧保留原生启动和版本操作。浏览页为额外的整合包与服务提供入口，SRE 在其中作为测试下载条目。</sys:String>
+    <sys:String x:Key="Hybrid.NativeHintDetail">右侧是启动游戏，旁边是版本设置。这些能力来自上游 PCL CE。浏览页提供整合包与服务入口，SRE 是标明的测试下载。</sys:String>
     <sys:String x:Key="Hybrid.BrowserFailed">浏览页暂时无法打开。请使用带 WebView2Runtime 目录的完整便携包；原生游戏、设置和下载页面仍然可用。</sys:String>
     <sys:String x:Key="Hybrid.Account.Title">账号与登录</sys:String>
     <sys:String x:Key="Hybrid.Account.SwitchHint">左侧切换已有账号，右侧新建账号。</sys:String>

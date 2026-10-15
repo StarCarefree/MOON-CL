@@ -32,6 +32,9 @@ public partial class PageLaunchLeft
     }
 
     private LaunchButtonAction _launchButtonAction;
+    private bool _updateChrome;
+    private DispatcherTimer? _updatePulse;
+    private double _updatePulseOffset;
 
     private static string StageWaitWindow => Lang.Text("Minecraft.Launch.Stage.WaitWindow");
     private static string StageEnd => Lang.Text("Minecraft.Launch.Stage.End");
@@ -53,10 +56,10 @@ public partial class PageLaunchLeft
         WeakLanguageChanged.Add(this, OnLanguageChanged);
         // Handles
         BtnInstance.Click += BtnInstance_Click;
-        BtnLaunch.Click += BtnLaunch_Click;
         BtnLaunch.Loaded += (_, _) => RefreshButtonsUI();
         BtnCancel.Click += BtnCancel_Click;
         BtnMore.Click += BtnMore_Click;
+        Unloaded += (_, _) => _updatePulse?.Stop();
         PanLaunchingInfo.SizeChanged += PanLaunchingInfo_SizeChangedW;
         PanLaunchingInfo.SizeChanged += PanLaunchingInfo_SizeChangedH;
     }
@@ -255,7 +258,18 @@ public partial class PageLaunchLeft
     {
         if (!BtnLaunch.IsLoaded)
             return;
-        // 获取当前状态
+        if (LauncherLibrary.VersionUpdating)
+        {
+            ApplyVersionUpdateChrome();
+            return;
+        }
+        if (_updateChrome)
+        {
+            _updateChrome = false;
+            StopUpdatePulse();
+            LaunchUpdateFill.Visibility = Visibility.Collapsed;
+            btnLaunchState = -1;
+        }
         int currentState;
         if (!isLoadFinished || ModInstanceList.mcInstanceListLoader.State == ModBase.LoadState.Loading ||
             ModFolder.mcFolderListLoader.State == ModBase.LoadState.Loading)
@@ -544,6 +558,71 @@ public partial class PageLaunchLeft
     }
 
     // 启动游戏按钮
+    public void ApplyVersionUpdateChrome()
+    {
+        if (!IsLoaded) return;
+        if (!LauncherLibrary.VersionUpdating)
+        {
+            if (_updateChrome) RefreshButtonsUI();
+            return;
+        }
+        _updateChrome = true;
+        BtnLaunch.Text = Lang.Text("Hybrid.Updating");
+        BtnLaunch.IsEnabled = false;
+        var progress = LauncherLibrary.VersionUpdateProgress;
+        var indeterminate = progress <= 0;
+        LabVersion.Text = indeterminate
+            ? ModInstanceList.McMcInstanceSelected?.Name ?? ""
+            : Lang.Number(progress, "P0");
+        PaintLaunchUpdate(progress, indeterminate);
+        EnsureUpdatePulse(indeterminate);
+    }
+
+    private void EnsureUpdatePulse(bool indeterminate)
+    {
+        if (!indeterminate)
+        {
+            _updatePulse?.Stop();
+            return;
+        }
+        _updatePulse ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        _updatePulse.Tick -= OnUpdatePulse;
+        _updatePulse.Tick += OnUpdatePulse;
+        if (!_updatePulse.IsEnabled) _updatePulse.Start();
+    }
+
+    private void OnUpdatePulse(object? sender, EventArgs e)
+    {
+        if (!LauncherLibrary.VersionUpdating || LauncherLibrary.VersionUpdateProgress > 0)
+        {
+            _updatePulse?.Stop();
+            return;
+        }
+        _updatePulseOffset = (_updatePulseOffset + 0.018) % 1.34;
+        PaintLaunchUpdate(0, true);
+    }
+
+    private void StopUpdatePulse()
+    {
+        _updatePulse?.Stop();
+        if (LaunchUpdateFill.RenderTransform is TranslateTransform slide) slide.X = 0;
+    }
+
+    private void PaintLaunchUpdate(double progress, bool indeterminate)
+    {
+        var width = BtnLaunch.ActualWidth > 1 ? BtnLaunch.ActualWidth : 160;
+        var slide = (TranslateTransform)LaunchUpdateFill.RenderTransform;
+        LaunchUpdateFill.Visibility = Visibility.Visible;
+        if (indeterminate)
+        {
+            LaunchUpdateFill.Width = Math.Max(48, width * 0.36);
+            slide.X = (_updatePulseOffset - 0.36) * width;
+            return;
+        }
+        slide.X = 0;
+        LaunchUpdateFill.Width = Math.Max(0, width * Math.Clamp(progress, 0, 1));
+    }
+
     private void BtnLaunch_Click(object sender, MouseButtonEventArgs e)
     {
         LaunchButtonClick();
@@ -637,19 +716,13 @@ public partial class PageLaunchLeft
         PanInput.IsHitTestVisible = false;
         PanLaunching.IsHitTestVisible = false;
         LoadLaunching.State.LoadingState = MyLoading.MyLoadingState.Stop;
+        PanLaunching.Visibility = Visibility.Collapsed;
         PanInput.Visibility = Visibility.Visible;
-        ModAnimation.AniStart(
-            new[]
-            {
-                ModAnimation.AaOpacity(PanLaunching, -PanLaunching.Opacity, 150),
-                ModAnimation.AaScaleTransform(PanLaunching,
-                    0.8d - ((ScaleTransform)PanLaunching.RenderTransform).ScaleX, 150,
-                    ease: new ModAnimation.AniEaseOutFluent(ModAnimation.AniEasePower.Weak)),
-                ModAnimation.AaOpacity(PanInput, 1d - PanInput.Opacity, 250, 50),
-                ModAnimation.AaScaleTransform(PanInput, 1d - ((ScaleTransform)PanInput.RenderTransform).ScaleX, 300, 50,
-                    new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak)),
-                ModAnimation.AaCode(() => PanInput.IsHitTestVisible = true, 200)
-            }, "Launch State Page", true);
+        PanInput.Opacity = 1;
+        PanInput.IsHitTestVisible = true;
+        if (PanInput.RenderTransform is ScaleTransform inputScale)
+            inputScale.ScaleX = inputScale.ScaleY = 1;
+        ModAnimation.AniStop("Launch State Page");
     }
 
     #endregion

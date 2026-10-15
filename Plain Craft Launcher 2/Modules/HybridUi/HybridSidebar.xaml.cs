@@ -133,7 +133,7 @@ public partial class HybridSidebar : UserControl
                 {
                     var starting = rank.ContainsKey(instance.PathInstance ?? "");
                     return new VersionEntry(instance.Name, starting ? prefix + " " + instance.Name : instance.Name,
-                        instance.Desc, VersionIcon(instance), starting, instance);
+                        VersionLine(instance), IconFor(instance), starting, instance);
                 }).ToArray();
             }
             Versions.SelectedItem = Versions.Items.OfType<VersionEntry>().FirstOrDefault(entry =>
@@ -176,6 +176,23 @@ public partial class HybridSidebar : UserControl
     {
         _versionListHover = false;
         RefreshActivity();
+    }
+    private static string VersionLine(McInstance instance)
+    {
+        var desc = instance.Desc?.Trim() ?? "";
+        var missing = PCL.Core.App.Localization.Lang.Text("Select.Instance.Description.NotLoaded");
+        if (desc.Length > 0 && desc != missing) return desc;
+        try
+        {
+            if (!instance.IsLoaded) instance.Load();
+            var fallback = instance.GetDefaultDescription()?.Trim();
+            if (!string.IsNullOrEmpty(fallback)) return fallback;
+        }
+        catch (Exception ex)
+        {
+            ModBase.Log(ex, "读取版本与加载器失败", ModBase.LogLevel.Debug);
+        }
+        return desc == missing ? "" : desc;
     }
 
     public void UpdateAccount(string name, ImageSource? face, ImageSource? hat)
@@ -227,7 +244,8 @@ public partial class HybridSidebar : UserControl
         };
     }
 
-    private static ImageSource? VersionIcon(McInstance instance) => LoadIcon(VersionIconPath(instance));
+    internal static ImageSource? IconFor(McInstance instance) => LoadIcon(VersionIconPath(instance));
+
 
     private static ImageSource? LoadIcon(string path)
     {

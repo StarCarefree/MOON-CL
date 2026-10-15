@@ -30,12 +30,33 @@ internal sealed class LauncherLibrary : IDisposable
     private readonly Dictionary<string, PackDefinition> _managed = new();
     private readonly HashSet<string> _publishedManaged = new(StringComparer.Ordinal);
     private readonly ExternalPackCheckOnce _once = new();
-    private bool _updateHint;
+    private string _checkNotice = "";
+    private HintType _checkNoticeType = HintType.Info;
     private bool _autoFinished;
     private string _autoFolder = "";
     public static bool PackWorkInProgress { get; private set; }
-    public bool HasUpdateHint => _updateHint;
-    public void ClearUpdateHint() => _updateHint = false;
+    public static bool VersionUpdating { get; private set; }
+    public static double VersionUpdateProgress { get; private set; }
+
+    internal static bool IsVersionUpdatePhase(string? phase) =>
+        !string.IsNullOrEmpty(phase) && phase.Contains("更新器", StringComparison.Ordinal);
+
+    private void PublishWork()
+    {
+        var updating = PackWorkInProgress && IsVersionUpdatePhase(_phase);
+        var progress = updating ? Math.Clamp(_progress, 0, 1) : 0;
+        if (updating == VersionUpdating && Math.Abs(progress - VersionUpdateProgress) < 0.0001) return;
+        VersionUpdating = updating;
+        VersionUpdateProgress = progress;
+        ModBase.RunInUi(static () => ModMain.frmLaunchLeft?.ApplyVersionUpdateChrome());
+    }
+    public bool TryTakeCheckNotice(out string text, out HintType type)
+    {
+        text = _checkNotice;
+        type = _checkNoticeType;
+        _checkNotice = "";
+        return text.Length > 0;
+    }
     private CancellationTokenSource? _work;
     private ModLoader.LoaderCombo<string>? _installer;
     private string _selected = PackCatalog.StarRailId;
@@ -134,7 +155,7 @@ internal sealed class LauncherLibrary : IDisposable
 
     private void ScanInstalled(bool force = false)
     {
-        var folder = ModFolder.mcFolderSelected ?? "";
+        var folder = FolderKey(ModFolder.mcFolderSelected);
         if (!force && folder == _lastDirectory && DateTime.UtcNow < _nextScan) return;
         if (folder != _lastDirectory)
         {
@@ -219,12 +240,13 @@ internal sealed class LauncherLibrary : IDisposable
 
     public async Task CheckManagedOnceAsync()
     {
-        var folder = ModFolder.mcFolderSelected ?? "";
+        var folder = FolderKey(ModFolder.mcFolderSelected);
         if (_autoFinished && string.Equals(folder, _autoFolder, StringComparison.OrdinalIgnoreCase)) return;
         if (_disposed || _work is not null || folder.Length == 0 || ModLaunch.isLaunching) return;
         if (ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Finished) return;
         await RunAsync(token => CheckInstalledAsync(token, false));
-        if (_error.Length == 0 && _phase != "已取消" && string.Equals(ModFolder.mcFolderSelected, folder, StringComparison.OrdinalIgnoreCase))
+        // A failed, timed-out or cancelled attempt still counts. HybridTick must not restart it every 750ms.
+        if (string.Equals(FolderKey(ModFolder.mcFolderSelected), folder, StringComparison.OrdinalIgnoreCase))
         {
             _autoFinished = true;
             _autoFolder = folder;
@@ -235,31 +257,69 @@ internal sealed class LauncherLibrary : IDisposable
     {
         ScanInstalled(true);
         _phase = "检查整合包更新";
+        _checkNotice = "";
+        var found = 0;
+        var checkedCount = 0;
+        var errors = new List<string>();
         foreach (var (id, installed) in _installed.ToArray())
         {
+            token.ThrowIfCancellationRequested();
             string root;
             try { root = ExternalPackCheckOnce.Normalize(installed.Instance.PathIndie); }
             catch (Exception ex) { ModBase.Log(ex, "读取实例目录失败", ModBase.LogLevel.Debug); continue; }
             if (!manual && _once.IsDone(root)) continue;
-            ExternalUpdateSource? source;
-            try { source = SourceFor(root, installed.Instance); }
-            catch (Exception ex) { ModBase.Log(ex, "读取更新配置失败", ModBase.LogLevel.Debug); continue; }
-            if (source is not { Enabled: true })
+            try
             {
-                _updates.Remove(id);
+                var source = SourceFor(root, installed.Instance);
+                if (source is not { Enabled: true })
+                {
+                    _updates.Remove(id);
+                    if (!manual) _once.MarkDone(root);
+                    continue;
+                }
+                checkedCount++;
+                var plan = await new ExternalPackUpdater(_http).CheckAsync(root, token, source);
                 if (!manual) _once.MarkDone(root);
-                continue;
+                if (plan is null) _updates.Remove(id);
+                else { _updates[id] = plan; found++; }
             }
-            var plan = await new ExternalPackUpdater(_http).CheckAsync(root, token, source);
-            if (!manual) _once.MarkDone(root);
-            if (plan is null) _updates.Remove(id);
-            else
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception ex)
             {
-                _updates[id] = plan;
-                if (!manual) _updateHint = true;
+                ModBase.Log(ex, "检查整合包更新失败", ModBase.LogLevel.Debug);
+                if (!manual) _once.MarkDone(root);
+                errors.Add(installed.Instance.Name + "：" + ex.Message);
             }
         }
-        _phase = "已刷新";
+        if (found > 0) _phase = "发现 Packwiz 更新";
+        else if (errors.Count > 0) _phase = "检查失败";
+        else if (checkedCount > 0) _phase = "已检查，没有 Packwiz 更新";
+        else _phase = "就绪";
+        _error = errors.Count == 0 ? "" : errors.Count == 1 ? errors[0] : errors.Count + " 个实例检查失败：" + errors[0];
+        if (manual || (found == 0 && errors.Count == 0 && checkedCount == 0)) return;
+        if (found > 0)
+        {
+            _checkNotice = "发现整合包的 Packwiz 更新。打开浏览页后可更新游戏；这不是整包版本号升级。";
+            _checkNoticeType = HintType.Info;
+            if (errors.Count > 0) _checkNotice += " 另有实例检查失败：" + errors[0];
+        }
+        else if (errors.Count > 0)
+        {
+            _checkNotice = "整合包更新检查失败：" + errors[0];
+            _checkNoticeType = HintType.Error;
+        }
+        else
+        {
+            _checkNotice = "已检查，没有 Packwiz 更新。";
+            _checkNoticeType = HintType.Success;
+        }
+    }
+
+    private static string FolderKey(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return "";
+        try { return ExternalPackCheckOnce.Normalize(folder); }
+        catch (Exception) { return folder.Trim(); }
     }
 
     public async Task RefreshIfNeededAsync(FormMain form)
@@ -350,12 +410,14 @@ internal sealed class LauncherLibrary : IDisposable
                 await RunAsync(async token =>
                 {
                     _phase = "备份并运行整合包更新器";
+                    _progress = 0;
+                    PublishWork();
                     var java = await Task.Run(() =>
                     {
                         lock (ModJava.javaLock) return ModJava.JavaSelect("更新需要 Java 21 或更高版本。", new Version(21, 0), relatedInstance: existing.Instance, enforceVersionRange: true);
                     }, token);
                     if (java is null) throw new InvalidOperationException("未找到 Java 21，请在设置中添加 Java。");
-                    await new ExternalPackUpdater(_http, java.Installation.JavaExePath).ApplyAsync(existing.Instance.PathIndie, plan, new Progress<double>(p => _progress = p), token, PackCatalog.TestArchive);
+                    await new ExternalPackUpdater(_http, java.Installation.JavaExePath).ApplyAsync(existing.Instance.PathIndie, plan, new Progress<double>(p => { _progress = p; PublishWork(); }), token, PackCatalog.TestArchive);
                     _updates.Remove(pack.Id); _phase = "更新完成";
                 });
             }
@@ -389,7 +451,7 @@ internal sealed class LauncherLibrary : IDisposable
         catch (ModBase.CancelledException) { _phase = "已取消"; }
         catch (ThreadInterruptedException) when (cts.IsCancellationRequested) { _phase = "已取消"; }
         catch (Exception ex) { _phase = "操作失败"; _error = ex.Message; ModBase.Log(ex, "整合包服务操作失败", ModBase.LogLevel.Debug); }
-        finally { _installer = null; _work = null; PackWorkInProgress = false; _nextScan = DateTime.MinValue; }
+        finally { _installer = null; _work = null; PackWorkInProgress = false; _nextScan = DateTime.MinValue; PublishWork(); }
     }
 
     private async Task InstallAsync(PackDefinition pack, bool quark, CancellationToken token)

@@ -64,7 +64,7 @@ python .\scripts\serve-pack-catalog.py --host 0.0.0.0 --port 8091 `
 - 真正配置为 `http://yd.aurorian.cn:25588/pack/pack.toml`。
 - 当前该地址的 Packwiz 清单是局部受管文件集，并非 4.4.0 整包发行目录；其 `version=1.0.0` 不能作为整包升级版本。
 
-启动器在实例列表就绪后，对整合包自动检查一次。本地有 `config/mod-loading-screen/update.properties` 时用它；目标没有 mod-loading-screen，或这份配置文件不存在时，仍按整合包配置里的 `packwizUrl` 更新，不因文件不存在而跳过。比较的是 `pack.toml` **原始字节 SHA256** 与缓存哈希，不是外层 ZIP 或 `versionId`。同一游戏目录不会在五分钟刷新里重复下载清单；浏览页「检查更新」可以再查一次。发现新清单时显示更新游戏。确认后找 Java 21+，调用实例或整合包里的更新器：
+启动器在实例列表就绪后，对整合包自动检查一次。失败、超时或没有更新也会结束，并用提示给出结果，不会每 750 毫秒重试，也不会把清单请求占住启动。清单读取最多等 20 秒。本地有 `config/mod-loading-screen/update.properties` 时用它；目标没有 mod-loading-screen，或这份配置文件不存在时，仍按整合包配置里的 `packwizUrl` 更新，不因文件不存在而跳过。比较的是 `pack.toml` **原始字节 SHA256** 与缓存哈希，不是外层 ZIP 或 `versionId`。同一游戏目录不会在五分钟刷新里重复下载清单；浏览页「检查更新」可以再查一次。发现新清单时显示更新游戏。确认后找 Java 21+，调用实例或整合包里的更新器：
 
 ```text
 java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=<configured-url> --direct

@@ -44,6 +44,12 @@ public sealed class ExternalPackCheckOnce
 public sealed class ExternalPackUpdater
 {
     public const string PresetUpdateUrl = "http://yd.aurorian.cn:25588/pack/pack.toml";
+    public static readonly TimeSpan DefaultManifestTimeout = TimeSpan.FromSeconds(20);
+    private static readonly object ArchiveConfigGate = new();
+    private static string _cachedArchive = "";
+    private static long _cachedArchiveLength = -1;
+    private static DateTime _cachedArchiveWrite;
+    private static ExternalUpdateSource? _cachedArchiveSource;
     private static readonly string[] Managed = ["mods", "config", "resourcepacks", ".updatemod", "packwiz.json", "pack.toml"];
     private readonly PackTransfer _transfer;
     private readonly string _java;
@@ -84,15 +90,39 @@ public sealed class ExternalPackUpdater
     {
         if (!string.IsNullOrEmpty(archivePath) && File.Exists(archivePath))
         {
-            using var zip = ZipFile.OpenRead(archivePath);
-            var entry = zip.Entries.FirstOrDefault(item => item.FullName.Replace('\\', '/').EndsWith("config/mod-loading-screen/update.properties", StringComparison.OrdinalIgnoreCase));
-            if (entry is not null)
+            var info = new FileInfo(archivePath);
+            var full = info.FullName;
+            lock (ArchiveConfigGate)
             {
-                using var reader = new StreamReader(entry.Open(), Encoding.Latin1, detectEncodingFromByteOrderMarks: true);
-                var parsed = ReadSourceText(reader.ReadToEnd());
-                if (parsed is not null) return parsed;
+                if (_cachedArchiveSource is not null && string.Equals(_cachedArchive, full, StringComparison.OrdinalIgnoreCase)
+                    && _cachedArchiveLength == info.Length && _cachedArchiveWrite == info.LastWriteTimeUtc)
+                    return _cachedArchiveSource;
             }
+            ExternalUpdateSource? parsed = null;
+            using (var zip = ZipFile.OpenRead(archivePath))
+            {
+                var entry = zip.Entries.FirstOrDefault(item => item.FullName.Replace('\\', '/').EndsWith("config/mod-loading-screen/update.properties", StringComparison.OrdinalIgnoreCase));
+                if (entry is not null)
+                {
+                    using var reader = new StreamReader(entry.Open(), Encoding.Latin1, detectEncodingFromByteOrderMarks: true);
+                    parsed = ReadSourceText(reader.ReadToEnd());
+                }
+            }
+            var source = parsed ?? PresetSource();
+            lock (ArchiveConfigGate)
+            {
+                _cachedArchive = full;
+                _cachedArchiveLength = info.Length;
+                _cachedArchiveWrite = info.LastWriteTimeUtc;
+                _cachedArchiveSource = source;
+            }
+            return source;
         }
+        return PresetSource();
+    }
+
+    private static ExternalUpdateSource PresetSource()
+    {
         PackCatalog.HttpUri(PresetUpdateUrl);
         return new ExternalUpdateSource("default", PresetUpdateUrl, true);
     }
@@ -214,18 +244,39 @@ public sealed class ExternalPackUpdater
         return end < 0 ? line[(quote + 1)..] : line[(quote + 1)..end];
     }
 
-    public async Task<ExternalUpdatePlan?> CheckAsync(string root, CancellationToken token, ExternalUpdateSource? fallback = null)
+    public async Task<ExternalUpdatePlan?> CheckAsync(string root, CancellationToken token, ExternalUpdateSource? fallback = null, TimeSpan? manifestTimeout = null)
     {
         var source = ReadSource(root) ?? fallback;
         if (source is null || !source.Enabled) return null;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        var bytes = await _transfer.ReadBytesAsync(PackCatalog.HttpUri(source.Url), timeout.Token);
+        var limit = manifestTimeout ?? DefaultManifestTimeout;
+        if (limit <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(manifestTimeout));
+        token.ThrowIfCancellationRequested();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(limit);
+        var read = _transfer.ReadBytesAsync(PackCatalog.HttpUri(source.Url), timeout.Token);
+        _ = await Task.WhenAny(read, Task.Delay(limit, token)).ConfigureAwait(false);
+        if (!read.IsCompleted)
+        {
+            timeout.Cancel();
+            Observe(read);
+            token.ThrowIfCancellationRequested();
+            throw new TimeoutException("读取 Packwiz 清单超时。");
+        }
+        byte[] bytes;
+        try { bytes = await read.ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            throw new TimeoutException("读取 Packwiz 清单超时。");
+        }
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         var cached = PackCatalog.SafePath(root, ".updatemod/sources/" + source.Id + "/packwiz.hash");
         if (!File.Exists(cached) && source.Id == "default") cached = PackCatalog.SafePath(root, ".updatemod/packwiz.hash");
         if (File.Exists(cached) && File.ReadAllText(cached).Trim().Equals(hash, StringComparison.OrdinalIgnoreCase)) return null;
         return new ExternalUpdatePlan(Path.GetFullPath(root), source.Url, hash, "Packwiz · " + hash[..8]);
     }
+
+    private static void Observe(Task task) =>
+        _ = task.ContinueWith(static finished => { _ = finished.Exception; }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
     public async Task ApplyAsync(string root, ExternalUpdatePlan plan, IProgress<double>? progress, CancellationToken token, string? updaterArchive = null)
     {

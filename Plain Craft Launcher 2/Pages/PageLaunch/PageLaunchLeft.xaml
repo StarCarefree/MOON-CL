@@ -26,30 +26,46 @@
         </Grid.RenderTransform>
         <Border Grid.RowSpan="5" Grid.ColumnSpan="5" Background="#1B1D21" BorderBrush="#303237" BorderThickness="1" CornerRadius="8" IsHitTestVisible="False" Panel.ZIndex="-1" />
         <TextBlock Grid.ColumnSpan="5" Grid.Row="0" Text="{DynamicResource Hybrid.Account}" Foreground="#A6ADB7" FontSize="11" Margin="20,20,20,14" />
-        <local:MyButton Grid.Row="3" Grid.Column="2" x:Name="BtnInstance" Height="40" Margin="0,12,10,0" Text="{DynamicResource Hybrid.VersionList}"
-                        IsEnabled="False" Click="BtnInstance_Click" AutomationProperties.AutomationId="Native.VersionList" />
-        <local:MyButton Grid.Row="3" Grid.Column="3" x:Name="BtnMore" IsEnabled="False" Height="40"
-                        Click="BtnMore_Click" AutomationProperties.AutomationId="Native.VersionSettings"
-                        Margin="0,12,20,0" TextPadding="22" Text="{DynamicResource Hybrid.VersionSettings}" />
+        <Grid Grid.Row="3" Grid.ColumnSpan="5" Margin="20,12,20,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <local:MyButton x:Name="BtnInstance" Height="40" HorizontalAlignment="Stretch" Text="{DynamicResource Hybrid.VersionList}"
+                            IsEnabled="False" Click="BtnInstance_Click" AutomationProperties.AutomationId="Native.VersionList" />
+            <local:MyButton Grid.Column="2" x:Name="BtnMore" IsEnabled="False" Height="40" MinWidth="108" HorizontalAlignment="Right"
+                            Click="BtnMore_Click" AutomationProperties.AutomationId="Native.VersionSettings"
+                            TextPadding="16,0" Text="{DynamicResource Hybrid.VersionSettings}" />
+        </Grid>
         <Grid Grid.ColumnSpan="5" Grid.Row="1" Margin="20,0,20,28" VerticalAlignment="Center" x:Name="PanLogin" />
-        <Grid Grid.ColumnSpan="5" Grid.Row="2" RenderTransformOrigin="0.5,0.5">
+        <Grid Grid.ColumnSpan="5" Grid.Row="2" Margin="20,0" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform>
                 <TransformGroup>
                     <ScaleTransform x:Name="AprilScaleTrans" />
                     <TranslateTransform x:Name="AprilPosTrans" />
                 </TransformGroup>
             </Grid.RenderTransform>
-            <local:MyButton x:Name="BtnLaunch" Height="70" Margin="20,0" Text="{DynamicResource Launch.Home.Button.Loading}" ColorType="Highlight" AutomationProperties.AutomationId="Native.StartGame"
-                            Click="BtnLaunch_Click"
-                            Padding="30,0,30,15" IsEnabled="False" />
-            <TextBlock x:Name="LabVersion" Text="{DynamicResource Launch.Home.VersionList.Loading}" Margin="35,0,35,10" IsHitTestVisible="False"
-                       VerticalAlignment="Bottom" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
-                       FontSize="11" Foreground="#3F3421" RenderTransformOrigin="0.5,-0.2">
-                <TextBlock.RenderTransform>
-                    <ScaleTransform ScaleX="{Binding RealRenderTransform.ScaleX, ElementName=BtnLaunch, Mode=OneWay}"
-                                    ScaleY="{Binding RealRenderTransform.ScaleY, ElementName=BtnLaunch, Mode=OneWay}" />
-                </TextBlock.RenderTransform>
-            </TextBlock>
+            <Border CornerRadius="6" ClipToBounds="True">
+                <Grid>
+                    <local:MyButton x:Name="BtnLaunch" Height="70" HorizontalAlignment="Stretch" Text="{DynamicResource Launch.Home.Button.Loading}" ColorType="Highlight" AutomationProperties.AutomationId="Native.StartGame"
+                                    Click="BtnLaunch_Click"
+                                    Padding="30,0,30,15" IsEnabled="False" />
+                    <Border x:Name="LaunchUpdateFill" Height="70" Width="72" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#8A5A10" Opacity="0.42" IsHitTestVisible="False" Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <TranslateTransform />
+                        </Border.RenderTransform>
+                    </Border>
+                    <TextBlock x:Name="LabVersion" Text="{DynamicResource Launch.Home.VersionList.Loading}" Margin="16,0,16,10" IsHitTestVisible="False"
+                               VerticalAlignment="Bottom" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               FontSize="11" Foreground="#3F3421" RenderTransformOrigin="0.5,-0.2">
+                        <TextBlock.RenderTransform>
+                            <ScaleTransform ScaleX="{Binding RealRenderTransform.ScaleX, ElementName=BtnLaunch, Mode=OneWay}"
+                                            ScaleY="{Binding RealRenderTransform.ScaleY, ElementName=BtnLaunch, Mode=OneWay}" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
     <Grid Name="PanLaunching" RenderTransformOrigin="0.5,0.5" Visibility="Collapsed" Opacity="0">
