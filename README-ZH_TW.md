@@ -18,7 +18,7 @@
 <a href="https://trendshift.io/repositories/21800?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-21800" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/21800/daily?language=C%23" alt="PCL-Community%2FPCL-CE | Trendshift" width="250" height="55"/></a>
 <a href="https://trendshift.io/repositories/21800" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21800" alt="PCL-Community%2FPCL-CE | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[社群版下載](https://github.com/PCL-Community/PCL-CE/releases/latest) |
+[MOONCL 下載](https://github.com/catmoon233/MOON-CL/releases/latest) |
 [上游儲存庫](https://github.com/Meloong-Git/PCL)
 
 [提交問題](https://github.com/PCL-Community/PCL-CE/issues/new/choose) |
