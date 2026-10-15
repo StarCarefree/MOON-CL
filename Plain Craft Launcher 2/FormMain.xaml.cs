@@ -1702,6 +1702,7 @@ public partial class FormMain
     public void PageChange(PageStackData stack, PageSubType subType = PageSubType.Default)
     {
         _webUi.Hide();
+        SetRoomsVisible(false);
         if (string.IsNullOrEmpty(PageNameGet(stack)))
         {
             // 切换到主页面

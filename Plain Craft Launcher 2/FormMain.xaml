@@ -235,6 +235,7 @@
                     </Border>
                 </Grid>
                 <Grid x:Name="PanBrowse" Grid.Row="1" Grid.Column="1" Background="{StaticResource Hybrid.Background}" Panel.ZIndex="1" Visibility="Collapsed" />
+                <local:HybridRooms x:Name="HybridRoomsView" Grid.Row="1" Grid.Column="1" Panel.ZIndex="1" Visibility="Collapsed" />
                 <StackPanel x:Name="PanHint" UseLayoutRounding="True"
                             SnapsToDevicePixels="True" HorizontalAlignment="Left" VerticalAlignment="Bottom"
                             Margin="0,0,0,20"

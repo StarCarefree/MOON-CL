@@ -33,6 +33,7 @@ public partial class FormMain
             _hybridTimer.Stop();
             _hybridTimer.Tick -= HybridTick;
             _webUi.Dispose();
+            HybridRoomsView.Dispose();
         };
         HybridAccountView.Closed += (_, _) => UpdateHybridShell();
         HybridSidebarView.PlayEntrance();
@@ -74,9 +75,11 @@ public partial class FormMain
     internal void SetBrowseVisible(bool visible)
     {
         if (PanBrowse is null) return;
+        if (visible) HybridRoomsView.Visibility = Visibility.Collapsed;
         PanBrowse.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        PanMain.Visibility = visible ? Visibility.Hidden : Visibility.Visible;
-        PanMain.IsHitTestVisible = !visible;
+        var covered = visible || HybridRoomsView.Visibility == Visibility.Visible;
+        PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
+        PanMain.IsHitTestVisible = !covered;
         if (visible)
         {
             PanBrowse.Opacity = 0;
@@ -87,6 +90,15 @@ public partial class FormMain
                 ModAnimation.AaTranslateY(PanBrowse, -12, 360, 0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak))
             }, "Hybrid Browse");
         }
+        UpdateHybridShell();
+    }
+
+    internal void SetRoomsVisible(bool visible)
+    {
+        HybridRoomsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        var covered = visible || _webUi.IsPresented;
+        PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
+        PanMain.IsHitTestVisible = !covered;
         UpdateHybridShell();
     }
 
@@ -113,7 +125,7 @@ public partial class FormMain
         if (HybridSidebarView is null || PanMain is null) return;
         var browse = _webUi.IsPresented;
         var page = (PageType)pageCurrent;
-        var route = browse ? "browse" : page switch
+        var route = HybridRoomsView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
         {
             PageType.Download or PageType.CompDetail => "download",
             PageType.Setup => "settings",
@@ -125,6 +137,7 @@ public partial class FormMain
         var nextSection = route switch
         {
             "browse" => Lang.Text("Hybrid.Browse"),
+            "rooms" => "联机房间",
             "settings" => Lang.Text("Main.Tab.Settings"),
             "download" => Lang.Text("Main.Tab.Download"),
             "tools" => Lang.Text("Main.Tab.Tools"),
@@ -215,6 +228,7 @@ public partial class FormMain
         if (route == "browse") { await ShowWebUiAsync(); return; }
         switch (route)
         {
+            case "rooms": _webUi.Hide(); SetRoomsVisible(true); break;
             case "games": _webUi.Hide(); PageChange(PageType.Launch); break;
             case "settings": _webUi.Hide(); PageChange(PageType.Setup, PageSubType.SetupLaunch); break;
             case "download": _webUi.Hide(); PageChange(PageType.Download, PageSubType.DownloadInstall); break;

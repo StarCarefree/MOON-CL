@@ -22,10 +22,12 @@ final class PortGuard extends OncePerRequestFilter {
     private final Ports ports;
     private final byte[] authorization;
     private final ObjectMapper mapper;
+    private final RoomStore rooms;
 
-    PortGuard(Ports ports, CloudProperties properties, ObjectMapper mapper) {
+    PortGuard(Ports ports, CloudProperties properties, ObjectMapper mapper, RoomStore rooms) {
         this.ports = ports;
         this.mapper = mapper;
+        this.rooms = rooms;
         authorization = ("Bearer " + properties.adminToken()).getBytes(StandardCharsets.UTF_8);
     }
 
@@ -38,12 +40,35 @@ final class PortGuard extends OncePerRequestFilter {
         response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: http:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
         String path = request.getRequestURI();
         String method = request.getMethod();
+        boolean roomPath = path.equals("/api/v1/rooms") || path.startsWith("/api/v1/rooms/");
+        if (roomPath) response.setHeader("Cache-Control", "no-store");
         boolean read = method.equals("GET") || method.equals("HEAD");
         if (!ports.isAdmin(request.getLocalPort())) {
-            boolean publicPath = path.equals("/index.json") || path.equals("/catalog.json") || path.equals("/healthz") || path.equals("/api/v1/packs")
-                    || path.matches("/api/v1/packs/[a-z0-9][a-z0-9_-]{0,63}(/download)?");
-            if (!publicPath) { error(response, 404, "资源不存在"); return; }
-            if (!read) { response.setHeader("Allow", "GET, HEAD"); error(response, 405, "获取端口仅支持 GET/HEAD"); return; }
+            if (roomPath) {
+                if (!Set.of("GET", "HEAD", "POST", "PUT", "DELETE").contains(method)) {
+                    error(response, 405, "请求方法不支持"); return;
+                }
+                // Count noncanonical POST paths too: MVC may decode escapes/matrix parameters.
+                boolean heartbeat = path.matches("/api/v1/rooms/[A-HJ-NP-Z2-9]{8}/members/[0-9a-f-]{36}/heartbeat");
+                if (method.equals("POST") && !heartbeat) {
+                    try { rooms.rateLimit(request.getRemoteAddr()); }
+                    catch (ApiException exception) {
+                        response.setHeader("Retry-After", "60");
+                        error(response, exception.status, exception.getMessage()); return;
+                    }
+                }
+                if (!read) {
+                    if (request.getContentLengthLong() > 4096) { error(response, 413, "Room body exceeds 4 KiB"); return; }
+                    byte[] body = request.getInputStream().readNBytes(4097);
+                    if (body.length > 4096) { error(response, 413, "Room body exceeds 4 KiB"); return; }
+                    request = new BufferedRequest(request, body);
+                }
+            } else {
+                boolean publicPath = path.equals("/index.json") || path.equals("/catalog.json") || path.equals("/healthz") || path.equals("/api/v1/packs")
+                        || path.matches("/api/v1/packs/[a-z0-9][a-z0-9_-]{0,63}(/download)?");
+                if (!publicPath) { error(response, 404, "资源不存在"); return; }
+                if (!read) { response.setHeader("Allow", "GET, HEAD"); error(response, 405, "获取端口仅支持 GET/HEAD"); return; }
+            }
         } else {
             if (read && (ASSETS.contains(path) || path.equals("/healthz"))) { chain.doFilter(request, response); return; }
             if (!path.startsWith("/api/admin/")) { error(response, 404, "资源不存在"); return; }
