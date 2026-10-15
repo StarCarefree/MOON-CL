@@ -22,7 +22,7 @@ internal static class HybridMotion
             delay += 28;
         }
         if (animations.Count > 0)
-            ModAnimation.AniStart(animations, "Hybrid Rise");
+            ModAnimation.AniStart(animations, "Hybrid Rise " + animations[0].GetHashCode());
     }
 
     public static void SlideIn(params FrameworkElement?[] elements)
@@ -42,7 +42,18 @@ internal static class HybridMotion
             delay += 26;
         }
         if (animations.Count > 0)
-            ModAnimation.AniStart(animations, "Hybrid Slide");
+            ModAnimation.AniStart(animations, "Hybrid Slide " + animations[0].GetHashCode());
+    }
+    public static void Swap(FrameworkElement element)
+    {
+        if (element.Visibility != Visibility.Visible) return;
+        element.Opacity = 0;
+        element.RenderTransform = new TranslateTransform(16, 0);
+        ModAnimation.AniStart(new[]
+        {
+            ModAnimation.AaOpacity(element, 1, 140),
+            ModAnimation.AaTranslateX(element, -16, 320, 0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak))
+        }, "Hybrid Swap " + element.GetHashCode());
     }
 
     public static void Pop(FrameworkElement card, FrameworkElement backdrop)

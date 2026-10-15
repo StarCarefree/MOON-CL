@@ -40,7 +40,7 @@ public partial class HybridAccountOverlay
             launch.ExternalLoginEnded += OnLoginEnded;
         ShowMethods();
         Visibility = Visibility.Visible;
-        ReloadAccounts(true);
+        ReloadAccounts(false);
         HybridMotion.Pop(Card, Backdrop);
         HybridMotion.SlideIn(LeftPane, RightPane);
         Keyboard.Focus(this);

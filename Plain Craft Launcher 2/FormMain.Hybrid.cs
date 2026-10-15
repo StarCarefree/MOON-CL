@@ -16,6 +16,7 @@ public partial class FormMain
 {
     private DispatcherTimer? _hybridTimer;
     private bool? _hybridGameLayout;
+    private string? _hybridVersionPath;
 
     private void InitializeHybridShell()
     {
@@ -153,9 +154,13 @@ public partial class FormMain
         }
         PanLeft.Visibility = browse || gameLayout ? Visibility.Collapsed : Visibility.Visible;
         var account = ProfileService.Current;
+        var skin = account is null ? null : ModMain.frmLoginProfileSkin?.Skin;
         HybridSidebarView.UpdateAccount(account?.UserName ?? Lang.Text("Hybrid.NotLoggedIn"),
-            account is null ? null : ModMain.frmLoginProfileSkin?.Skin?.ImgBack?.Source);
+            skin?.ImgBack?.Source, skin?.ImgFore?.Source);
         var selected = ModInstanceList.McMcInstanceSelected;
+        var versionPath = selected?.PathInstance ?? "";
+        var versionChanged = _hybridVersionPath is not null && !string.Equals(_hybridVersionPath, versionPath, StringComparison.OrdinalIgnoreCase);
+        _hybridVersionPath = versionPath;
         if (ModMain.frmLaunchRight is { } home)
         {
             home.LabNativeGameName.Text = selected?.Name ?? Lang.Text("Hybrid.EmptyGameTitle");
@@ -163,6 +168,7 @@ public partial class FormMain
             home.LabNativeGameStatus.Text = selected is not null && ModLaunch.IsInstanceLaunching(selected)
                 ? Lang.Text("Launch.Status.Title.Launching")
                 : selected is null ? Lang.Text("Hybrid.NoVersions") : Lang.Text("Hybrid.Ready");
+            if (versionChanged) home.PlayVersionSwitch();
         }
         if (ModInstanceList.mcInstanceListLoader.State == ModBase.LoadState.Finished)
         {
@@ -172,6 +178,7 @@ public partial class FormMain
                 .Where(instance => instance.PathInstance.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .GroupBy(instance => instance.PathInstance, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToArray();
             HybridSidebarView.UpdateVersions(instances, selected, ModLaunch.LaunchingPaths(), Lang.Text("Hybrid.LaunchingPrefix"));
+            if (versionChanged) HybridSidebarView.AnimateSelected(versionPath);
         }
     }
 

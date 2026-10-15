@@ -178,12 +178,25 @@ public partial class HybridSidebar : UserControl
         RefreshActivity();
     }
 
-    public void UpdateAccount(string name, ImageSource? image)
+    public void UpdateAccount(string name, ImageSource? face, ImageSource? hat)
     {
         Account.Text = name;
-        Avatar.Source = image;
+        Avatar.Source = face;
+        AvatarFore.Source = hat;
+        AvatarFore.Visibility = hat is null ? Visibility.Collapsed : Visibility.Visible;
         AvatarLetter.Text = string.IsNullOrEmpty(name) ? "?" : name[..1];
-        AvatarLetter.Visibility = image is null ? Visibility.Visible : Visibility.Collapsed;
+        AvatarLetter.Visibility = face is null && hat is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public void AnimateSelected(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (Versions.ItemContainerGenerator.ContainerFromItem(Versions.SelectedItem) is not FrameworkElement item) return;
+            if (!string.Equals((item.DataContext as VersionEntry)?.Instance.PathInstance, path, StringComparison.OrdinalIgnoreCase)) return;
+            HybridMotion.Swap(item);
+        }, DispatcherPriority.Loaded);
     }
 
     private static string VersionIconPath(McInstance instance)
