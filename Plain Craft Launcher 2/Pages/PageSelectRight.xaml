@@ -6,6 +6,15 @@
     mc:Ignorable="d" x:Class="PCL.PageSelectRight"
     PanScroll="{Binding ElementName=PanBack}">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal" Margin="25,12,25,0">
+            <local:MyButton x:Name="BtnClientList" Text="客户端版本" Height="32" Padding="16,0" ColorType="Highlight" Click="ClientList_Click" />
+            <local:MyButton x:Name="BtnServerList" Text="切换至服务端管理列表" Height="32" Padding="16,0" Margin="10,0,0,0" Click="ServerList_Click" />
+        </StackPanel>
+        <Grid x:Name="PanClientContent" Grid.Row="1">
         <Grid x:Name="PanAllBack">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -52,5 +61,7 @@
                          Click="Load_Click"
                          VerticalAlignment="Center" IsHitTestVisible="False" AutoRun="False" />
         </local:MyCard>
+        </Grid>
+        <ContentControl x:Name="PanServers" Grid.Row="1" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
     </Grid>
 </local:MyPageRight>

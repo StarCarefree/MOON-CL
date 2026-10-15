@@ -522,6 +522,7 @@ public partial class FormMain
     /// <param name="isUpdating">是否正在更新重启</param>
     public void EndProgram(bool sendWarning, bool isUpdating = false)
     {
+        if (!ServerUi.CanExit()) return;
         // 发出警告
         if (sendWarning && ModNet.HasDownloadingTask())
         {
