@@ -1,0 +1,20 @@
+{
+  "packs": [
+    {
+      "id": "starrail-harpy-express",
+      "name": "StarRailHarpyExpress",
+      "description": "SRE 哈比列车 · 公开版整合包。外层发布名 V4.3.3-Release，包内 modrinth.index.json 标记 V4.3.0。",
+      "version": "V4.3.0",
+      "minecraft": "1.21.1",
+      "author": "StarRailHarpyExpress",
+      "loader": "Fabric",
+      "icon": "",
+      "background": "",
+      "downloadUrl": "https://gitee.com/starrailexpress/starrailexpress/releases/download/modpack/(PCL%E6%8E%A8%E8%8D%90%E4%BD%BF%E7%94%A8)StarRailHarpyExpress%20V4.3.3-Release.zip",
+      "fileName": "(PCL推荐使用)StarRailHarpyExpress V4.3.3-Release.zip",
+      "sha256": "",
+      "shareUrl": "https://pan.quark.cn/s/e3f623dd58d6",
+      "sharePath": "SRE哈比列车/4.4.0/公开版（不含地图）StarRailHarpyExpress V4.4.0-beta1.mrpack"
+    }
+  ]
+}
