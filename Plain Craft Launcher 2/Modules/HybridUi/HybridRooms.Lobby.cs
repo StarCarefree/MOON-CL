@@ -12,7 +12,9 @@ namespace PCL;
 
 public partial class HybridRooms
 {
+    private const int MemberPageSize = 8;
     private readonly ObservableCollection<RoomMemberPresentation> _memberPage = [];
+    private readonly ObservableCollection<bool> _emptySeatPage = [];
     private readonly ObservableCollection<RoomMemberPresentation> _hallPage = [];
     private readonly ObservableCollection<RoomRoutePresentation> _routePage = [];
     private int _memberPageIndex, _routePageIndex;
@@ -37,9 +39,12 @@ public partial class HybridRooms
     }
     private void RefreshPages()
     {
-        _memberPageIndex = Math.Clamp(_memberPageIndex, 0, Math.Max(0, (_members.Count - 1) / 4));
+        _memberPageIndex = Math.Clamp(_memberPageIndex, 0, Math.Max(0, (_members.Count - 1) / MemberPageSize));
         _routePageIndex = Math.Clamp(_routePageIndex, 0, Math.Max(0, (_routes.Count - 1) / 3));
-        SyncPage(_memberPage, _members.Skip(_memberPageIndex * 4).Take(4).ToArray());
+        SyncPage(_memberPage, _members.Skip(_memberPageIndex * MemberPageSize).Take(MemberPageSize).ToArray());
+        // Hidden occupied placeholders retain their tracks without painting beneath real cards.
+        SyncPage(_emptySeatPage, Enumerable.Range(0, MemberPageSize).Select(seat => seat >= _memberPage.Count).ToArray());
+        EmptySeats.ItemsSource = _emptySeatPage;
         SyncPage(_hallPage, _members.Take(4).ToArray());
         if (!_routes.Any(r => r.Route.Id == _selectedRouteId)) _selectedRouteId = _routes.FirstOrDefault()?.Route.Id;
         _paging = true;
@@ -49,11 +54,11 @@ public partial class HybridRooms
             RouteList.SelectedItem = _routePage.FirstOrDefault(r => r.Route.Id == _selectedRouteId);
         }
         finally { _paging = false; }
-        MemberCount.Text = $"队伍 / {_members.Count} 人 · 最多 16 人";
-        MemberPageLabel.Text = $"{_memberPageIndex + 1} / {Math.Max(1, (_members.Count + 3) / 4)}";
+        MemberCount.Text = $"队伍 / {_members.Count} 人";
+        MemberPageLabel.Text = $"{_memberPageIndex + 1} / {Math.Max(1, (_members.Count + MemberPageSize - 1) / MemberPageSize)}";
         RoutePageLabel.Text = $"{_routePageIndex + 1} / {Math.Max(1, (_routes.Count + 2) / 3)}";
         MemberPrev.IsEnabled = _memberPageIndex > 0;
-        MemberNext.IsEnabled = (_memberPageIndex + 1) * 4 < _members.Count;
+        MemberNext.IsEnabled = (_memberPageIndex + 1) * MemberPageSize < _members.Count;
         RoutePrev.IsEnabled = _routePageIndex > 0;
         RouteNext.IsEnabled = (_routePageIndex + 1) * 3 < _routes.Count;
         RemoveRouteButton.IsEnabled = !_busy && SelectedRoute is not null;
@@ -123,6 +128,10 @@ public partial class HybridRooms
     private void OpenTools_Click(object sender, RoutedEventArgs e)
     {
         if (!_initialized || _closed) return;
+        // Only an explicit route-wizard shortcut follows the chosen mode. Room/settings entry
+        // preserves the last selected tools tab; heartbeats never change it.
+        if (sender is Button button && System.Windows.Automation.AutomationProperties.GetAutomationId(button) == "Rooms.RouteTools")
+            ToolsPanel.SelectedIndex = Mode switch { "easytier" => 1, "zerotier" => 2, _ => 0 };
         DiscoverTools();
         OpenOverlay(ToolsForm, "本机工具 · 凭据仅本次会话", ToolsPanel);
     }
@@ -136,6 +145,7 @@ public partial class HybridRooms
         if (LobbyContent is null || OverlayFrame is null) return;
         var compact = ActualWidth < 850 || ActualHeight < 640;
         LobbyContent.Margin = new Thickness(compact ? 12 : 22);
+        Resources["RoomAvatarSize"] = compact ? 48d : 64d;
         OverlayFrame.Margin = new Thickness(compact ? 10 : 22);
         OverlayFrame.Padding = new Thickness(compact ? 12 : 20);
         IdentitySummary.Visibility = Show(ActualWidth >= 720);

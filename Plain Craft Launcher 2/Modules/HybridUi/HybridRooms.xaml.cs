@@ -412,7 +412,9 @@ public partial class HybridRooms : UserControl, IDisposable
     // Deliberately independent of _busy: twelve slow probes must never starve the 75-second room lease.
     private async void Heartbeat_Tick(object? sender, EventArgs e)
     {
-        if (_closed || _refreshing || _session?.Room is null) return;
+        if (_closed) return;
+        RefreshEasyTierDownload();
+        if (_refreshing || _session?.Room is null) return;
         var now = DateTime.UtcNow;
         if (now < _nextHeartbeat && (_presenceDue is null || now < _presenceDue.Value)) return;
         var session = _session; var presence = _presence;

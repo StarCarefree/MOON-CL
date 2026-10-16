@@ -115,6 +115,52 @@ internal static class Program
         await view.Dispatcher.InvokeAsync(() => view.UpdateLayout(), System.Windows.Threading.DispatcherPriority.Loaded);
         AssertNoScrollBars(view);
     }
+    private static void AssertSeatGeometry(HybridRooms view)
+    {
+        var seats = Control<ItemsControl>(view, "Members"); view.UpdateLayout();
+        for (var i = 0; i < seats.Items.Count; i++)
+        {
+            var slot = (FrameworkElement)seats.ItemContainerGenerator.ContainerFromIndex(i);
+            AssertInViewport(view, slot, "Player seat " + i);
+            var image = Descendants(slot).OfType<Image>().First();
+            var avatar = (Border)VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(image));
+            Check(avatar.ActualWidth >= 48 && Math.Abs(avatar.ActualWidth - avatar.ActualHeight) <= 1, "Avatar must be enlarged proportionally");
+            var bounds = avatar.TransformToAncestor(slot).TransformBounds(new Rect(0, 0, avatar.ActualWidth, avatar.ActualHeight));
+            Check(Math.Abs(bounds.Left + bounds.Width / 2 - slot.ActualWidth / 2) <= 1.5, "Avatar is not centered inside its player seat");
+            Check(image.Stretch == Stretch.Uniform && RenderOptions.GetBitmapScalingMode(image) == BitmapScalingMode.NearestNeighbor,
+                "Minecraft avatars must use uniform nearest-neighbor scaling");
+        }
+    }
+    private static void AssertPanelAlignment(HybridRooms view)
+    {
+        var left = Control<FrameworkElement>(view, "PlayerPanelSurface");
+        var right = Control<FrameworkElement>(view, "NetworkPanelSurface");
+        var a = left.TransformToAncestor(view).TransformBounds(new Rect(0, 0, left.ActualWidth, left.ActualHeight));
+        var b = right.TransformToAncestor(view).TransformBounds(new Rect(0, 0, right.ActualWidth, right.ActualHeight));
+        Check(Math.Abs(a.Top - b.Top) <= 1 && Math.Abs(a.Bottom - b.Bottom) <= 1, "Player and network panels must align at both top and bottom");
+    }
+    private static void AssertAvatarComposition()
+    {
+        var encode = typeof(HybridRooms).Assembly.GetType("PCL.RoomPresentation")!.GetMethod("EncodeAvatar", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var face = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 0, 0, 255, 255 }, 4);
+        var hat = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 255, 0, 0, 128 }, 4);
+        var png = (string)encode.Invoke(null, [face, hat])!;
+        new RoomPresence(png).Validate();
+        using (var stream = new MemoryStream(Convert.FromBase64String(png)))
+        {
+            var image = new FormatConvertedBitmap(BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad), PixelFormats.Bgra32, null, 0);
+            var sample = new byte[4]; image.CopyPixels(new Int32Rect(0, 0, 1, 1), sample, 4, 0);
+            Check(Math.Abs(sample[0] - 128) <= 1 && Math.Abs(sample[2] - 127) <= 1 && sample[3] == 255, "Avatar hat alpha composition is incorrect");
+        }
+        var rectangular = BitmapSource.Create(1, 2, 96, 96, PixelFormats.Bgra32, null, new byte[] { 0, 0, 255, 255, 0, 0, 255, 255 }, 4);
+        using (var stream = new MemoryStream(Convert.FromBase64String((string)encode.Invoke(null, [rectangular, null])!)))
+        {
+            var image = new FormatConvertedBitmap(BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad), PixelFormats.Bgra32, null, 0);
+            var edge = new byte[4]; var center = new byte[4];
+            image.CopyPixels(new Int32Rect(0, 32, 1, 1), edge, 4, 0); image.CopyPixels(new Int32Rect(32, 32, 1, 1), center, 4, 0);
+            Check(edge[3] == 0 && center[3] == 255, "Avatar input must retain its aspect ratio and transparent padding");
+        }
+    }
     private static void Run(string[] args)
     {
         Directory.CreateDirectory(args[1]); Directory.CreateDirectory(args[2]);
@@ -126,6 +172,7 @@ internal static class Program
         {
             try
             {
+                AssertAvatarComposition();
                 Check(Control<ComboBox>(host, "Coordinator").SelectedIndex == 0, "Official must be the default");
                 Check(Control<TextBox>(host, "CustomUrl").Visibility == Visibility.Collapsed, "Official mode must hide the URL");
                 Check(Control<FrameworkElement>(host, "HallPanel").Visibility == Visibility.Visible, "Hall is the initial view");
@@ -134,17 +181,42 @@ internal static class Program
                 AssertInViewport(host, ButtonById(host, "Rooms.OpenJoin"), "Join entry at compact size");
                 Screenshot(host, Path.Combine(args[2], "multiplayer-hall-compact.png"));
                 await ResizeViewport(window, host, 1080, 860);
-                AssertPrivate(host); Screenshot(host, Path.Combine(args[2], "multiplayer-hall.png"));
+                AssertPrivate(host);
+                foreach (var entry in new[] { "Rooms.OpenCreate", "Rooms.OpenJoin" })
+                {
+                    var card = ButtonById(host, entry);
+                    Check(card.ActualHeight > 120 && card.ActualWidth > 200, "Entry interaction must cover the entire card");
+                    Check(!Descendants(card).OfType<Button>().Any(button => !ReferenceEquals(button, card)), "Hall entry still contains a nested button");
+                }
+                Screenshot(host, Path.Combine(args[2], "multiplayer-hall.png"));
                 Configure(host, args[0], "房主烟测");
-                var face = new DrawingImage(new GeometryDrawing(Brushes.Goldenrod, null, new RectangleGeometry(new Rect(0, 0, 8, 8)))); face.Freeze();
+                var facePixels = new byte[8 * 8 * 4];
+                for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++)
+                {
+                    var offset = (y * 8 + x) * 4; var alternate = (x + y) % 2 == 0;
+                    facePixels[offset] = alternate ? (byte)45 : (byte)190;
+                    facePixels[offset + 1] = alternate ? (byte)180 : (byte)105;
+                    facePixels[offset + 2] = alternate ? (byte)240 : (byte)65;
+                    facePixels[offset + 3] = 255;
+                }
+                var face = BitmapSource.Create(8, 8, 96, 96, PixelFormats.Bgra32, null, facePixels, 8 * 4); face.Freeze();
                 host.UpdateLocalState("房主烟测", face, null, null);
-                Click(host, "Rooms.OpenCreate");
+                Click(host, "Rooms.OpenCreate"); await Idle(host);
                 Check(!string.IsNullOrWhiteSpace(Control<TextBox>(host, "RoomName").Text), "Room name should be suggested automatically");
-                Click(host, "Rooms.Create"); await Idle(host);
+                Check(Control<FrameworkElement>(host, "Overlay").Visibility == Visibility.Collapsed, "Clicking the create card must create directly without a second button");
                 var session = Field<RoomSession>(host, "_session");
                 Check(session.IsHost && session.Room is not null, "Create failed: " + Control<TextBlock>(host, "Status").Text);
                 Check(session.Room!.EffectiveRoutes.Length == 0, "Create must not need a transport");
                 Check(session.Room.Members[0].Avatar.Length > 0, "PNG avatar did not round-trip through the coordinator");
+                using (var png = new MemoryStream(Convert.FromBase64String(session.Room.Members[0].Avatar)))
+                {
+                    var avatar = BitmapFrame.Create(png, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                    Check(avatar.PixelWidth == 64 && avatar.PixelHeight == 64, "Avatar must preserve a crisp 64x64 source");
+                    var pixels = new FormatConvertedBitmap(avatar, PixelFormats.Bgra32, null, 0);
+                    var sample = new byte[64 * 64 * 4]; pixels.CopyPixels(sample, 64 * 4, 0);
+                    var colors = Enumerable.Range(0, 64 * 64).Select(i => BitConverter.ToUInt32(sample, i * 4)).Distinct().Count();
+                    Check(colors == 2, "Avatar scaling introduced blended pixels");
+                }
                 Check(Control<FrameworkElement>(host, "RoomPanel").Visibility == Visibility.Visible, "Create did not enter the room");
                 Click(host, "Rooms.OpenSettings");
                 var lockedToggle = Descendants(Control<ComboBox>(host, "Coordinator")).OfType<System.Windows.Controls.Primitives.ToggleButton>().First();
@@ -154,6 +226,8 @@ internal static class Program
                 await ResizeViewport(window, host, 750, 540);
                 AssertInViewport(host, ButtonById(host, "Rooms.AutoConnect"), "Auto connect at compact size");
                 AssertInViewport(host, Control<ItemsControl>(host, "Members"), "Player seats at compact size");
+                AssertSeatGeometry(host);
+                AssertPanelAlignment(host);
                 Screenshot(host, Path.Combine(args[2], "multiplayer-room-compact.png"));
                 await ResizeViewport(window, host, 1080, 860);
                 var presence = new RoomPresence(session.Room.Members[0].Avatar, new("NeoForge 联机实例", "1.21.1", "launching"));
@@ -223,6 +297,23 @@ internal static class Program
                             if (Control<FrameworkElement>(host, field).IsVisible) AssertInViewport(host, Control<FrameworkElement>(host, field), "Tool field " + field);
                     }
                 }
+                tools.SelectedIndex = 1; host.UpdateLayout();
+                AssertInViewport(host, ButtonById(host, "Rooms.CheckEasyTier"), "EasyTier check entry");
+                AssertInViewport(host, ButtonById(host, "Rooms.GetEasyTier"), "EasyTier acquisition entry");
+                var priorTool = Control<TextBox>(host, "EasyTierPath").Text;
+                Control<TextBox>(host, "EasyTierPath").Text = Path.Combine(args[1], "missing-easytier-core.exe");
+                Click(host, "Rooms.CheckEasyTier"); await Idle(host);
+                Check(Control<TextBlock>(host, "EasyTierToolStatus").Text.Contains("工具面板"), "Missing EasyTier must show an actionable error inside the tools panel");
+                Control<TextBox>(host, "EasyTierPath").Text = priorTool;
+                var nativeEasyTier = Environment.GetEnvironmentVariable("MOONCL_TEST_EASYTIER_CORE");
+                if (!string.IsNullOrWhiteSpace(nativeEasyTier) && File.Exists(nativeEasyTier))
+                {
+                    var leaseCount = Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count;
+                    Control<TextBox>(host, "EasyTierPath").Text = nativeEasyTier;
+                    Click(host, "Rooms.CheckEasyTier"); await Idle(host);
+                    Check(Control<TextBlock>(host, "EasyTierToolStatus").Text.Contains("2.6.4"), "EasyTier tool check did not show the native version");
+                    Check(Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count == leaseCount, "Version check changed room transports");
+                }
                 Screenshot(host, Path.Combine(args[2], "multiplayer-tools-compact.png"));
                 Click(host, "Rooms.ReturnToRoute");
                 Click(host, "Rooms.RouteAdvanced");
@@ -277,19 +368,20 @@ internal static class Program
                     Check(Field<RoomSession>(guest, "_session").Room!.Members.Length == 16, "Full room fixture was not created");
                     await ResizeViewport(window, guest, 750, 540);
                     var seenMembers = new HashSet<string>();
-                    for (var page = 0; page < 4; page++)
+                    for (var page = 0; page < 2; page++)
                     {
                         var seats = Control<ItemsControl>(guest, "Members");
-                        Check(seats.Items.Count <= 4 && seats.Items.Count > 0, "Seats must use bounded pages");
+                        Check(seats.Items.Count == 8, "A full room must show eight seats per page");
                         foreach (var item in seats.Items)
                             seenMembers.Add((string)item.GetType().GetProperty("Id", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(item)!);
                         AssertNoScrollBars(guest); AssertInViewport(guest, seats, "Full-room seats at compact size");
-                        if (page < 3) Click(guest, "Rooms.MemberNext");
+                        AssertSeatGeometry(guest); AssertPanelAlignment(guest);
+                        if (page < 1) Click(guest, "Rooms.MemberNext");
                     }
                     Check(seenMembers.Count == 16, "Member pagination lost players");
                     Check(!ButtonById(guest, "Rooms.MemberNext").IsEnabled, "Member pages must stop at the last page");
                     await Refresh(guest);
-                    Check(Control<TextBlock>(guest, "MemberPageLabel").Text.Contains("4"), "Heartbeat unexpectedly reset the member page");
+                    Check(Control<TextBlock>(guest, "MemberPageLabel").Text.Contains("2 / 2"), "Heartbeat unexpectedly reset the member page");
                     var manyRoutes = Enumerable.Range(0, 12).Select(i => fastRoute with { Id = "paged" + i, Name = "游戏线路 " + (i + 1) }).ToArray();
                     await session.PublishRoutesAsync(manyRoutes, CancellationToken.None); await Refresh(guest);
                     var seenRoutes = new HashSet<string>();

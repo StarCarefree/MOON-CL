@@ -95,6 +95,7 @@ public sealed class RoomTransportFactory : IDisposable
                     }
                     break;
                 case "easytier":
+                    EasyTierToolSupport.ValidateExecutable(settings.EasyTierPath);
                     var rpcPort = FreeTcpPort(); var local = FreeTcpPort();
                     while (local == rpcPort) local = FreeTcpPort();
                     var plan = EasyTierRoomConfiguration.Build(c, asHost, localGamePort, local, rpcPort);

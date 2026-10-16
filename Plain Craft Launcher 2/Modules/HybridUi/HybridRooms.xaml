@@ -1,6 +1,9 @@
 <UserControl x:Class="PCL.HybridRooms"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
- xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" PreviewKeyDown="Lobby_KeyDown" SizeChanged="Lobby_SizeChanged">
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:sys="clr-namespace:System;assembly=mscorlib"
+ UseLayoutRounding="True" SnapsToDevicePixels="True"
+ PreviewKeyDown="Lobby_KeyDown" SizeChanged="Lobby_SizeChanged">
  <UserControl.Resources>
   <ResourceDictionary>
    <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="HybridTheme.xaml" /></ResourceDictionary.MergedDictionaries>
@@ -15,8 +18,106 @@
    <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="#252729"/><Setter Property="BorderBrush" Value="#44423A"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="8"/><Setter Property="Padding" Value="12"/></Style>
    <Style TargetType="TabControl"><Setter Property="Background" Value="#252729"/><Setter Property="BorderBrush" Value="#49473F"/><Setter Property="Padding" Value="10"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions><TabPanel IsItemsHost="True"/><Border Grid.Row="1" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}"><ContentPresenter ContentSource="SelectedContent"/></Border></Grid></ControlTemplate></Setter.Value></Setter></Style>
    <Style TargetType="TabItem"><Setter Property="Foreground" Value="#EEECE5"/><Setter Property="Background" Value="#343432"/><Setter Property="Padding" Value="12,6"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem"><Border x:Name="TabBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" BorderBrush="#49473F" BorderThickness="1"><ContentPresenter ContentSource="Header"/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="TabBorder" Property="Background" Value="#6A5934"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
-   <Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="RouteBorder" BorderThickness="2,0,0,0" BorderBrush="Transparent" Background="#202224"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="RouteBorder" Property="Background" Value="#39352A"/><Setter TargetName="RouteBorder" Property="BorderBrush" Value="#D9BC75"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
-   <DataTemplate x:Key="MemberTemplate"><Border Style="{StaticResource Card}" Margin="3" Padding="8"><Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Border Width="32" Height="32" Background="#41423F" CornerRadius="5" HorizontalAlignment="Left" VerticalAlignment="Center"><Grid><TextBlock Text="{Binding Initials}" Foreground="#EEECE5" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Avatar}" RenderOptions.BitmapScalingMode="NearestNeighbor"/></Grid></Border><TextBlock Grid.Row="1" Text="{Binding Name}" Foreground="#EEECE5" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,5,0,3"/><TextBlock Grid.Row="2" Text="{Binding Game}" FontSize="11" Foreground="#ADA99F" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/></Grid></Border></DataTemplate>
+   <Style TargetType="ListBoxItem">
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+     <Setter.Value>
+      <ControlTemplate TargetType="ListBoxItem">
+       <Border x:Name="RouteBorder" BorderThickness="2,0,0,0" BorderBrush="Transparent" Background="#202224">
+        <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+       </Border>
+       <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RouteBorder" Property="Background" Value="#2C2D2B"/></Trigger>
+        <Trigger Property="IsSelected" Value="True">
+         <Setter TargetName="RouteBorder" Property="Background" Value="#39352A"/>
+         <Setter TargetName="RouteBorder" Property="BorderBrush" Value="#D9BC75"/>
+        </Trigger>
+        <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="RouteBorder" Property="BorderBrush" Value="#EEECE5"/></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+       </ControlTemplate.Triggers>
+      </ControlTemplate>
+     </Setter.Value>
+    </Setter>
+   </Style>
+   <sys:Double x:Key="RoomAvatarSize">48</sys:Double>
+   <!-- Preserve the native charcoal/gold palette; interaction feedback is immediate, without motion. -->
+   <Style x:Key="EntryCard" TargetType="Button" BasedOn="{StaticResource Hybrid.QuietButton}">
+    <Setter Property="Height" Value="Auto"/>
+    <Setter Property="Padding" Value="24"/>
+    <Setter Property="Background" Value="#252729"/>
+    <Setter Property="Foreground" Value="#EEECE5"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True"/>
+    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    <Setter Property="Template">
+     <Setter.Value>
+      <ControlTemplate TargetType="Button">
+       <Border x:Name="EntrySurface" Background="{TemplateBinding Background}" BorderBrush="#44423A"
+               BorderThickness="2" CornerRadius="8" Padding="{TemplateBinding Padding}">
+        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+       </Border>
+       <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+         <Setter TargetName="EntrySurface" Property="Background" Value="#302F29"/>
+         <Setter TargetName="EntrySurface" Property="BorderBrush" Value="#A28C58"/>
+        </Trigger>
+        <Trigger Property="IsPressed" Value="True">
+         <Setter TargetName="EntrySurface" Property="Background" Value="#393326"/>
+        </Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True">
+         <Setter TargetName="EntrySurface" Property="BorderBrush" Value="#D9BC75"/>
+        </Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+       </ControlTemplate.Triggers>
+      </ControlTemplate>
+     </Setter.Value>
+    </Setter>
+   </Style>
+   <DataTemplate x:Key="MemberTemplate">
+    <Border Style="{StaticResource Card}" Margin="3" Padding="4" ToolTip="{Binding Game}">
+     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Stretch">
+      <Border Width="{DynamicResource RoomAvatarSize}" Height="{DynamicResource RoomAvatarSize}"
+              Background="#41423F" CornerRadius="4" HorizontalAlignment="Center"
+              UseLayoutRounding="True" SnapsToDevicePixels="True">
+       <Grid>
+        <TextBlock Text="{Binding Initials}" Foreground="#EEECE5" FontSize="24"
+                   HorizontalAlignment="Center" VerticalAlignment="Center">
+         <TextBlock.Style>
+          <Style TargetType="TextBlock">
+           <Setter Property="Visibility" Value="Collapsed"/>
+           <Style.Triggers><DataTrigger Binding="{Binding Avatar}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+          </Style>
+         </TextBlock.Style>
+        </TextBlock>
+        <Image Source="{Binding Avatar}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+               RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True" SnapsToDevicePixels="True"/>
+       </Grid>
+      </Border>
+      <TextBlock Text="{Binding Name}" Foreground="#EEECE5" FontWeight="SemiBold" FontSize="12"
+                 TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+      <TextBlock Text="{Binding Role}" Foreground="#D9BC75" FontSize="10" TextAlignment="Center"
+                 TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+      <TextBlock Text="{Binding Game}" FontSize="10" Foreground="#ADA99F" TextAlignment="Center"
+                 TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+     </StackPanel>
+    </Border>
+   </DataTemplate>
+   <DataTemplate x:Key="EmptySeatTemplate">
+    <Border Margin="3" Padding="4" Background="#202224" BorderBrush="#363733" BorderThickness="1" CornerRadius="8">
+     <Border.Style>
+      <Style TargetType="Border">
+       <Style.Triggers><DataTrigger Binding="{Binding}" Value="False"><Setter Property="Visibility" Value="Hidden"/></DataTrigger></Style.Triggers>
+      </Style>
+     </Border.Style>
+     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+      <TextBlock Text="＋" FontSize="24" Foreground="#706D63" TextAlignment="Center"/>
+      <TextBlock Text="等待队友" FontSize="11" Foreground="#827F75" TextAlignment="Center" Margin="0,4,0,0"/>
+     </StackPanel>
+    </Border>
+   </DataTemplate>
   </ResourceDictionary>
  </UserControl.Resources>
  <Grid x:Name="LobbyRoot" Background="#1B1D1F" Margin="0">
@@ -27,19 +128,127 @@
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <StackPanel Margin="4,4,0,20"><TextBlock Text="集结，然后出发。" FontSize="28" FontWeight="Bold"/><TextBlock Text="和朋友共享一个世界 · 房间身份与游戏连接独立保持" Foreground="#ADA99F" Margin="0,8,0,0"/></StackPanel>
     <Border Grid.Row="1" x:Name="CurrentCard" Style="{StaticResource Card}" Visibility="Collapsed"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="仍在房间中 / CONNECTION RETAINED" Foreground="#D9BC75"/><StackPanel Grid.Row="1" Margin="0,12"><TextBlock x:Name="CurrentTitle" FontSize="20"/><TextBlock x:Name="CurrentHostGame" Margin="0,6,0,0"/></StackPanel><ItemsControl Grid.Row="2" x:Name="HallMembers" ItemTemplate="{StaticResource MemberTemplate}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" Columns="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl><StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,12,0,0"><Button Content="重新进入房间 →" Click="Reenter_Click" Style="{StaticResource Gold}" AutomationProperties.AutomationId="Rooms.Reenter"/><Button x:Name="HallLeaveButton" Content="退出房间" Click="Leave_Click" Style="{StaticResource Action}" AutomationProperties.AutomationId="Rooms.HallLeave"/></StackPanel></Grid></Border>
-    <Grid Grid.Row="1" x:Name="EntryForms"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition/></Grid.ColumnDefinitions>
-     <Border Style="{StaticResource Card}"><Grid><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="01 / HOST" Foreground="#D9BC75"/><TextBlock Text="开启你的世界" FontSize="24" FontWeight="Bold" Margin="0,12,0,10"/><TextBlock Text="创建房间，再发布游戏线路。&#10;无需提前配置传输工具。" Foreground="#ADA99F"/></StackPanel><Button Grid.Row="1" Content="＋ 创建房间" Style="{StaticResource Gold}" Click="OpenCreate_Click" AutomationProperties.AutomationId="Rooms.OpenCreate"/></Grid></Border>
-     <Border Grid.Column="2" Style="{StaticResource Card}"><Grid><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="02 / JOIN" Foreground="#D9BC75"/><TextBlock Text="与队友会合" FontSize="24" FontWeight="Bold" Margin="0,12,0,10"/><TextBlock Text="使用 8 位邀请码加入，&#10;自动检测可用游戏线路。" Foreground="#ADA99F"/></StackPanel><Button Grid.Row="1" Content="→ 加入房间" Style="{StaticResource Action}" Click="OpenJoin_Click" AutomationProperties.AutomationId="Rooms.OpenJoin"/></Grid></Border>
+    <Grid Grid.Row="1" x:Name="EntryForms">
+     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+     <Button Style="{StaticResource EntryCard}" Click="Create_Click"
+             AutomationProperties.AutomationId="Rooms.OpenCreate" AutomationProperties.Name="创建房间">
+      <Grid>
+       <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <StackPanel VerticalAlignment="Center">
+        <TextBlock Text="01 / HOST" Foreground="#D9BC75"/>
+        <TextBlock Text="创建房间" FontSize="24" FontWeight="Bold" Margin="0,12,0,12"/>
+        <TextBlock Text="开启你的世界，邀请朋友加入。&#10;创建后再发布游戏线路。" Foreground="#ADA99F"/>
+       </StackPanel>
+       <TextBlock Grid.Row="1" Text="点击创建并进入 →" Foreground="#D9BC75" Margin="0,16,0,0"/>
+      </Grid>
+     </Button>
+     <Button Grid.Column="2" Style="{StaticResource EntryCard}" Click="OpenJoin_Click"
+             AutomationProperties.AutomationId="Rooms.OpenJoin" AutomationProperties.Name="加入房间">
+      <Grid>
+       <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <StackPanel VerticalAlignment="Center">
+        <TextBlock Text="02 / JOIN" Foreground="#D9BC75"/>
+        <TextBlock Text="加入房间" FontSize="24" FontWeight="Bold" Margin="0,12,0,12"/>
+        <TextBlock Text="使用 8 位邀请码，与队友会合。&#10;加入后检测可用游戏线路。" Foreground="#ADA99F"/>
+       </StackPanel>
+       <TextBlock Grid.Row="1" Text="输入邀请码 →" Foreground="#D9BC75" Margin="0,16,0,0"/>
+      </Grid>
+     </Button>
     </Grid>
    </Grid>
    <Grid Grid.Row="1" x:Name="RoomPanel" Visibility="Collapsed">
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="RoomTitle" FontSize="18" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/><StackPanel Orientation="Horizontal" Margin="0,5,0,0"><TextBlock x:Name="Invitation" FontSize="20" Foreground="#D9BC75" Margin="0,0,10,0"/><Button Content="复制邀请码" Style="{StaticResource Action}" Click="CopyCode_Click" AutomationProperties.AutomationId="Rooms.CopyCode"/></StackPanel></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top"><Button Content="← 大厅" Style="{StaticResource Action}" Click="Back_Click" AutomationProperties.AutomationId="Rooms.Back"/><Button x:Name="LeaveButton" Content="退出房间" Style="{StaticResource Action}" Click="Leave_Click" AutomationProperties.AutomationId="Rooms.Leave"/></StackPanel></Grid>
-    <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
-     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock x:Name="MemberCount" Text="队伍 / 0 人" Foreground="#D9BC75" Margin="3,0,0,5"/><UniformGrid Grid.Row="1" Rows="2" Columns="2" IsHitTestVisible="False"><Border Style="{StaticResource Card}" Margin="3"><TextBlock Text="＋ 等待队友" Foreground="#706D63" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Border Style="{StaticResource Card}" Margin="3"><TextBlock Text="＋ 等待队友" Foreground="#706D63" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Border Style="{StaticResource Card}" Margin="3"><TextBlock Text="＋ 等待队友" Foreground="#706D63" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Border Style="{StaticResource Card}" Margin="3"><TextBlock Text="＋ 等待队友" Foreground="#706D63" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></UniformGrid><ItemsControl Grid.Row="1" x:Name="Members" ItemTemplate="{StaticResource MemberTemplate}" AutomationProperties.AutomationId="Rooms.Members"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="2" Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl><StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0"><Button x:Name="MemberPrev" Content="‹" Style="{StaticResource Action}" Click="MemberPrev_Click" AutomationProperties.AutomationId="Rooms.MemberPrev"/><TextBlock x:Name="MemberPageLabel" VerticalAlignment="Center" Margin="4,0,10,0"/><Button x:Name="MemberNext" Content="›" Style="{StaticResource Action}" Click="MemberNext_Click" AutomationProperties.AutomationId="Rooms.MemberNext"/></StackPanel></Grid>
-     <Border Grid.Column="2" Style="{StaticResource Card}" Padding="8"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock x:Name="HostGame" MaxHeight="17" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="12" AutomationProperties.AutomationId="Rooms.HostGame"/><DockPanel Grid.Row="1" Margin="0,3"><Border x:Name="EditorCard" DockPanel.Dock="Right"><Button Content="＋ 发布" Style="{StaticResource Action}" Click="OpenRouteEditor_Click" AutomationProperties.AutomationId="Rooms.OpenRouteEditor"/></Border><TextBlock Text="游戏线路" Foreground="#D9BC75" VerticalAlignment="Center"/></DockPanel><ListBox Grid.Row="2" x:Name="RouteList" Background="#1B1D1F" Foreground="#EEECE5" BorderThickness="0" SelectionChanged="Route_Changed" HorizontalContentAlignment="Stretch" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.AutomationId="Rooms.Routes"><ListBox.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="1"/></ItemsPanelTemplate></ListBox.ItemsPanel><ListBox.ItemTemplate><DataTemplate><StackPanel Margin="2" ToolTip="{Binding Result}"><TextBlock Text="{Binding Title}" Foreground="#EEECE5" FontWeight="SemiBold" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Endpoint}" Foreground="#C9C5BB" FontSize="10" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Result}" FontSize="10" Foreground="#ADA99F" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/></StackPanel></DataTemplate></ListBox.ItemTemplate></ListBox><TextBlock Grid.Row="2" x:Name="NoRoutes" Text="等待房主发布线路" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Foreground="#ADA99F"/><StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2"><Button x:Name="RoutePrev" Content="‹" Style="{StaticResource Action}" Click="RoutePrev_Click" AutomationProperties.AutomationId="Rooms.RoutePrev"/><TextBlock x:Name="RoutePageLabel" VerticalAlignment="Center" Margin="4,0,10,0"/><Button x:Name="RouteNext" Content="›" Style="{StaticResource Action}" Click="RouteNext_Click" AutomationProperties.AutomationId="Rooms.RouteNext"/></StackPanel><TextBox Grid.Row="4" x:Name="Endpoint" IsReadOnly="True" FontSize="11" ToolTip="当前已验证的游戏接入地址" AutomationProperties.AutomationId="Rooms.Endpoint"/></Grid></Border>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid Height="32" Margin="0,0,0,8">
+     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBlock x:Name="RoomTitle" FontSize="18" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                VerticalAlignment="Center" Margin="0,0,16,0" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+     <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,12,0">
+      <TextBlock x:Name="Invitation" FontSize="20" Foreground="#D9BC75" VerticalAlignment="Center" Margin="0,0,8,0"/>
+      <Button Content="复制邀请码" Style="{StaticResource Action}" Click="CopyCode_Click" AutomationProperties.AutomationId="Rooms.CopyCode"/>
+     </StackPanel>
+     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+      <Button Content="← 大厅" Style="{StaticResource Action}" Click="Back_Click" AutomationProperties.AutomationId="Rooms.Back"/>
+      <Button x:Name="LeaveButton" Content="退出房间" Style="{StaticResource Action}" Margin="0" Click="Leave_Click" AutomationProperties.AutomationId="Rooms.Leave"/>
+     </StackPanel>
     </Grid>
-    <StackPanel Grid.Row="2" Margin="0,10,0,0"><StackPanel x:Name="ConnectActions" Orientation="Horizontal"><Button Content="自动连接" Style="{StaticResource Gold}" Click="AutoConnect_Click" AutomationProperties.AutomationId="Rooms.AutoConnect"/><Button Content="检测所选" Style="{StaticResource Action}" Click="ManualConnect_Click" AutomationProperties.AutomationId="Rooms.Connect"/><Button Content="复制地址" Style="{StaticResource Action}" Click="CopyAddress_Click" AutomationProperties.AutomationId="Rooms.CopyAddress"/><Button Content="一键联机 · 待开放" IsEnabled="False" Style="{StaticResource Action}" AutomationProperties.AutomationId="Rooms.LaunchFuture"/><Button x:Name="RemoveRouteButton" Content="移除" Style="{StaticResource Action}" Click="RemoveRoute_Click" AutomationProperties.AutomationId="Rooms.RemoveRoute"/></StackPanel><TextBlock Text="真实游戏握手决定可达性 · 不会自动启动 Minecraft" FontSize="11" Foreground="#ADA99F" Margin="0,6,0,0"/></StackPanel>
+    <!-- Both panels share header, content and pagination tracks, not independent stacked heights. -->
+    <Grid Grid.Row="1">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+     <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition/><RowDefinition Height="40"/></Grid.RowDefinitions>
+     <Border x:Name="PlayerPanelSurface" Grid.RowSpan="3" Style="{StaticResource Card}" Padding="0"/>
+     <Border x:Name="NetworkPanelSurface" Grid.Column="2" Grid.RowSpan="3" Style="{StaticResource Card}" Padding="0"/>
+     <StackPanel Margin="12,0" VerticalAlignment="Center">
+      <TextBlock x:Name="MemberCount" Text="队伍 / 0 人" Foreground="#D9BC75" FontWeight="SemiBold" FontSize="12"/>
+      <TextBlock Text="每页 8 席 · 最多 16 人" Foreground="#ADA99F" FontSize="10" Margin="0,4,0,0"/>
+     </StackPanel>
+     <Grid Grid.Row="1" Margin="5,0">
+      <ItemsControl x:Name="EmptySeats" ItemTemplate="{StaticResource EmptySeatTemplate}" IsHitTestVisible="False" Focusable="False">
+       <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="2" Columns="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      </ItemsControl>
+      <ItemsControl x:Name="Members" ItemTemplate="{StaticResource MemberTemplate}" AutomationProperties.AutomationId="Rooms.Members">
+       <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="2" Columns="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      </ItemsControl>
+     </Grid>
+     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+      <Button x:Name="MemberPrev" Content="‹" Style="{StaticResource Action}" Click="MemberPrev_Click" AutomationProperties.AutomationId="Rooms.MemberPrev" AutomationProperties.Name="上一页玩家"/>
+      <TextBlock x:Name="MemberPageLabel" VerticalAlignment="Center" Margin="4,0,10,0"/>
+      <Button x:Name="MemberNext" Content="›" Style="{StaticResource Action}" Margin="0" Click="MemberNext_Click" AutomationProperties.AutomationId="Rooms.MemberNext" AutomationProperties.Name="下一页玩家"/>
+     </StackPanel>
+     <Grid Grid.Column="2" Margin="10,0" VerticalAlignment="Center">
+      <Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="16"/></Grid.RowDefinitions>
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <TextBlock Text="游戏线路" Foreground="#D9BC75" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+       <Border x:Name="EditorCard" Grid.Column="1">
+        <Button Content="＋ 发布" Style="{StaticResource Action}" Height="26" Padding="6,2" Click="OpenRouteEditor_Click" AutomationProperties.AutomationId="Rooms.OpenRouteEditor"/>
+       </Border>
+       <Button x:Name="RemoveRouteButton" Grid.Column="2" Content="移除" Style="{StaticResource Action}" Height="26" Padding="6,2" Margin="0"
+               Click="RemoveRoute_Click" AutomationProperties.AutomationId="Rooms.RemoveRoute"/>
+      </Grid>
+      <TextBlock Grid.Row="1" x:Name="HostGame" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="10"
+                 Foreground="#ADA99F" VerticalAlignment="Center" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.AutomationId="Rooms.HostGame"/>
+     </Grid>
+     <Grid Grid.Column="2" Grid.Row="1" Margin="8,3">
+      <ListBox x:Name="RouteList" Background="#202224" Foreground="#EEECE5" BorderThickness="0" SelectionChanged="Route_Changed"
+               HorizontalContentAlignment="Stretch" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               AutomationProperties.AutomationId="Rooms.Routes">
+       <ListBox.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="1" Rows="3"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+       <ListBox.ItemTemplate>
+        <DataTemplate>
+         <StackPanel Margin="6,4" VerticalAlignment="Center" ToolTip="{Binding Result}">
+          <TextBlock Text="{Binding Title}" Foreground="#EEECE5" FontWeight="SemiBold" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding Endpoint}" Foreground="#C9C5BB" FontSize="10" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
+          <TextBlock Text="{Binding Result}" FontSize="10" Foreground="#ADA99F" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+         </StackPanel>
+        </DataTemplate>
+       </ListBox.ItemTemplate>
+      </ListBox>
+      <TextBlock x:Name="NoRoutes" Text="等待房主发布线路" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Foreground="#ADA99F" FontSize="11"/>
+     </Grid>
+     <StackPanel Grid.Column="2" Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+      <Button x:Name="RoutePrev" Content="‹" Style="{StaticResource Action}" Click="RoutePrev_Click" AutomationProperties.AutomationId="Rooms.RoutePrev" AutomationProperties.Name="上一页线路"/>
+      <TextBlock x:Name="RoutePageLabel" VerticalAlignment="Center" Margin="4,0,10,0"/>
+      <Button x:Name="RouteNext" Content="›" Style="{StaticResource Action}" Margin="0" Click="RouteNext_Click" AutomationProperties.AutomationId="Rooms.RouteNext" AutomationProperties.Name="下一页线路"/>
+     </StackPanel>
+    </Grid>
+    <Grid Grid.Row="2" Margin="0,8,0,0">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+     <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <WrapPanel x:Name="ConnectActions">
+      <Button Content="自动连接" Style="{StaticResource Gold}" Click="AutoConnect_Click" AutomationProperties.AutomationId="Rooms.AutoConnect"/>
+      <Button Content="检测所选" Style="{StaticResource Action}" Click="ManualConnect_Click" AutomationProperties.AutomationId="Rooms.Connect"/>
+      <Button Content="复制地址" Style="{StaticResource Action}" Click="CopyAddress_Click" AutomationProperties.AutomationId="Rooms.CopyAddress"/>
+     </WrapPanel>
+     <Grid Grid.Column="2">
+      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Button Content="一键联机 · 待开放" IsEnabled="False" Style="{StaticResource Action}" Padding="6,4" Background="Transparent" AutomationProperties.AutomationId="Rooms.LaunchFuture"/>
+      <Button Grid.Column="1" Content="工具" Style="{StaticResource Action}" Margin="0" Padding="8,4" IsEnabled="{Binding IsEnabled, ElementName=ToolsPanel}"
+              Click="OpenTools_Click" AutomationProperties.AutomationId="Rooms.RoomTools"/>
+     </Grid>
+     <TextBlock Grid.Row="1" Text="真实游戏握手决定可达性 · 不会自动启动 Minecraft" FontSize="10" Foreground="#ADA99F" Margin="0,6,0,0"/>
+     <TextBox Grid.Row="1" Grid.Column="2" x:Name="Endpoint" IsReadOnly="True" FontSize="10" MinHeight="22" Padding="4,2" Margin="0,6,0,0"
+              ToolTip="当前已验证的游戏接入地址" AutomationProperties.AutomationId="Rooms.Endpoint"/>
+    </Grid>
    </Grid>
    <Border Grid.Row="2" Background="#29271F" Padding="9" CornerRadius="5" Margin="0,10,0,0"><DockPanel><Button x:Name="CancelButton" Content="取消" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="Cancel_Click" Visibility="Collapsed" AutomationProperties.AutomationId="Rooms.Cancel"/><TextBlock x:Name="Status" Text="创建或加入房间，开始联机。" FontSize="11" MaxHeight="32" VerticalAlignment="Center" Foreground="#D9BC75" AutomationProperties.AutomationId="Rooms.Status" AutomationProperties.LiveSetting="Polite"/></DockPanel></Border>
   </Grid>
@@ -50,7 +259,7 @@
      <Grid Grid.Row="1">
       <StackPanel x:Name="CreateForm" Visibility="Collapsed" MaxWidth="440"><TextBlock Text="房间名称" Style="{StaticResource Label}"/><TextBox x:Name="RoomName" MaxLength="48" AutomationProperties.AutomationId="Rooms.RoomName"/><TextBlock Text="密码（可选；不要复用重要密码）" Style="{StaticResource Label}"/><PasswordBox x:Name="CreatePassword" AutomationProperties.AutomationId="Rooms.CreatePassword"/><TextBlock Text="房间只协调成员；创建后可发布多条游戏线路。" Style="{StaticResource Label}"/><Button Content="创建房间" Margin="0,16,0,0" Style="{StaticResource Gold}" Click="Create_Click" AutomationProperties.AutomationId="Rooms.Create"/></StackPanel>
       <StackPanel x:Name="JoinForm" Visibility="Collapsed" MaxWidth="440"><TextBlock Text="8 位邀请码" Style="{StaticResource Label}"/><TextBox x:Name="RoomCode" MaxLength="8" CharacterCasing="Upper" AutomationProperties.AutomationId="Rooms.Code"/><TextBlock Text="房间密码" Style="{StaticResource Label}"/><PasswordBox x:Name="JoinPassword" AutomationProperties.AutomationId="Rooms.JoinPassword"/><Button Content="加入房间" Margin="0,16,0,0" Style="{StaticResource Gold}" Click="Join_Click" AutomationProperties.AutomationId="Rooms.Join"/></StackPanel>
-      <Grid x:Name="SettingsForm" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel x:Name="IdentityPanel"><TextBlock Text="玩家名称（支持离线身份）" Style="{StaticResource Label}"/><TextBox x:Name="PlayerName" Text="Player" MaxLength="32" AutomationProperties.AutomationId="Rooms.PlayerName"/><TextBlock Text="房间中控" Style="{StaticResource Label}"/><ComboBox x:Name="Coordinator" SelectedIndex="0" SelectionChanged="Coordinator_Changed" AutomationProperties.AutomationId="Rooms.Coordinator"><ComboBoxItem Content="官方中控"/><ComboBoxItem Content="自定义中控"/></ComboBox><TextBox x:Name="CustomUrl" Visibility="Collapsed" Margin="0,6,0,0" MaxLength="1024" TextChanged="CustomUrl_Changed" AutomationProperties.AutomationId="Rooms.CustomUrl" AutomationProperties.Name="自定义中控地址"/><TextBlock x:Name="SecurityHint" Style="{StaticResource Label}"/></StackPanel><Button Grid.Row="1" Content="本机工具与节点设置 →" Style="{StaticResource Action}" Click="OpenTools_Click" AutomationProperties.AutomationId="Rooms.OpenTools"/></Grid>
+      <Grid x:Name="SettingsForm" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel x:Name="IdentityPanel"><TextBlock Text="玩家名称（支持离线身份）" Style="{StaticResource Label}"/><TextBox x:Name="PlayerName" Text="Player" MaxLength="32" AutomationProperties.AutomationId="Rooms.PlayerName"/><TextBlock Text="房间中控" Style="{StaticResource Label}"/><ComboBox x:Name="Coordinator" SelectedIndex="0" SelectionChanged="Coordinator_Changed" AutomationProperties.AutomationId="Rooms.Coordinator"><ComboBoxItem Content="官方中控"/><ComboBoxItem Content="自定义中控"/></ComboBox><TextBox x:Name="CustomUrl" Visibility="Collapsed" Margin="0,6,0,0" MaxLength="1024" TextChanged="CustomUrl_Changed" AutomationProperties.AutomationId="Rooms.CustomUrl" AutomationProperties.Name="自定义中控地址"/><TextBlock x:Name="SecurityHint" Style="{StaticResource Label}"/></StackPanel><StackPanel Grid.Row="1" Orientation="Horizontal"><Button Content="本机工具与节点设置 →" Style="{StaticResource Action}" Click="OpenTools_Click" AutomationProperties.AutomationId="Rooms.OpenTools"/><Button Content="创建选项 · 名称 / 密码" Style="{StaticResource Action}" IsEnabled="{Binding IsEnabled, ElementName=CreateForm}" Click="OpenCreate_Click" AutomationProperties.AutomationId="Rooms.CreateOptions"/></StackPanel></Grid>
       <Grid x:Name="RouteEditor" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><Button Content="1 · 基础" Style="{StaticResource Action}" Click="RouteBasic_Click" AutomationProperties.AutomationId="Rooms.RouteBasic"/><Button Content="2 · 模式参数" Style="{StaticResource Action}" Click="RouteAdvanced_Click" AutomationProperties.AutomationId="Rooms.RouteAdvanced"/><Button Content="3 · 本机工具" Style="{StaticResource Action}" Click="OpenTools_Click" AutomationProperties.AutomationId="Rooms.RouteTools"/></StackPanel>
        <Grid Grid.Row="1"><StackPanel x:Name="RouteBasic"><TextBlock Text="线路名称" Style="{StaticResource Label}"/><TextBox x:Name="RouteName" Text="游戏线路" MaxLength="48" AutomationProperties.AutomationId="Rooms.RouteName"/><TextBlock Text="连接模式" Style="{StaticResource Label}"/><ComboBox x:Name="RouteMode" SelectedIndex="0" SelectionChanged="Mode_Changed" AutomationProperties.AutomationId="Rooms.Mode"><ComboBoxItem Content="IPv6 直连"/><ComboBoxItem Content="FRP / TCP"/><ComboBoxItem Content="P2P / XTCP"/><ComboBoxItem Content="ZeroTier"/><ComboBoxItem Content="EasyTier"/></ComboBox><TextBlock Text="本地游戏 / LAN 端口（可手动覆盖）" Style="{StaticResource Label}"/><TextBox x:Name="LocalPort" Text="25565" MaxLength="5" TextChanged="LocalPort_Changed" AutomationProperties.AutomationId="Rooms.LocalPort"/><TextBlock x:Name="PortHint" Text="在游戏内开放局域网后，可重新打开此向导读取端口。" Style="{StaticResource Label}"/></StackPanel>
@@ -59,7 +268,7 @@
         </Grid>
        </Grid><StackPanel Grid.Row="2"><TextBlock x:Name="ModeHelp" Style="{StaticResource Label}"/><Button Content="启动本机传输并发布线路" Style="{StaticResource Gold}" Click="AddRoute_Click" AutomationProperties.AutomationId="Rooms.PublishRoute"/></StackPanel>
       </Grid>
-      <Grid x:Name="ToolsForm" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TabControl x:Name="ToolsPanel" AutomationProperties.AutomationId="Rooms.LocalTools"><TabItem Header="FRP / P2P"><TabControl><TabItem Header="程序与节点"><StackPanel><TextBlock Text="可信 frpc.exe 路径" Style="{StaticResource Label}"/><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="SelectFrpc_Click"/><TextBox x:Name="FrpcPath" MaxLength="1024" AutomationProperties.AutomationId="Rooms.FrpcPath"/></DockPanel><TextBlock Text="frps 控制主机（不同于公网游戏入口）" Style="{StaticResource Label}"/><TextBox x:Name="NodeHost" AutomationProperties.AutomationId="Rooms.NodeHost"/><TextBlock Text="frps 控制端口" Style="{StaticResource Label}"/><TextBox x:Name="NodePort" Text="7000" MaxLength="5" AutomationProperties.AutomationId="Rooms.NodePort"/></StackPanel></TabItem><TabItem Header="安全凭据"><StackPanel><TextBlock Text="frps Token（仅本次会话）" Style="{StaticResource Label}"/><PasswordBox x:Name="NodeToken" MaxLength="512" AutomationProperties.AutomationId="Rooms.NodeToken"/><TextBlock Text="节点 TLS CA 文件（可选）" Style="{StaticResource Label}"/><TextBox x:Name="NodeCa" MaxLength="1024" AutomationProperties.AutomationId="Rooms.NodeCa"/></StackPanel></TabItem></TabControl></TabItem><TabItem Header="EasyTier"><StackPanel><TextBlock Text="可信 easytier-core.exe 路径" Style="{StaticResource Label}"/><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="SelectEasyTier_Click"/><TextBox x:Name="EasyTierPath" MaxLength="1024" AutomationProperties.AutomationId="Rooms.EasyTierPath"/></DockPanel><TextBlock Text="只发现已知本机目录中的工具。启动前请确认来源可信；也可手动选择。" Style="{StaticResource Label}"/></StackPanel></TabItem><TabItem Header="ZeroTier"><StackPanel><TextBlock Text="本机 API Token（可选；仅本次会话）" Style="{StaticResource Label}"/><PasswordBox x:Name="ZeroTierToken" MaxLength="512" AutomationProperties.AutomationId="Rooms.ZeroTierToken"/><TextBlock Text="留空时读取 ProgramData 默认文件。读取地址不会静默加入网络。" Style="{StaticResource Label}"/></StackPanel></TabItem></TabControl><Button Grid.Row="1" Content="返回线路向导" Margin="0,10,0,0" Style="{StaticResource Action}" Click="ReturnToRoute_Click" AutomationProperties.AutomationId="Rooms.ReturnToRoute"/></Grid>
+      <Grid x:Name="ToolsForm" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TabControl x:Name="ToolsPanel" AutomationProperties.AutomationId="Rooms.LocalTools"><TabItem Header="FRP / P2P"><TabControl><TabItem Header="程序与节点"><StackPanel><TextBlock Text="可信 frpc.exe 路径" Style="{StaticResource Label}"/><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="SelectFrpc_Click"/><TextBox x:Name="FrpcPath" MaxLength="1024" AutomationProperties.AutomationId="Rooms.FrpcPath"/></DockPanel><TextBlock Text="frps 控制主机（不同于公网游戏入口）" Style="{StaticResource Label}"/><TextBox x:Name="NodeHost" AutomationProperties.AutomationId="Rooms.NodeHost"/><TextBlock Text="frps 控制端口" Style="{StaticResource Label}"/><TextBox x:Name="NodePort" Text="7000" MaxLength="5" AutomationProperties.AutomationId="Rooms.NodePort"/></StackPanel></TabItem><TabItem Header="安全凭据"><StackPanel><TextBlock Text="frps Token（仅本次会话）" Style="{StaticResource Label}"/><PasswordBox x:Name="NodeToken" MaxLength="512" AutomationProperties.AutomationId="Rooms.NodeToken"/><TextBlock Text="节点 TLS CA 文件（可选）" Style="{StaticResource Label}"/><TextBox x:Name="NodeCa" MaxLength="1024" AutomationProperties.AutomationId="Rooms.NodeCa"/></StackPanel></TabItem></TabControl></TabItem><TabItem Header="EasyTier"><StackPanel><TextBlock Text="可信 easytier-core.exe 路径" Style="{StaticResource Label}"/><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="SelectEasyTier_Click"/><TextBox x:Name="EasyTierPath" MaxLength="1024" AutomationProperties.AutomationId="Rooms.EasyTierPath"/></DockPanel><WrapPanel Margin="0,14,0,0"><Button Content="检测工具" Style="{StaticResource Action}" Click="CheckEasyTier_Click" AutomationProperties.AutomationId="Rooms.CheckEasyTier"/><Button Content="获取 EasyTier" Style="{StaticResource Action}" Click="GetEasyTier_Click" AutomationProperties.AutomationId="Rooms.GetEasyTier"/></WrapPanel><TextBlock x:Name="EasyTierToolStatus" Text="选择本机 EasyTier Core，或通过启动器已有的下载任务获取。" Style="{StaticResource Label}" AutomationProperties.AutomationId="Rooms.EasyTierToolStatus"/><TextBlock Text="推荐 2.6.4；检测不加入网络，下载需确认。发布/连接 EasyTier 线路时才启动工具。" Style="{StaticResource Label}"/></StackPanel></TabItem><TabItem Header="ZeroTier"><StackPanel><TextBlock Text="本机 API Token（可选；仅本次会话）" Style="{StaticResource Label}"/><PasswordBox x:Name="ZeroTierToken" MaxLength="512" AutomationProperties.AutomationId="Rooms.ZeroTierToken"/><TextBlock Text="留空时读取 ProgramData 默认文件。读取地址不会静默加入网络。" Style="{StaticResource Label}"/></StackPanel></TabItem></TabControl><Button Grid.Row="1" Content="返回线路向导" Margin="0,10,0,0" Style="{StaticResource Action}" Click="ReturnToRoute_Click" AutomationProperties.AutomationId="Rooms.ReturnToRoute"/></Grid>
      </Grid>
      <DockPanel Grid.Row="2" Margin="0,8,0,0"><Button Content="取消操作" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="Cancel_Click" Visibility="{Binding Visibility, ElementName=CancelButton}" AutomationProperties.AutomationId="Rooms.CancelOverlay"/><TextBlock x:Name="OverlayStatus" Foreground="#D9BC75" FontSize="11" MaxHeight="32" Text="{Binding Text, ElementName=Status}"/></DockPanel>
     </Grid>

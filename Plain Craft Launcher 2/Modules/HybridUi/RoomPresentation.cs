@@ -70,21 +70,59 @@ internal static class RoomPresentation
         if (face is null) return "";
         try
         {
-            var visual = new DrawingVisual();
-            RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.NearestNeighbor);
-            using (var drawing = visual.RenderOpen())
+            // Render directly at display resolution, preserving transparent pixels and pixel edges.
+            // The coordinator still caps decoded PNG bytes at 6144; retry at 32px if necessary.
+            foreach (var size in new[] { 64, 32 })
             {
-                drawing.DrawImage(face, new Rect(0, 0, 32, 32));
-                if (hat is not null) drawing.DrawImage(hat, new Rect(0, 0, 32, 32));
+                var pixels = AvatarPixels(face, size);
+                if (hat is not null)
+                {
+                    var overlay = AvatarPixels(hat, size);
+                    for (var i = 0; i < pixels.Length; i += 4)
+                    {
+                        var inverseAlpha = 255 - overlay[i + 3];
+                        for (var channel = 0; channel < 4; channel++)
+                            pixels[i + channel] = (byte)Math.Min(255, overlay[i + channel] + (pixels[i + channel] * inverseAlpha + 127) / 255);
+                    }
+                }
+                var bitmap = BitmapSource.Create(size, size, 96, 96, PixelFormats.Pbgra32, null, pixels, size * 4);
+                bitmap.Freeze();
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                using var stream = new MemoryStream(); encoder.Save(stream);
+                if (stream.Length <= 6144) return Convert.ToBase64String(stream.ToArray());
             }
-            var bitmap = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(visual); bitmap.Freeze();
-            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = new MemoryStream(); encoder.Save(stream);
-            if (stream.Length > 6144) return "";
-            return Convert.ToBase64String(stream.ToArray());
+            return "";
         }
         catch (Exception) { return ""; }
+    }
+
+    private static byte[] AvatarPixels(ImageSource source, int size)
+    {
+        BitmapSource bitmap;
+        if (source is BitmapSource native) bitmap = native;
+        else
+        {
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen()) drawing.DrawImage(source, new Rect(0, 0, size, size));
+            var rendered = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+            rendered.Render(visual); bitmap = rendered;
+        }
+        if (bitmap.PixelWidth is < 1 or > 1024 || bitmap.PixelHeight is < 1 or > 1024) throw new InvalidDataException("Avatar dimensions exceed local limits.");
+        if (bitmap.Format != PixelFormats.Pbgra32) bitmap = new FormatConvertedBitmap(bitmap, PixelFormats.Pbgra32, null, 0);
+        var sourcePixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+        bitmap.CopyPixels(sourcePixels, bitmap.PixelWidth * 4, 0);
+        var output = new byte[size * size * 4];
+        var scale = Math.Min((double)size / bitmap.PixelWidth, (double)size / bitmap.PixelHeight);
+        var width = Math.Max(1, (int)Math.Round(bitmap.PixelWidth * scale));
+        var height = Math.Max(1, (int)Math.Round(bitmap.PixelHeight * scale));
+        var left = (size - width) / 2; var top = (size - height) / 2;
+        for (var y = 0; y < height; y++) for (var x = 0; x < width; x++)
+        {
+            var sx = Math.Min(bitmap.PixelWidth - 1, x * bitmap.PixelWidth / width);
+            var sy = Math.Min(bitmap.PixelHeight - 1, y * bitmap.PixelHeight / height);
+            Buffer.BlockCopy(sourcePixels, (sy * bitmap.PixelWidth + sx) * 4, output, ((y + top) * size + x + left) * 4, 4);
+        }
+        return output;
     }
 }
 
@@ -125,7 +163,8 @@ internal sealed class RoomMemberPresentation(string id) : RoomObservable
     internal string Id { get; } = id;
     private RoomMember? _member;
     private bool _self;
-    public string Name => (_member?.Name ?? "") + (_member?.IsHost == true ? " · 房主" : "") + (_self ? " · 你" : "");
+    public string Name => _member?.Name ?? "";
+    public string Role => (_member?.IsHost == true ? "房主" : "成员") + (_self ? " · 你" : "");
     public string Initials => string.IsNullOrWhiteSpace(_member?.Name) ? "?" : System.Globalization.StringInfo.GetNextTextElement(_member.Name).ToUpperInvariant();
     public string Game => RoomPresentation.GameText(_member?.Game);
     public ImageSource? Avatar { get; private set; }
@@ -134,7 +173,7 @@ internal sealed class RoomMemberPresentation(string id) : RoomObservable
         if (_member == member && _self == self) return;
         if (_member?.Avatar != member.Avatar) { Avatar = cache.Decode(member.Avatar); Changed(nameof(Avatar)); }
         _member = member; _self = self;
-        Changed(nameof(Name)); Changed(nameof(Initials)); Changed(nameof(Game));
+        Changed(nameof(Name)); Changed(nameof(Role)); Changed(nameof(Initials)); Changed(nameof(Game));
     }
 }
 
