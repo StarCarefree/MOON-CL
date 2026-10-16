@@ -3,6 +3,8 @@
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    xmlns:local="clr-namespace:PCL">
     <local:MyPageRight.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="../../Modules/HybridUi/HybridTheme.xaml" /></ResourceDictionary.MergedDictionaries></ResourceDictionary></local:MyPageRight.Resources>
+    <Grid>
+    <!-- Keep the original homepage mounted underneath the optional native launch surface. -->
     <local:MyScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" x:Name="PanBack" Padding="0,0,14,0">
         <StackPanel Name="PanMain" Margin="32,28,28,24" Grid.IsSharedSizeScope="True" MaxWidth="1120" HorizontalAlignment="Stretch">
             <Grid Margin="0,0,0,22">
@@ -58,4 +60,6 @@
             </local:MyCard>
         </StackPanel>
     </local:MyScrollViewer>
+    <local:HybridLaunchScreen x:Name="LaunchScreen" HomeRequested="LaunchScreen_HomeRequested" CancelRequested="LaunchScreen_CancelRequested" />
+    </Grid>
 </local:MyPageRight>

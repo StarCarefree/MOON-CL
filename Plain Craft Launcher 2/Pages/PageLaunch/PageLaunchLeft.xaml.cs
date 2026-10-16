@@ -363,7 +363,9 @@ public partial class PageLaunchLeft
     }
 
     // 取消按钮
-    private void BtnCancel_Click(object sender, MouseButtonEventArgs e)
+    private void BtnCancel_Click(object sender, MouseButtonEventArgs e) => CancelLaunch();
+
+    internal void CancelLaunch()
     {
         var selected = ModInstanceList.McMcInstanceSelected;
         if (selected is not null && ModLaunch.IsInstanceLaunching(selected))
@@ -506,6 +508,8 @@ public partial class PageLaunchLeft
             }
 
             ModAnimation.AniStart(animList, "Launching Progress");
+            ModMain.frmLaunchRight?.LaunchScreen.UpdateLaunch(LabLaunchingTitle.Text,
+                LabLaunchingStage.Text, actualProgress, hasLaunchDownloader ? LabLaunchingDownload.Text : null);
         }
         catch (Exception ex)
         {
@@ -693,6 +697,11 @@ public partial class PageLaunchLeft
         PanLaunching.IsHitTestVisible = false;
         LoadLaunching.State.LoadingState = MyLoading.MyLoadingState.Run;
         PanLaunching.Visibility = Visibility.Visible;
+        var launchScreen = ModMain.frmLaunchRight?.LaunchScreen;
+        if (Config.Preference.ShowLaunchAnimation && ModLaunch.currentLaunchOptions?.SaveBatch is null)
+            launchScreen?.BeginLaunch(LabLaunchingName.Text);
+        else
+            launchScreen?.EndLaunch();
         ModAnimation.AniStart(
             new[]
             {
@@ -712,6 +721,7 @@ public partial class PageLaunchLeft
     /// </summary>
     public void PageChangeToLogin()
     {
+        ModMain.frmLaunchRight?.LaunchScreen.EndLaunch();
         if (PageGet(pageCurrent) is ILoginPage loginPage) loginPage.Reload();
         PanInput.IsHitTestVisible = false;
         PanLaunching.IsHitTestVisible = false;
