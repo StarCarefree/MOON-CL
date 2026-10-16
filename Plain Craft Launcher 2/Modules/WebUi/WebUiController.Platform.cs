@@ -60,11 +60,12 @@ internal sealed partial class WebUiController
             {
                 if (source is not ("curseforge" or "modrinth")) throw new ArgumentException("只翻译 CurseForge 与 Modrinth 条目。");
                 PlatformPackCatalog.ValidateId(source, id);
-                var address = $"https://mod.mcimirror.top/translate/{source}/{id}";
+                var address = $"https://mod.mcimirror.top/translate/{source}/{Uri.EscapeDataString(id)}";
                 var json = await Task.Run(() => ModDownload.DlModRequest(address), token).WaitAsync(token);
                 if (json.Length > 200_000) throw new InvalidDataException("翻译结果超过大小上限。");
                 var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidDataException("翻译结果不是 JSON 对象。");
                 var text = root["translated"]?.ToString()?.Trim() ?? "";
+                if (text.Length == 0) throw new InvalidDataException("翻译服务没有返回译文。");
                 if (text.Length > 8000) text = text[..8000];
                 Send(new JsonObject { ["type"] = "platformTranslation", ["text"] = text });
                 return;

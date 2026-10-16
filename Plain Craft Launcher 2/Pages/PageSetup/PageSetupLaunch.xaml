@@ -321,12 +321,14 @@
                 <StackPanel Margin="25,40,25,18">
                     <TextBlock x:Name="LabDownloadCache" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <TextBlock x:Name="LabQuarkDrive" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <StackPanel Orientation="Horizontal">
+                    <WrapPanel ItemHeight="35">
                         <local:MyButton MinWidth="120" Margin="0,0,12,0" Padding="13,0"
                                         Text="{DynamicResource Setup.Launch.DownloadCache.Open}" Click="BtnOpenDownloadCache_Click" />
+                        <local:MyButton MinWidth="120" Margin="0,0,12,0" Padding="13,0"
+                                        Text="{DynamicResource Setup.Launch.DownloadCache.Change}" Click="BtnChangeDownloadCache_Click" />
                         <local:MyButton MinWidth="120" ColorType="Red" Padding="13,0"
                                         Text="{DynamicResource Setup.Launch.DownloadCache.Clear}" Click="BtnClearDownloadCache_Click" />
-                    </StackPanel>
+                    </WrapPanel>
                 </StackPanel>
             </local:MyCard>
             <local:MyExtraTextButton HorizontalAlignment="Center" Margin="0,-5,0,15"

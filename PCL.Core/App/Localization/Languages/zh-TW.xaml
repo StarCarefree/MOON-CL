@@ -2740,8 +2740,11 @@
     <sys:String x:Key="Setup.Launch.DownloadCache.Quark">夸克轉存目錄：{0}。這是網盤裡的資料夾，一鍵清空不會刪除它。</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Unavailable">本機下載快取暫時不可用。</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Open">開啟資料夾</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.Change">切換目錄</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Clear">一鍵清空</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Confirm">只刪除本機整合包下載快取，不刪除夸克網盤 MOONCL 裡的檔案，也不刪除已安裝的遊戲。</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.ChangeTitle">選擇本機下載快取目錄</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.Changed">下載快取目錄已切換。舊目錄裡的檔案沒有移動，也沒有刪除。</sys:String>
 
     <!-- Setup.Launch.Advanced -->
 

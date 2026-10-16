@@ -2796,8 +2796,11 @@
     <sys:String x:Key="Setup.Launch.DownloadCache.Quark">夸克转存目录：{0}。这是网盘里的文件夹，一键清空不会删除它。</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Unavailable">本地下载缓存暂时不可用。</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Open">打开文件夹</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.Change">切换目录</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Clear">一键清空</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Confirm">只删除本机整合包下载缓存，不删除夸克网盘 MOONCL 里的文件，也不删除已安装的游戏。</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.ChangeTitle">选择本地下载缓存目录</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.Changed">下载缓存目录已切换。旧目录里的文件没有移动，也没有删除。</sys:String>
 
     <!-- Setup.Launch.Advanced -->
 

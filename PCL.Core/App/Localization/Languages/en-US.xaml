@@ -2796,8 +2796,11 @@
     <sys:String x:Key="Setup.Launch.DownloadCache.Quark">Quark save folder: {0}. This is on your cloud drive; clearing does not delete it.</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Unavailable">The local download cache is unavailable.</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Open">Open folder</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.Change">Change folder</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Clear">Clear cache</sys:String>
     <sys:String x:Key="Setup.Launch.DownloadCache.Confirm">This deletes only local modpack download cache. It does not delete files in the Quark MOONCL folder or installed games.</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.ChangeTitle">Choose the local download cache folder</sys:String>
+    <sys:String x:Key="Setup.Launch.DownloadCache.Changed">The download cache folder has changed. Files in the previous folder were not moved or deleted.</sys:String>
 
     <!-- Setup.Launch.Advanced -->
 

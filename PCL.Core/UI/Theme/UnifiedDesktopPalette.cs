@@ -23,7 +23,9 @@ internal static class UnifiedDesktopPalette
         Set(resources, "White", "#1B1D21");
         Set(resources, "ToolTip", "#24262A");
         Set(resources, "Transparent", "#00111315");
-        Set(resources, "RedBack", "#322322");
+        Set(resources, "RedBack", "#3A2424");
+        Set(resources, "RedLight", "#FF6B63");
+        Set(resources, "RedDark", "#F05448");
         Set(resources, "Memory", "#A3A8B0");
         Set(resources, "ControlBorder", "#3A3D42");
         Set(resources, "Shadow", "#000000");

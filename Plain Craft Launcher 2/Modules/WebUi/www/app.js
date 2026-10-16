@@ -243,7 +243,7 @@ Object.defineProperties(platform, {
   totalPages: { get: () => platformPosition().totalPages, set: value => { platformPosition().totalPages = value; } }
 });
  const categoryState = { items: new Map(), pending: new Map(), errors: new Map(), requests: new Map(), sequence: 0 };
- const translation = { page: false, text: new Map(), pending: new Map(), missing: new Set(), requests: new Map(), sequence: 0, autoDetail: "" };
+const translation = { page: false, text: new Map(), pending: new Map(), missing: new Set(), errors: new Map(), requests: new Map(), sequence: 0, autoDetail: "" };
 const RESOURCE_TYPES = { modpack: "整合包", datapack: "数据包", world: "地图", shader: "光影包", resourcepack: "材质包", plugin: "服务器插件", server: "服务器" };
 const MCLISTS = "https://www.mclists.cn/";
 const servers = { items: [], error: "", loading: false, selected: null };
@@ -1302,9 +1302,7 @@ function receivePlatform(data) {
     clearRequest(platform.detailPending, request.key);
     platform.detailErrors.set(request.key, message);
   } else if (request.kind === "translate") {
-    receiveTranslation({ requestId: data.requestId, text: "" });
-    platform.requests.delete(data.requestId);
-    render();
+    receiveTranslation({ requestId: data.requestId, text: "", failed: true, message });
     return;
   } else if (request.kind === "download") {
     if (platform.downloadLatest.get(request.key) !== data.requestId || (data.id != null && String(data.id) !== request.projectId)) return;
@@ -1321,7 +1319,7 @@ function requestTranslation(item) {
   const identity = projectIdOf(item);
   const key = translationKey(item);
   if (!identity || !key || state.link !== "live" || translation.pending.has(key) || translation.text.has(key)) return;
-  translation.missing.delete(key);
+  translation.missing.delete(key); translation.errors.delete(key);
   const requestId = `translate-${++translation.sequence}`;
   translation.requests.set(requestId, key);
   platform.requests.set(requestId, { kind: "translate", source: identity.source, projectId: identity.projectId, resourceType: resourceTypeOf(item), key });
@@ -1354,11 +1352,11 @@ function syncCardTranslate(node, item) {
     });
     node.append(button);
   }
-  const done = translation.text.has(key), busy = translation.pending.has(key);
+  const done = translation.text.has(key), busy = translation.pending.has(key), failed = translation.errors.get(key) || "";
   button.setAttribute("aria-pressed", String(done));
   button.setAttribute("aria-busy", String(busy));
   button.disabled = busy;
-  button.title = done ? "恢复原文" : busy ? "正在翻译" : "翻译这条简介";
+  button.title = done ? "恢复原文" : busy ? "正在翻译" : failed ? `翻译失败：${failed}` : "翻译这条简介";
 }
 function syncPageTranslate() {
   const button = ui["translate-page"];
@@ -1372,8 +1370,14 @@ function receiveTranslation(data) {
   translation.requests.delete(data.requestId);
   translation.pending.delete(key);
   const textValue = typeof data.text === "string" ? data.text.trim() : "";
-  if (textValue) translation.text.set(key, textValue); else translation.missing.add(key);
+  if (data.failed) translation.errors.set(key, String(data.message || "翻译失败"));
+  else if (textValue) { translation.text.set(key, textValue); translation.errors.delete(key); }
+  else { translation.missing.add(key); translation.errors.delete(key); }
   render();
+  if (textValue && ui["pack-detail"].open && translationKey(findDetailItem()) === key) {
+    ui["detail-introduction"].open = true;
+    ui["detail-introduction"].scrollIntoView({ block: "nearest" });
+  }
 }
 function pageableSources() {
   const sources = [];
@@ -1911,10 +1915,11 @@ function renderDetail() {
 
   renderIntroduction(shownDescription);
   ui["detail-translate"].hidden = !platformItem;
+  const translateFailed = translation.errors.get(translationKey(item)) || "";
   ui["detail-translate"].disabled = platformItem && translation.pending.has(translationKey(item)) && !translatedText(item);
   ui["detail-translate"].setAttribute("aria-pressed", String(!!translatedText(item)));
   ui["detail-translate"].setAttribute("aria-busy", String(platformItem && translation.pending.has(translationKey(item))));
-  ui["detail-translate"].title = translatedText(item) ? "恢复原文" : "翻译简介";
+  ui["detail-translate"].title = translatedText(item) ? "恢复原文" : translateFailed ? `翻译失败：${translateFailed}，再点重试` : "翻译简介";
   setImage(ui["detail-icon"], packArt(item, "icon"));
   setText("detail-mc", versionSummary(item) || "未提供");
   ui["detail-mc"].title = versionTitle(item);
@@ -2019,8 +2024,10 @@ ui["detail-translate"].addEventListener("click", () => {
   const item = findDetailItem();
   if (!isPlatform(item)) return;
   const key = translationKey(item);
+  ui["detail-introduction"].open = true;
   if (translation.text.has(key)) { translation.text.delete(key); render(); return; }
   requestTranslation(item); render();
+  ui["detail-introduction"].scrollIntoView({ block: "nearest" });
 });
 ui["reset-filters"].addEventListener("click", () => {
   ui.search.value = "";
@@ -2066,6 +2073,9 @@ ui["pack-detail"].addEventListener("close", () => {
   catalog.detailId = "";
   if (catalog.returnFocus?.isConnected) catalog.returnFocus.focus();
   else ui.search.focus();
+});
+ui["pack-detail"].addEventListener("click", event => {
+  if (event.target === ui["pack-detail"]) ui["pack-detail"].close();
 });
 ui["detail-retry"].addEventListener("click", () => {
   const item = findDetailItem();

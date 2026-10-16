@@ -739,27 +739,10 @@ internal sealed class LauncherLibrary : IDisposable
         return "夸克 CDN 拒绝了匿名直链（HTTP 412）。该文件超过访客通道大小限制，不能直接下载。";
     }
 
-    internal const string DownloadCacheName = "PCL-PackDownloads";
+    internal const string DownloadCacheName = PCL.Core.IO.PackDownloadCache.FolderName;
 
     internal static string PackDownloadRoot()
-    {
-        const long needed = 256L * 1024 * 1024;
-        var system = Path.GetTempPath();
-        if (HasRoom(system, needed)) return Path.Combine(system, DownloadCacheName);
-        foreach (var candidate in new[] { @"I:\tmp-pcl", @"D:\pcl-cy\tmp", @"G:\download" })
-        {
-            try
-            {
-                var root = Path.GetPathRoot(candidate);
-                if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
-                Directory.CreateDirectory(candidate);
-                if (HasRoom(candidate, needed)) return Path.Combine(candidate, DownloadCacheName);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        }
-        throw new IOException("临时盘空间不足，已停止下载，没有写入整合包。");
-    }
-
+        => PCL.Core.IO.PackDownloadCache.Resolve(Config.Launch.PackDownloadRoot, Path.GetTempPath());
 
     internal static string QuarkDriveFolder => "夸克网盘根目录 / MOONCL";
 
@@ -772,9 +755,8 @@ internal sealed class LauncherLibrary : IDisposable
         }
         var removed = 0;
         var blocked = 0;
-        foreach (var root in new[] { Path.GetTempPath(), @"I:\tmp-pcl", @"D:\pcl-cy\tmp", @"G:\download" })
+        foreach (var cache in PCL.Core.IO.PackDownloadCache.ClearTargets(Config.Launch.PackDownloadRoot, Path.GetTempPath()))
         {
-            var cache = Path.Combine(root, DownloadCacheName);
             if (!Directory.Exists(cache)) continue;
             try
             {
@@ -791,19 +773,6 @@ internal sealed class LauncherLibrary : IDisposable
             ? "部分下载缓存正在使用，已清空 " + removed + " 项。"
             : removed == 0 ? "下载缓存已经是空的。" : "已清空 " + removed + " 项下载缓存。";
         return blocked == 0;
-    }
-
-    private static bool HasRoom(string path, long bytes)
-    {
-        try
-        {
-            var root = Path.GetPathRoot(Path.GetFullPath(path));
-            return !string.IsNullOrEmpty(root) && new DriveInfo(root).AvailableFreeSpace >= bytes;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return false;
-        }
     }
 
     private async Task InstallAsync(PackDefinition pack, bool quark, CancellationToken token)

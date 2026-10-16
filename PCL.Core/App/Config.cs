@@ -560,6 +560,11 @@ public static partial class Config
         [ConfigItem<int>("LaunchAdvanceRenderer", 0 ,ConfigSource.Local)] public partial int Renderer { get; set; }
 
         /// <summary>
+        /// 整合包本机下载缓存目录。空字符串表示按临时盘和备用盘自动选择。
+        /// </summary>
+        [ConfigItem<string>("LaunchPackDownloadRoot", "", ConfigSource.Local)] public partial string PackDownloadRoot { get; set; }
+
+        /// <summary>
         /// 游戏窗口标题。
         /// </summary>
         [ConfigItem<string>("LaunchArgumentTitle", "", ConfigSource.Local)] public partial string Title { get; set; }

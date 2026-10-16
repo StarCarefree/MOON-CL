@@ -141,7 +141,7 @@ public static class PackCatalog
             string Url(string key) => Get(key) is { Length: > 0 } url ? HttpUri(url, source).AbsoluteUri : "";
             var id = RequireId(Get("id"), "预设");
             if (result.Any(p => p.Id == id)) throw new InvalidDataException("预设 ID 无效或重复。");
-            var fileName = ArchiveName(Get("fileName"));
+            var fileName = Get("fileName").Length == 0 ? "" : ArchiveName(Get("fileName"));
             var sha = Sha(Get("sha256"));
             var pack = new PackDefinition
             {
@@ -245,7 +245,7 @@ public static class PackCatalog
 
     private static string ArchiveName(string fileName)
     {
-        if (fileName.Length == 0) fileName = "pack.zip";
+        if (fileName.Length == 0) return "";
         if (Path.GetFileName(fileName) != fileName || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
             !(fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || fileName.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("下载文件名必须为 ZIP 或 MRPACK 文件名。");

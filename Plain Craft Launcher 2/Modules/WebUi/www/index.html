@@ -41,10 +41,17 @@
       <section class="discover-controls" aria-label="搜索与筛选">
         <div class="discover-heading">
           <div><p class="eyebrow">EXPLORE YOUR NEXT WORLD</p><h2>发现你的下一个世界</h2></div>
-          <form id="search-form" class="search" role="search">
-            <label for="search" class="visually-hidden">搜索</label>
-            <div class="search-entry"><input id="search" type="search" placeholder="名称、版本或描述" autocomplete="off" spellcheck="false" enterkeyhint="search" /><button type="submit" class="search-submit">搜索</button></div>
-          </form>
+          <div class="heading-tools">
+            <form id="search-form" class="search" role="search">
+              <label for="search" class="visually-hidden">搜索</label>
+              <div class="search-entry"><input id="search" type="search" placeholder="名称、作者、版本或关键词" autocomplete="off" spellcheck="false" enterkeyhint="search" /><button type="submit" class="search-submit">搜索</button></div>
+            </form>
+            <aside class="sponsor" aria-label="星运游戏">
+              <a id="sponsor-link" href="https://started.ink/">
+                <img src="starcarefree-banner.png" alt="星运游戏 StarCarefree Game：创建 Minecraft 联机服务器，我的世界联机推荐，12%+ 折扣，顷刻完成开服。超快售后、专业技术支持、无需任何基础。" />
+              </a>
+            </aside>
+          </div>
         </div>
         <div class="source-tabs resource-types" role="tablist" aria-label="资源类型">
           <button id="type-modpack" type="button" role="tab" aria-selected="true" aria-controls="cards">整合包</button>
@@ -76,11 +83,6 @@
           <button id="reset-filters" type="button" class="ghost">重置筛选</button>
         </form>
         <div class="filter-help"><small id="category-help" role="status"></small><button id="category-retry" type="button" hidden>重试分类</button></div>
-        <aside class="sponsor" aria-label="星运游戏">
-          <a id="sponsor-link" href="https://www.starcarefree.com/">
-            <img src="starcarefree-banner.png" alt="星运游戏 StarCarefree Game：创建 Minecraft 联机服务器，我的世界联机推荐，12%+ 折扣，顷刻完成开服。超快售后、专业技术支持、无需任何基础。" />
-          </a>
-        </aside>
       </section>
       <div class="section-head discovery-title"><h2 id="discovery-title">来源发现</h2><p id="discovery-note">根据当前来源与筛选展示</p><div class="discovery-nav"><button id="discovery-previous" type="button" disabled aria-label="上一个"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5 5 8l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span id="discovery-index"></span><button id="discovery-next" type="button" disabled aria-label="下一个"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 2.5 11 8l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
       <section class="stage" aria-labelledby="discovery-title">

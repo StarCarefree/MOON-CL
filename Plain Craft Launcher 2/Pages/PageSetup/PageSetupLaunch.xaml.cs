@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using PCL.Core.App;
 using PCL.Core.App.Configuration;
 using PCL.Core.Utils.OS;
+using PCL.Core.UI;
 using PCL.Core.App.Localization;
 
 namespace PCL;
@@ -222,6 +223,27 @@ public partial class PageSetupLaunch
             ModBase.OpenExplorer(path.TrimEnd('\\') + "\\");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            HintService.Hint(ex.Message, HintType.Error);
+        }
+    }
+
+    private void BtnChangeDownloadCache_Click(object sender, MouseButtonEventArgs e)
+    {
+        string? current = null;
+        try { current = LauncherLibrary.PackDownloadRoot(); }
+        catch (IOException) { }
+        var selected = SystemDialogs.SelectFolder(Lang.Text("Setup.Launch.DownloadCache.ChangeTitle"), current);
+        if (string.IsNullOrEmpty(selected)) return;
+        try
+        {
+            var cache = PCL.Core.IO.PackDownloadCache.NormalizeChosenFolder(selected);
+            Directory.CreateDirectory(cache);
+            Config.Launch.PackDownloadRoot = cache;
+            HintService.Hint(Lang.Text("Setup.Launch.DownloadCache.Changed"), HintType.Success);
+            RefreshDownloadCache();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             HintService.Hint(ex.Message, HintType.Error);
         }

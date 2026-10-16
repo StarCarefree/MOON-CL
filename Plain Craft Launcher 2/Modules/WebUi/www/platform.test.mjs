@@ -96,11 +96,21 @@ try{
  await page.locator('#detail-download').click(); const download=await last('download');
  assert.equal(download.id,'abcd1234'); assert.equal(download.source,'modrinth');
  await send({type:'platformError',source:'modrinth',operation:'download',id:download.id,requestId:download.requestId,message:'DEMO open failed'});
+ await page.locator('#detail-translate').click(); const translate=(await messages()).filter(m=>m.operation==='translate').at(-1);
+ assert.equal(translate.source,'modrinth'); assert.equal(translate.id,'abcd1234');
+ await send({type:'platformError',source:'modrinth',operation:'translate',requestId:translate.requestId,message:'DEMO translate failed'});
+ assert.match(await page.locator('#detail-translate').getAttribute('title'),/DEMO translate failed/);
+ await page.locator('#detail-translate').click(); assert.notEqual((await messages()).filter(m=>m.operation==='translate').at(-1).requestId, translate.requestId);
+ await send({type:'platformTranslation',source:'modrinth',requestId:(await messages()).filter(m=>m.operation==='translate').at(-1).requestId,text:'中文简介'});
+ assert.equal(await page.locator('#detail-description').textContent(),'中文简介');
+ assert.equal(await page.locator('#detail-introduction').evaluate(node => node.open), true);
  await page.locator('#download-retry').click(); const download2=await last('download');
  await send({type:'platformError',source:'modrinth',operation:'download',id:download.id,requestId:download.requestId,message:'DEMO stale download error'});
  assert.equal(await page.locator('#download-retry').isVisible(),false);
  assert.notEqual(download2.requestId,download.requestId);
- await page.keyboard.press('Escape');
+ await page.evaluate(() => { const wait = document.getElementById('version-wait'); if (wait.open) wait.close(); });
+ await page.locator('#pack-detail').click({position:{x:8,y:8}});
+ assert.equal(await page.locator('#pack-detail').evaluate(node=>node.open), false);
  console.log('PASS metadata, plain text, detail retry and source-specific native download messages');
 
  await page.locator('#include-mcmod').check(); const mcRequest=(await messages()).filter(m=>m.type==='mcmod'&&m.operation==='list').at(-1);

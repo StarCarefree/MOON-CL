@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Markup;
@@ -204,6 +205,8 @@ public partial class MyButton
             ModAnimation.AaColor(PanFore, BackgroundProperty,
                 _ColorType == ColorState.Red ? "ColorBrushRedBack" : "ColorBrush7", animationColorIn),
             "MyButton Background " + Uuid);
+        if (_ColorType == ColorState.Red)
+            LabText.SetResourceReference(TextBlock.ForegroundProperty, "ColorBrushRedLight");
     }
 
     private void Button_MouseUp()

@@ -53,8 +53,17 @@ public sealed class PackCatalogTest
         Assert.ThrowsExactly<InvalidDataException>(() => PackCatalog.HttpUri(url));
 
     [TestMethod]
-    public void DuplicateIdsAreRejected() => Assert.ThrowsExactly<InvalidDataException>(() =>
-        PackCatalog.Parse("""{"packs":[{"id":"sre","name":"a","version":"1"},{"id":"sre","name":"b","version":"2"}]}""", new Uri("https://example.com/catalog.json")));
+    public void DuplicateIdsAreRejected() =>
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PackCatalog.Parse("""{"packs":[{"id":"sre","name":"a","version":"1"},{"id":"sre","name":"b","version":"2"}]}""", new Uri("https://example.com/catalog.json")));
+
+    [TestMethod]
+    public void EmptyFileNameStaysEmptySoVersionsAreChosenLater()
+    {
+        var packs = PackCatalog.Parse("""{"packs":[{"id":"roguelike-bio","name":"肉鸽生化","version":"V1.0","fileName":"","shareUrl":"https://pan.quark.cn/s/538fbf1a2d2c?pwd=T6v2"}]}""", new Uri("https://example.com/index.json"));
+        Assert.AreEqual("", packs[0].FileName);
+        Assert.AreEqual("https://pan.quark.cn/s/538fbf1a2d2c?pwd=T6v2", packs[0].ShareUrl);
+    }
 
     [TestMethod]
     [DataRow("instance:removed", "starrail-harpy-express")]
