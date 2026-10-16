@@ -15,14 +15,15 @@ namespace PCL.Core.Minecraft.Launcher;
 public sealed record McmodLink(string Name, string Url);
 public sealed record McmodPack
 {
-    public string Id => "mcmod-" + WikiId;
+    public string Id => ResourceType == "datapack" ? "mcmod-datapack-" + WikiId : "mcmod-" + WikiId;
     public int WikiId { get; init; }
+    public string ResourceType { get; init; } = "modpack";
     public string Source => "mcmod";
     public string Name { get; init; } = "";
     public string EnglishName { get; init; } = "";
     public string Description { get; init; } = "";
     public string Icon { get; init; } = "";
-    public string Website => $"https://www.mcmod.cn/modpack/{WikiId}.html";
+    public string Website => $"https://www.mcmod.cn/{(ResourceType == "datapack" ? "class" : "modpack")}/{WikiId}.html";
     public string[] MinecraftVersions { get; init; } = [];
     public string[] Loaders { get; init; } = [];
     public string[] Authors { get; init; } = [];
@@ -44,30 +45,37 @@ public sealed class McmodCatalog(HttpClient http)
     private DateTimeOffset _nextRequestAt;
     private DateTimeOffset _cooldownUntil;
 
-    public async Task<McmodPage> GetPageAsync(int page, CancellationToken token = default, string minecraft = "", string loader = "", int category = 0)
+    public async Task<McmodPage> GetPageAsync(int page, CancellationToken token = default, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack")
     {
         if (page is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(page));
-        var path = ListPath(page, minecraft, loader, category);
-        return (McmodPage)await CachedAsync("page:" + path, path,
-            html => ParsePage(html, page), token).ConfigureAwait(false);
+        var path = ListPath(page, minecraft, loader, category, resourceType);
+        return (McmodPage)await CachedAsync("page:" + resourceType + ":" + path, path,
+            html => ParsePage(html, page, resourceType), token).ConfigureAwait(false);
     }
 
-    public static string ListPath(int page, string minecraft = "", string loader = "", int category = 0)
+    public static string ListPath(int page, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack")
     {
         if (page is < 1 or > 500 || category is < 0 or > 15) throw new ArgumentOutOfRangeException(nameof(page));
+        BrowseResourceTypes.RequireSupported("mcmod", resourceType);
         if (minecraft.Length > 0 && !Regex.IsMatch(minecraft, @"^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$"))
             throw new ArgumentException("无效的 Minecraft 版本筛选。");
+        if (resourceType == "datapack")
+        {
+            if (category != 0 || loader.Length > 0 && loader != "数据包") throw new ArgumentException("数据包不使用整合包的加载器或分类筛选。");
+            return $"modlist.html?api=5&page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "");
+        }
         var api = loader.ToLowerInvariant() switch { "" => 0, "forge" => 1, "fabric" => 2, "quilt" => 3, "neoforge" => 7, "liteloader" => 5, "rift" => 6, "数据包" => 4, "行为包" => 8, _ => -1 };
         if (api < 0) throw new ArgumentException("无效的加载器筛选。");
         return $"modpack.html?page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "") +
             (api > 0 ? "&api=" + api : "") + (category > 0 ? "&category=" + category : "");
     }
 
-    public async Task<McmodPack> GetDetailAsync(int id, CancellationToken token = default)
+    public async Task<McmodPack> GetDetailAsync(int id, CancellationToken token = default, string resourceType = "modpack")
     {
         if (id is < 1 or > 10000000) throw new ArgumentOutOfRangeException(nameof(id));
-        return (McmodPack)await CachedAsync("detail:" + id, $"modpack/{id}.html",
-            html => ParseDetail(html, id), token).ConfigureAwait(false);
+        BrowseResourceTypes.RequireSupported("mcmod", resourceType);
+        return (McmodPack)await CachedAsync("detail:" + resourceType + ":" + id, $"{(resourceType == "datapack" ? "class" : "modpack")}/{id}.html",
+            html => ParseDetail(html, id, resourceType), token).ConfigureAwait(false);
     }
 
     private async Task<object> CachedAsync(string key, string path, Func<string, object> parse, CancellationToken token)
@@ -113,21 +121,22 @@ public sealed class McmodCatalog(HttpClient http)
         finally { _gate.Release(); }
     }
 
-    public static McmodPage ParsePage(string html, int page = 1)
+    public static McmodPage ParsePage(string html, int page = 1, string resourceType = "modpack")
     {
+        BrowseResourceTypes.RequireSupported("mcmod", resourceType);
         var root = Document(html);
         var packs = new List<McmodPack>();
         foreach (var card in ByClass(root, "modlist-block"))
         {
             var nameNode = ByClass(card, "name").FirstOrDefault();
             var anchor = nameNode?.Descendants("a").FirstOrDefault();
-            var match = Regex.Match(anchor?.GetAttributeValue("href", "") ?? "", @"^/modpack/(\d+)\.html$", RegexOptions.CultureInvariant);
+            var match = Regex.Match(anchor?.GetAttributeValue("href", "") ?? "", resourceType == "datapack" ? @"^/class/(\d+)\.html$" : @"^/modpack/(\d+)\.html$", RegexOptions.CultureInvariant);
             if (!match.Success || !int.TryParse(match.Groups[1].Value, out var id)) continue;
             var name = Text(anchor);
             if (name.Length == 0 || packs.Any(p => p.WikiId == id)) continue;
             packs.Add(new McmodPack
             {
-                WikiId = id, Name = name, EnglishName = Text(ByClass(card, "ename").FirstOrDefault()),
+                WikiId = id, ResourceType = resourceType, Name = name, EnglishName = Text(ByClass(card, "ename").FirstOrDefault()),
                 Description = Text(ByClass(card, "intro-content").FirstOrDefault()),
                 Icon = HttpUrl(card.Descendants("img").FirstOrDefault()?.GetAttributeValue("src", "") ?? "")
             });
@@ -138,13 +147,16 @@ public sealed class McmodCatalog(HttpClient http)
         return new McmodPage(page, Math.Clamp(pages, page, 500), packs);
     }
 
-    public static McmodPack ParseDetail(string html, int id)
+    public static McmodPack ParseDetail(string html, int id, string resourceType = "modpack")
     {
+        BrowseResourceTypes.RequireSupported("mcmod", resourceType);
         var root = Document(html);
         var title = ByClass(root, "class-title").FirstOrDefault();
         var name = Text(title?.Descendants("h3").FirstOrDefault());
         if (name.Length == 0) throw new InvalidDataException("未识别到百科整合包详情，请稍后重试或查看原页面。");
         var info = ByClass(root, "class-info-left").FirstOrDefault();
+        if (resourceType == "datapack" && !(info?.Descendants("a").Any(n => Regex.IsMatch(n.GetAttributeValue("href", ""), @"^/modlist\.html\?[^#]*\bapi=5(?:&|$)")) ?? false))
+            throw new InvalidDataException("百科页面未标记为数据包，不能显示在数据包列表中。");
         var links = new List<McmodLink>();
         foreach (var frame in ByClass(info, "common-link-frame"))
         foreach (var a in frame.Descendants("a"))
@@ -156,6 +168,7 @@ public sealed class McmodCatalog(HttpClient http)
             links.Add(new McmodLink(label, url));
         }
         var versions = ByClass(info, "mcver").SelectMany(n => n.Descendants("a"))
+            .Where(n => resourceType != "datapack" || Regex.IsMatch(n.GetAttributeValue("href", ""), @"[?&]api=5(?:&|$)"))
             .Select(Text).Where(s => Regex.IsMatch(s, @"^\d+\.\d+(?:\.\d+)?(?:[-\w.]+)?$"));
         var loaders = info?.Descendants("a").Where(n => Regex.IsMatch(n.GetAttributeValue("href", ""), @"[?&]api=\d+"))
             .Select(Text).Where(s => !Regex.IsMatch(s, @"^\d")) ?? [];
@@ -164,20 +177,25 @@ public sealed class McmodCatalog(HttpClient http)
         var desc = ByClass(root, "text-area").FirstOrDefault(n => n.GetAttributeValue("data-id", "") == "1");
         return new McmodPack
         {
-            WikiId = id, Name = string.Join(" ", new[] { Text(ByClass(title, "short-name").FirstOrDefault()), name }.Where(s => s.Length > 0)),
+            WikiId = id, ResourceType = resourceType, Name = string.Join(" ", new[] { Text(ByClass(title, "short-name").FirstOrDefault()), name }.Where(s => s.Length > 0)),
             EnglishName = Text(title?.Descendants("h4").FirstOrDefault()),
             Description = PlainText(desc, 18000),
             Icon = HttpUrl(ByClass(root, "class-cover-image").FirstOrDefault()?.Descendants("img").FirstOrDefault()?.GetAttributeValue("src", "") ?? ""),
-            MinecraftVersions = Unique(versions), Loaders = Unique(loaders), Authors = Unique(authors),
+            MinecraftVersions = Unique(versions), Loaders = resourceType == "datapack" ? ["数据包"] : Unique(loaders), Authors = Unique(authors),
             Categories = Unique(ByClass(root, "class-category").SelectMany(n => n.Descendants("a")).Select(Text)),
-            CurseForgeUrl = links.Select(l => l.Url).FirstOrDefault(IsCurseForgeModpack) ?? "", Links = links.Take(32).ToArray()
+            CurseForgeUrl = links.Select(l => l.Url).FirstOrDefault(url => IsCurseForgeResource(url, resourceType)) ?? "", Links = links.Take(32).ToArray()
         };
     }
 
-    public static bool IsCurseForgeModpack(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-        uri.Scheme == "https" && string.IsNullOrEmpty(uri.UserInfo) && (uri.Host.Equals("www.curseforge.com", StringComparison.OrdinalIgnoreCase) ||
-        uri.Host.Equals("curseforge.com", StringComparison.OrdinalIgnoreCase)) &&
-        Regex.IsMatch(uri.AbsolutePath, @"^/minecraft/modpacks/[a-zA-Z0-9_-]+/?$");
+    public static bool IsCurseForgeModpack(string url) => IsCurseForgeResource(url, "modpack");
+    public static bool IsCurseForgeResource(string url, string resourceType = "modpack")
+    {
+        if (resourceType is not ("modpack" or "datapack")) return false;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !string.IsNullOrEmpty(uri.UserInfo) ||
+            !(uri.Host.Equals("www.curseforge.com", StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("curseforge.com", StringComparison.OrdinalIgnoreCase))) return false;
+        var path = resourceType == "datapack" ? @"^/minecraft/(?:data-packs|datapacks)/[a-zA-Z0-9_-]+/?$" : @"^/minecraft/modpacks/[a-zA-Z0-9_-]+/?$";
+        return Regex.IsMatch(uri.AbsolutePath, path);
+    }
 
     public static string DecodeLink(string value)
     {

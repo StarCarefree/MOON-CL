@@ -138,4 +138,43 @@ public sealed class McmodCatalogTest
         await Assert.ThrowsExactlyAsync<HttpRequestException>(() => client.GetPageAsync(2));
         Assert.AreEqual(1, count);
     }
+
+    [TestMethod]
+    public void DatapackUsesClassNamespaceAndFixedApiFive()
+    {
+        Assert.AreEqual("modlist.html?api=5&page=2&mcver=1.20.1", McmodCatalog.ListPath(2, "1.20.1", resourceType: "datapack"));
+        var html = """<div class="modlist-block"><p class="name"><a href="/class/1426.html">Data</a></p></div><ul class="common-pages"><a data-page="2">2</a></ul>""";
+        var pack = McmodCatalog.ParsePage(html, resourceType: "datapack").Items[0];
+        Assert.AreEqual("mcmod-datapack-1426", pack.Id); Assert.AreEqual("datapack", pack.ResourceType);
+        Assert.AreEqual("https://www.mcmod.cn/class/1426.html", pack.Website);
+        Assert.ThrowsExactly<ArgumentException>(() => McmodCatalog.ListPath(1, loader: "Forge", resourceType: "datapack"));
+        Assert.ThrowsExactly<NotSupportedException>(() => McmodCatalog.ListPath(1, resourceType: "shader"));
+    }
+
+    [TestMethod]
+    public void DatapackDetailRequiresMarkerAndUsesOnlyDataVersions()
+    {
+        var url = "https://www.curseforge.com/minecraft/data-packs/example";
+        var html = Detail(Link(url, "CurseForge")).Replace("/modpack.html?api=1", "/modlist.html?api=5")
+            .Replace("<li class=\"mcver\">", "<li class=\"mcver\"><a href=\"/modlist.html?api=1&mcver=1.21.1\">1.21.1</a>");
+        var pack = McmodCatalog.ParseDetail(html, 1426, "datapack");
+        CollectionAssert.AreEqual(new[] { "1.20.1" }, pack.MinecraftVersions);
+        CollectionAssert.AreEqual(new[] { "数据包" }, pack.Loaders);
+        Assert.AreEqual("Tonywww", pack.Authors[0]); Assert.AreEqual(url, pack.CurseForgeUrl);
+        Assert.ThrowsExactly<InvalidDataException>(() => McmodCatalog.ParseDetail(Detail(), 1426, "datapack"));
+        Assert.IsFalse(McmodCatalog.IsCurseForgeResource("https://www.curseforge.com/minecraft/modpacks/example", "datapack"));
+        Assert.IsFalse(McmodCatalog.IsCurseForgeResource("https://www.curseforge.com.evil.test/minecraft/data-packs/example", "datapack"));
+    }
+
+    [TestMethod]
+    public async Task SameWikiNumberDoesNotShareDetailCacheAcrossTypes()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler(r => { calls++; return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(r.RequestUri!.AbsolutePath.StartsWith("/class/") ? Detail().Replace("/modpack.html?api=1", "/modlist.html?api=5") : Detail()) }; }));
+        var client = new McmodCatalog(http);
+        var pack = await client.GetDetailAsync(1426);
+        var data = await client.GetDetailAsync(1426, resourceType: "datapack");
+        Assert.AreNotEqual(pack.Id, data.Id); Assert.AreEqual(2, calls);
+        await client.GetDetailAsync(1426, resourceType: "datapack"); Assert.AreEqual(2, calls);
+    }
 }

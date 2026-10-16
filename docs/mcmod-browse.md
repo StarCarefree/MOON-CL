@@ -1,5 +1,7 @@
 # 浏览页：MC 百科整合包
 
+MC百科现同时接入整合包和数据包；数据包使用独立 class 页面与缓存命名空间。五类资源及来源限制见 [resource-browse.md](resource-browse.md)。
+
 浏览页仍是 WPF 中的 WebView2 补充页面，原生侧栏、账号、启动、版本管理和现有 SRE 下载/更新逻辑不变。
 
 ## 使用

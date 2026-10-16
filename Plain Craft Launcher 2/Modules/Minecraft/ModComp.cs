@@ -1156,6 +1156,7 @@ public static class ModComp
                 Type = projectType switch
                 {
                     "modpack" => CompType.ModPack,
+                    "datapack" => CompType.DataPack,
                     "resourcepack" => CompType.ResourcePack,
                     "shader" => CompType.Shader,
                     _ => CompType.Mod // Modrinth 将数据包标为 Mod
@@ -2203,6 +2204,10 @@ public static class ModComp
         { "mc-mods", "6" },
         { "modpacks", "4471" },
         { "texture-packs", "12" },
+        { "resourcepacks", "12" },
+        { "worlds", "17" },
+        { "data-packs", "6945" },
+        { "datapacks", "6945" },
         { "shaders", "6552" }
     };
 

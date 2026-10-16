@@ -1,5 +1,7 @@
 # CurseForge / Modrinth 整合包浏览
 
+现已扩展为数据包、地图、整合包、光影包、材质包五类列表；类型映射、来源可用性和分类隔离说明见 [resource-browse.md](resource-browse.md)。以下整合包说明仍适用于整合包分类。
+
 ## 页面行为
 
 浏览页增加 CurseForge、Modrinth、MC百科来源切换。默认来源是 CurseForge，**不请求、不显示 MC 百科整合包**；切换 Modrinth 也默认不混入百科。MC百科可独立浏览，也可通过明确勾选“同时显示 MC百科”加入当前平台列表。SRE 和启动器预设不变，界面不额外显示置顶提示。
