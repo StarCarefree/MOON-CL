@@ -1,3 +1,4 @@
+import {onlyExplorer} from './test-explorers.mjs';
 // Isolated browser contract tests: DEMO platform data only; no downloads or remote network.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -23,7 +24,7 @@ const reply=(request,items,totalPages=4)=>send({type:'platformList',source:reque
 try{
  page=await setup(); await page.clock.install();
  assert.deepEqual(await messages(),[{type:'bootstrap'}]);
- assert.equal(await page.locator('#source-curseforge').getAttribute('aria-selected'),'true');
+ assert.equal(await page.locator('#source-curseforge').isChecked(),true);
  assert.equal(await page.locator('#include-mcmod').isChecked(),false);
  await send(state); let req=await last();
  assert.equal(req.source,'curseforge'); assert.equal(req.page,1); assert.equal(req.query,'');
@@ -34,13 +35,13 @@ try{
  await send(state); assert.equal((await messages()).filter(m=>m.type==='platform'&&m.operation==='list').length,1);
  console.log('PASS default CurseForge only; no MCmod requests; source labels and native SRE retained');
 
- await page.locator('#source-modrinth').click(); let mrReq=await last();
+ await onlyExplorer(page,'modrinth'); let mrReq=await last();
  assert.equal(mrReq.source,'modrinth'); assert.equal(await card(cf.id).count(),0);
  await reply({...mrReq,source:'curseforge'},[cf]); assert.equal(await card(cf.id).count(),0);
  await reply(mrReq,[mr]); assert.equal(await card(mr.id).count(),1);
  assert.equal(await page.locator('#include-mcmod').isChecked(),false);
- await page.locator('#source-curseforge').click(); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),0);
- await page.locator('#source-modrinth').click(); assert.equal(await card(mr.id).count(),1);
+ await onlyExplorer(page,'curseforge'); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),0);
+ await onlyExplorer(page,'modrinth'); assert.equal(await card(mr.id).count(),1);
  console.log('PASS platform switches/cache never mix CurseForge, Modrinth or MCmod');
 
  const beforeSearch=(await messages()).length;
@@ -51,14 +52,13 @@ try{
  await page.locator('#filter-mc').selectOption('1.20.1'); req=await last(); assert.equal(req.minecraft,'1.20.1');
  await page.locator('#filter-loader').selectOption('Fabric'); req=await last(); assert.equal(req.loader,'Fabric');
  await page.locator('#filter-sort').selectOption('updated'); req=await last(); assert.equal(req.sort,'updated');
- await reply(req,[mr],5); await page.locator('#platform-next-page').click(); const second=await last();
+ await reply(req,[mr],5); await page.locator('#modrinth-next-page').click(); const second=await last();
  assert.equal(second.page,2); assert.equal(second.query,'adventure'); assert.equal(second.loader,'Fabric'); assert.equal(second.sort,'updated');
  await reply(second,[item('modrinth','bbbb1234')]); await reply(req,[mr]);
  assert.equal(await card('modrinth-bbbb1234').count(),1); assert.equal(await card(mr.id).count(),0);
- await page.locator('#platform-retry').evaluate(node=>node.hidden=false);
  await page.evaluate(()=>requestPlatformPage(2,true)); const retry=await last();
  await send({type:'platformError',source:'modrinth',operation:'list',page:2,requestId:second.requestId,message:'DEMO stale error'});
- assert.notEqual(await page.locator('#platform-status').getAttribute('data-state'),'error');
+ assert.notEqual(await page.locator('#modrinth-status').getAttribute('data-state'),'error');
  await reply(retry,[mr],5);
  console.log('PASS remote debounced query, filters/sort, pagination and stale response/error isolation');
 
@@ -100,18 +100,18 @@ try{
  await page.locator('#include-mcmod').check(); const mcRequest=(await messages()).filter(m=>m.type==='mcmod'&&m.operation==='list').at(-1);
  assert.ok(mcRequest); await send({type:'mcmodList',page:mcRequest.page,totalPages:2,requestId:mcRequest.requestId,items:[{id:'mcmod-1426',wikiId:1426,source:'mcmod',name:'DEMO encyclopedia'}]});
  assert.equal(await card('mcmod-1426').count(),1); assert.equal(await card(mr.id).count(),1);
- await page.locator('#source-curseforge').click(); assert.equal(await page.locator('#include-mcmod').isChecked(),false);
+ await onlyExplorer(page,'curseforge'); assert.equal(await page.locator('#include-mcmod').isChecked(),false);
  assert.equal(await card('mcmod-1426').count(),0); assert.equal(await card(mr.id).count(),0);
- await page.locator('#source-mcmod').click(); assert.equal(await card('mcmod-1426').count(),1); assert.equal(await card(cf.id).count(),0);
+ await onlyExplorer(page,'mcmod'); assert.equal(await card('mcmod-1426').count(),1); assert.equal(await card(cf.id).count(),0);
  await page.locator('#search').fill('from encyclopedia'); const lastCount=(await messages()).filter(m=>m.type==='platform').length;
  await page.clock.fastForward(500); assert.equal((await messages()).filter(m=>m.type==='platform').length,lastCount);
- await page.locator('#source-modrinth').click(); req=await last(); assert.equal(req.source,'modrinth'); assert.equal(req.query,'from encyclopedia');
+ await onlyExplorer(page,'modrinth'); req=await last(); assert.equal(req.source,'modrinth'); assert.equal(req.query,'from encyclopedia');
  assert.equal(await page.locator('#include-mcmod').isChecked(),false);
  console.log('PASS encyclopedia opt-in mixing, independent browsing and switching back resets mixing');
 
  await reply(req,[],1); await page.evaluate(()=>requestPlatformPage(1,true)); req=await last();
- await page.clock.fastForward(60001); assert.match(await page.locator('#platform-message').textContent(),/超时/);
- await page.locator('#platform-retry').click(); req=await last(); await reply(req,[mr],1);
+ await page.clock.fastForward(60001); assert.match(await page.locator('#modrinth-message').textContent(),/超时/);
+ await page.locator('#modrinth-retry').click(); req=await last(); await reply(req,[mr],1);
  for(const width of [360,840,1280,1600]) {await page.setViewportSize({width,height:960}); assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true)}
  assert.deepEqual(errors,[]); await page.close();
  console.log('PASS timeout/retry, source tabs responsive layout and no page errors');

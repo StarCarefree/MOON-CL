@@ -1,3 +1,4 @@
+import {onlyExplorer} from './test-explorers.mjs';
 // Browser-only contract tests. All packs below are DEMO fixtures, never app data.
 // Run: node frontend.test.mjs (requires playwright; PLAYWRIGHT_MODULE may name an
 // external installation). BROWSER_CHANNEL defaults to installed Microsoft Edge.
@@ -27,7 +28,7 @@ async function setup(live = true, source = 'mcmod') {
   });
   await page.goto(url);
   // Legacy encyclopedia regressions explicitly select their source; default-platform behavior is tested separately.
-  if (source === 'mcmod') await page.locator('#source-mcmod').click();
+  if (source === 'mcmod') await onlyExplorer(page, 'mcmod');
   return page;
 }
 const send = async (page, message) => {
@@ -304,7 +305,8 @@ try {
   assert.equal((await messages(filtered)).at(-1).page, 1);
   await filtered.locator('#include-mcmod').uncheck();
   const hiddenCount = (await messages(filtered)).length;
-  await filtered.locator('#filter-category').selectOption('15');
+  assert.equal(await filtered.locator('#filter-category').isDisabled(), true);
+  await filtered.locator('#filter-category').evaluate(node => { node.value = '15'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await send(filtered, snapshot());
   assert.equal((await messages(filtered)).length, hiddenCount);
   await filtered.locator('#include-mcmod').check();

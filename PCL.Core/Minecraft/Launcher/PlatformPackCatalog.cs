@@ -17,6 +17,7 @@ public sealed record PlatformPack
     public string Id => Source + "-" + ProjectId;
     public string Source { get; init; } = "";
     public string ProjectId { get; init; } = "";
+    public string Slug { get; init; } = "";
     public string ResourceType { get; init; } = "modpack";
     public string Name { get; init; } = "";
     public string Description { get; init; } = "";
@@ -127,7 +128,7 @@ public static class PlatformPackCatalog
             .ThenByDescending(f => long.TryParse(Str(f, "id"), out var value) ? value : 0).FirstOrDefault();
         return new PlatformPack
         {
-            Source = source, ProjectId = id, ResourceType = resourceType, Name = PlainText(Str(item, cf ? "name" : "title"), 512),
+            Source = source, ProjectId = id, Slug = slug, ResourceType = resourceType, Name = PlainText(Str(item, cf ? "name" : "title"), 512),
             Description = PlainText(Str(item, cf ? "summary" : "body", Str(item, "description")), 18000),
             Icon = SafeUrl(cf ? item["logo"]?["thumbnailUrl"]?.ToString() ?? item["logo"]?["url"]?.ToString() ?? "" : Str(item, "icon_url")),
             Website = SafeUrl(website),

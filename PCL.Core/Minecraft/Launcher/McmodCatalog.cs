@@ -31,6 +31,7 @@ public sealed record McmodPack
     // MC support versions are not pack release versions. The encyclopedia does not always publish the latter.
     public string Version { get; init; } = "";
     public string CurseForgeUrl { get; init; } = "";
+    public string ModrinthUrl { get; init; } = "";
     public McmodLink[] Links { get; init; } = [];
 }
 public sealed record McmodPage(int Page, int TotalPages, IReadOnlyList<McmodPack> Items);
@@ -183,7 +184,8 @@ public sealed class McmodCatalog(HttpClient http)
             Icon = HttpUrl(ByClass(root, "class-cover-image").FirstOrDefault()?.Descendants("img").FirstOrDefault()?.GetAttributeValue("src", "") ?? ""),
             MinecraftVersions = Unique(versions), Loaders = resourceType == "datapack" ? ["数据包"] : Unique(loaders), Authors = Unique(authors),
             Categories = Unique(ByClass(root, "class-category").SelectMany(n => n.Descendants("a")).Select(Text)),
-            CurseForgeUrl = links.Select(l => l.Url).FirstOrDefault(url => IsCurseForgeResource(url, resourceType)) ?? "", Links = links.Take(32).ToArray()
+            CurseForgeUrl = links.Select(l => l.Url).FirstOrDefault(url => IsCurseForgeResource(url, resourceType)) ?? "",
+            ModrinthUrl = links.Select(l => l.Url).FirstOrDefault(url => IsModrinthResource(url, resourceType)) ?? "", Links = links.Take(32).ToArray()
         };
     }
 
@@ -193,8 +195,17 @@ public sealed class McmodCatalog(HttpClient http)
         if (resourceType is not ("modpack" or "datapack")) return false;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !string.IsNullOrEmpty(uri.UserInfo) ||
             !(uri.Host.Equals("www.curseforge.com", StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("curseforge.com", StringComparison.OrdinalIgnoreCase))) return false;
-        var path = resourceType == "datapack" ? @"^/minecraft/(?:data-packs|datapacks)/[a-zA-Z0-9_-]+/?$" : @"^/minecraft/modpacks/[a-zA-Z0-9_-]+/?$";
+        var path = resourceType == "datapack" ? @"^/minecraft/(?:data-packs|datapacks)/[a-zA-Z0-9_-]+(?:/.*)?$" : @"^/minecraft/modpacks/[a-zA-Z0-9_-]+(?:/.*)?$";
         return Regex.IsMatch(uri.AbsolutePath, path);
+    }
+
+    public static bool IsModrinthResource(string url, string resourceType = "modpack")
+    {
+        if (resourceType is not ("modpack" or "datapack")) return false;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !string.IsNullOrEmpty(uri.UserInfo) ||
+            !(uri.Host.Equals("modrinth.com", StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("www.modrinth.com", StringComparison.OrdinalIgnoreCase))) return false;
+        var prefix = resourceType == "datapack" ? "(?:datapack|mod)" : "modpack";
+        return Regex.IsMatch(uri.AbsolutePath, "^/(?:" + prefix + @"/[a-zA-Z0-9_-]+|project/[A-Za-z0-9]{8})(?:/.*)?$");
     }
 
     public static string DecodeLink(string value)

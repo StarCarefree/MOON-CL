@@ -28,6 +28,7 @@ internal sealed partial class WebUiController : IDisposable
     private string _runtimeVersion = "";
     private bool _bundledRuntime;
     private string _lastSnapshot = "";
+    private bool? _lastPresentation;
 
     public bool IsAttached => _view is not null;
     public bool IsPresented { get; private set; }
@@ -114,6 +115,8 @@ internal sealed partial class WebUiController : IDisposable
                 if (_disposed || generation != _generation || !e.IsSuccess) return;
                 _ready = true;
                 SendBootstrap(core);
+                _lastPresentation = null;
+                UpdatePresentation();
                 Refresh(force: true);
                 if (IsPresented && form.PanMsgBackground.Visibility != Visibility.Visible) view.Focus();
             };
@@ -148,7 +151,15 @@ internal sealed partial class WebUiController : IDisposable
     {
         if (_view is null || _form is null) return;
         // A WPF overlay cannot cover WebView2's child HWND. Hide the browser during native modal dialogs.
-        _view.Visibility = IsPresented && _form.PanMsgBackground.Visibility != Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+        var visible = IsPresented && _form.PanMsgBackground.Visibility != Visibility.Visible;
+        _view.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!_ready || _lastPresentation == visible || _view.CoreWebView2 is not { } core) return;
+        try
+        {
+            core.PostWebMessageAsJson(new JsonObject { ["type"] = "presentation", ["visible"] = visible }.ToJsonString());
+            _lastPresentation = visible;
+        }
+        catch (Exception ex) { ModBase.Log(ex, "同步浏览页可见状态失败", ModBase.LogLevel.Debug); }
     }
 
     private async void OnTick(object? sender, EventArgs e)

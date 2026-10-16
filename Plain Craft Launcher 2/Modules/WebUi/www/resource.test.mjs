@@ -1,3 +1,4 @@
+import {onlyExplorer} from './test-explorers.mjs';
 // Resource-kind contract regression. DEMO metadata only; external traffic/downloads are blocked.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -44,13 +45,13 @@ try {
  assert.equal(await page.locator('#detail-import').isVisible(),true); await page.keyboard.press('Escape');
  console.log('PASS five lists, type-scoped caches, stale/wrong-kind isolation, pack-only SRE/import and typed download');
 
- await page.locator('#source-modrinth').click(); await page.locator('#type-shader').click();
+ await onlyExplorer(page,'modrinth'); await page.locator('#type-shader').click();
  request=await last(); assert.equal(request.source,'modrinth'); assert.equal(request.resourceType,'shader');
  await listReply(request,[item('shader','modrinth','abcd1234')]); assert.equal(await card('modrinth-abcd1234').count(),1);
  let count=(await messages()).length; await page.locator('#type-world').click(); assert.equal((await messages()).length,count);
- assert.equal(await page.locator('#platform-status').getAttribute('data-state'),'unsupported');
- assert.equal(await card('modrinth-abcd1234').count(),0); assert.match(await page.locator('#platform-message').textContent(),/CurseForge/);
- await page.locator('#source-mcmod').click(); assert.equal((await messages()).length,count);
+ assert.equal(await page.locator('#modrinth-status').getAttribute('data-state'),'unsupported');
+ assert.equal(await card('modrinth-abcd1234').count(),0); assert.match(await page.locator('#modrinth-message').textContent(),/其他探索器/);
+ await onlyExplorer(page,'mcmod'); assert.equal((await messages()).length,count);
  assert.equal(await page.locator('#mcmod-status').getAttribute('data-state'),'unsupported');
  await page.locator('#type-shader').click(); assert.equal((await messages()).length,count);
  console.log('PASS Modrinth supported types and explicit unavailable map/MCmod states with no network request');

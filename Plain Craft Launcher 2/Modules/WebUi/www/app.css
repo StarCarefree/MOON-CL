@@ -568,3 +568,13 @@ select:focus-visible { outline: 2px solid #f3d7a2; outline-offset: 2px; }
   .pack-detail { padding: 16px; }
   .detail-meta { gap: 16px; }
 }
+
+.explorer-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.explorer-option { display: flex; align-items: center; gap: 9px; min-height: 46px; padding: 9px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); cursor: pointer; }
+.explorer-option:has(input:checked) { border-color: var(--gold); background: #30281b; }
+.explorer-option input { accent-color: var(--gold); width: 15px; height: 15px; margin: 0; }
+.explorer-option small { display: block; color: var(--muted); font-size: 11px; }
+.explorer-option:focus-within { outline: 2px solid #f3d7a2; outline-offset: 2px; }
+#mcl-status, #association-status { flex-wrap: wrap; }
+#mcl-status p, #association-status p { flex: 1 1 260px; }
+@media (max-width: 560px) { .explorer-option { flex: 1 1 135px; } }

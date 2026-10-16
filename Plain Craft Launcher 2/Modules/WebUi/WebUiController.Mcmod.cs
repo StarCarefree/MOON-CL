@@ -23,7 +23,7 @@ internal sealed partial class WebUiController
     private async Task HandleMcmodAsync(CoreWebView2 core, JsonObject message, FormMain form)
     {
         var operation = ReadString(message, "operation") ?? "";
-        if (operation is not ("list" or "detail" or "download")) return;
+        if (operation is not ("list" or "detail" or "download" or "links")) return;
         var page = message["page"] is JsonValue p && p.TryGetValue<int>(out var pageValue) ? pageValue : 1;
         var id = message["id"] is JsonValue i && i.TryGetValue<int>(out var idValue) ? idValue : 0;
         var minecraft = ReadString(message, "minecraft") ?? "";
@@ -51,23 +51,25 @@ internal sealed partial class WebUiController
                 return;
             }
             var detail = await _mcmodCatalog.GetDetailAsync(id, _mcmodLifetime.Token, resourceType);
-            if (operation == "detail")
+            if (operation is "detail" or "links")
             {
-                Send(new JsonObject { ["type"] = "mcmodDetail", ["item"] = JsonSerializer.SerializeToNode(detail, McmodJson) });
+                Send(new JsonObject { ["type"] = operation == "links" ? "mcmodLinks" : "mcmodDetail", ["id"] = id, ["item"] = JsonSerializer.SerializeToNode(detail, McmodJson) });
                 return;
             }
-            if (_openingMcmodDownload) throw new InvalidOperationException("正在获取 CurseForge 下载信息，请稍候。");
-            if (!McmodCatalog.IsCurseForgeResource(detail.CurseForgeUrl, resourceType))
-                throw new InvalidDataException("此资源没有对应类型的 CurseForge 项目，请使用作者链接手动下载。");
+            if (_openingMcmodDownload) throw new InvalidOperationException("正在获取关联项目的下载信息，请稍候。");
+            var fromCurseForge = McmodCatalog.IsCurseForgeResource(detail.CurseForgeUrl, resourceType);
+            var fromModrinth = McmodCatalog.IsModrinthResource(detail.ModrinthUrl, resourceType);
+            if (!fromCurseForge && !fromModrinth) throw new InvalidDataException("此资源没有对应类型的 CF / Modrinth 项目，请使用作者链接手动下载。");
             _openingMcmodDownload = true;
             try
             {
                 // Resolve only the server-parsed project, never a URL supplied by the browser message.
-                var projectId = await Task.Run(() => ModComp.ResolveLinkToProjectId(detail.CurseForgeUrl), _mcmodLifetime.Token);
-                if (string.IsNullOrEmpty(projectId)) throw new InvalidDataException("CurseForge 未返回对应整合包项目。可打开作者链接手动下载。");
-                var projects = await ModComp.CompRequest.GetCompProjectsByIdsAsync([projectId]);
-                var project = projects.FirstOrDefault(p => p.Type == ResourceCompType(resourceType) && p.FromCurseForge);
-                if (project is null) throw new InvalidDataException("CurseForge 项目类型不符或不可用，可打开作者链接手动下载。");
+                var url = fromCurseForge ? detail.CurseForgeUrl : detail.ModrinthUrl;
+                var projectId = await Task.Run(() => ModComp.ResolveLinkToProjectId(url), _mcmodLifetime.Token);
+                if (string.IsNullOrEmpty(projectId)) throw new InvalidDataException("关联平台未返回项目，可打开作者链接手动下载。");
+                var projects = await (fromCurseForge ? ModComp.CompRequest.GetListByIdsFromCurseforgeAsync([projectId]) : ModComp.CompRequest.GetListByIdsFromModrinthAsync([projectId]));
+                var project = projects.FirstOrDefault(p => p.Type == ResourceCompType(resourceType) && p.FromCurseForge == fromCurseForge);
+                if (project is null) throw new InvalidDataException("关联平台项目类型不符或不可用，可打开作者链接手动下载。");
                 if (!Current() || !IsPresented || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
                 // Native detail retrieves the actual version/file list and uses the existing download/install path.
                 Hide();

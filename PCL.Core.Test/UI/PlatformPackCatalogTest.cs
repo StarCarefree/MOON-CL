@@ -66,6 +66,7 @@ public sealed class PlatformPackCatalogTest
         var page = PlatformPackCatalog.ParsePage("modrinth", MrList(), 1);
         Assert.AreEqual(2, page.TotalPages); var pack = page.Items[0];
         Assert.AreEqual("modrinth-abcd1234", pack.Id); Assert.AreEqual("", pack.Version);
+        Assert.AreEqual("sample", pack.Slug);
         CollectionAssert.AreEqual(new[] { "Creator" }, pack.Authors);
         CollectionAssert.AreEqual(new[] { "Fabric" }, pack.Loaders);
         CollectionAssert.AreEqual(new[] { "adventure" }, pack.Categories);

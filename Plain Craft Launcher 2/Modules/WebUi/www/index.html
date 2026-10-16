@@ -112,13 +112,13 @@
           <button id="type-shader" type="button" role="tab" aria-selected="false" aria-controls="cards">光影包</button>
           <button id="type-resourcepack" type="button" role="tab" aria-selected="false" aria-controls="cards">材质包</button>
         </div>
-        <div class="source-tabs" role="tablist" aria-label="资源来源">
-          <button id="source-curseforge" type="button" role="tab" aria-selected="true" aria-controls="cards">CurseForge</button>
-          <button id="source-modrinth" type="button" role="tab" aria-selected="false" aria-controls="cards">Modrinth</button>
-          <button id="source-mcmod" type="button" role="tab" aria-selected="false" aria-controls="cards">MC百科</button>
+        <div class="explorer-picker" role="group" aria-label="探索器（可多选）">
+          <label class="explorer-option"><input id="source-mcl" type="checkbox" checked /> <span>MCL 整合包<small>远端 index.json</small></span></label>
+          <label class="explorer-option"><input id="source-curseforge" type="checkbox" checked /> <span>CurseForge</span></label>
+          <label class="explorer-option"><input id="source-modrinth" type="checkbox" /> <span>Modrinth</span></label>
+          <label id="source-mcmod" class="explorer-option"><input id="include-mcmod" type="checkbox" /> <span>MC百科</span></label>
         </div>
         <form id="filters" class="filters" aria-label="筛选资源">
-          <label class="source-toggle"><input id="include-mcmod" type="checkbox" /> 同时显示 MC百科</label>
           <label for="filter-mc">MC 版本<select id="filter-mc"><option value="">全部版本</option></select></label>
           <label for="filter-loader">加载器<select id="filter-loader"><option value="">全部加载器</option></select></label>
           <label id="filter-sort-label" for="filter-sort">排序<select id="filter-sort">
@@ -131,24 +131,28 @@
           <button id="reset-filters" type="button" class="ghost">重置筛选</button>
         </form>
         <div class="catalog-caption"><p id="catalog-caption-main">CurseForge 搜索、版本、加载器与排序由平台处理 · 每页 24 个</p><p id="catalog-caption-note">本地预设按搜索框即时筛选 · 未连接时不请求网络 · 分类仅用于 MC百科</p></div>
+        <div id="mcl-status" class="source-status" role="status"><p id="mcl-message">MCL 远端整合包目录</p><button id="mcl-refresh" type="button" disabled>刷新 MCL 目录</button><button id="mcl-config" type="button">目录配置</button></div>
         <div id="platform-status" class="source-status" role="status" aria-live="polite">
           <p id="platform-message">连接启动器后加载 CurseForge。</p>
           <button id="platform-retry" type="button" hidden>重试本页</button>
         </div>
+        <div id="modrinth-status" class="source-status" role="status" aria-live="polite" hidden><p id="modrinth-message"></p><button id="modrinth-retry" type="button" hidden>重试 Modrinth</button></div>
         <div id="mcmod-status" class="source-status" role="status" aria-live="polite" hidden>
           <p id="mcmod-message">连接启动器后加载 MC百科。</p>
           <button id="mcmod-retry" type="button" hidden>重试本页</button>
         </div>
+        <div id="association-status" class="source-status" role="status" hidden><p id="association-message"></p><button id="association-retry" type="button" hidden>重试关联核对</button></div>
         <div id="cards" class="cards" role="group" aria-label="资源条目"></div>
         <div id="empty" class="empty" hidden>
           <p id="empty-text">没有匹配的整合包</p>
           <button id="clear-search" type="button">清除搜索</button>
           <button id="empty-config" type="button" hidden>配置目录地址</button>
         </div>
-        <nav id="platform-pagination" class="pagination" aria-label="平台分页">
+        <nav id="platform-pagination" class="pagination" aria-label="CurseForge 分页">
           <p id="platform-page-label">CurseForge · 尚未加载</p>
           <div><button id="platform-previous-page" type="button" disabled>上一页</button><button id="platform-next-page" type="button" disabled>下一页</button></div>
         </nav>
+        <nav id="modrinth-pagination" class="pagination" aria-label="Modrinth 分页" hidden><p id="modrinth-page-label"></p><div><button id="modrinth-previous-page" type="button" disabled>上一页</button><button id="modrinth-next-page" type="button" disabled>下一页</button></div></nav>
         <nav id="pagination" class="pagination" aria-label="MC百科分页" hidden>
           <p id="page-label">MC百科 · 尚未加载</p>
           <div><button id="previous-page" type="button" disabled>上一页</button><button id="next-page" type="button" disabled>下一页</button></div>
@@ -208,7 +212,7 @@
         <button id="close-services" type="button" aria-label="关闭服务配置">×</button>
       </div>
       <p class="panel-description">地址只交给本地启动器保存和访问，此页不会直接请求网络，也不会读取或显示账号令牌。留空可清除已保存的地址。夸克地址留空时，启动器使用官方匿名解析。授权按钮会让启动器打开夸克官方授权页；令牌只保存在本机。</p>
-      <label class="field" for="catalog-url">整合包预设目录源 · index.json
+      <label class="field" for="catalog-url">MCL 远端目录源 · index.json
         <textarea id="catalog-url" rows="5" maxlength="16400" placeholder="https://primary.example/index.json&#10;https://backup.example/index.json" autocomplete="off" spellcheck="false" aria-describedby="catalog-help catalog-source-status"></textarea>
         <small id="catalog-help">每行一个，最多 8 个。第一行为主源，其余按顺序备用；读取失败自动尝试下一个。填写的是目录 JSON，不是 ZIP/MRPACK 下载地址。</small>
       </label>
@@ -226,6 +230,7 @@
       </div>
     </form>
   </dialog>
+  <script src="explorer-identity.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

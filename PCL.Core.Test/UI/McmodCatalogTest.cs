@@ -177,4 +177,17 @@ public sealed class McmodCatalogTest
         Assert.AreNotEqual(pack.Id, data.Id); Assert.AreEqual(2, calls);
         await client.GetDetailAsync(1426, resourceType: "datapack"); Assert.AreEqual(2, calls);
     }
+
+    [TestMethod]
+    public void ModrinthOnlyAssociationKeepsTypedDownloadReference()
+    {
+        var url = "https://modrinth.com/modpack/example/versions";
+        var pack = McmodCatalog.ParseDetail(Detail(Link(url, "Modrinth")), 1426);
+        Assert.AreEqual(url, pack.ModrinthUrl); Assert.AreEqual("", pack.CurseForgeUrl);
+        Assert.IsTrue(McmodCatalog.IsModrinthResource("https://modrinth.com/mod/example", "datapack"));
+        Assert.IsFalse(McmodCatalog.IsModrinthResource("https://modrinth.com/mod/example", "modpack"));
+        Assert.IsFalse(McmodCatalog.IsModrinthResource("https://modrinth.com.evil.test/modpack/example"));
+        Assert.IsFalse(McmodCatalog.IsModrinthResource("https://user:pass@modrinth.com/modpack/example"));
+        Assert.IsTrue(McmodCatalog.IsCurseForgeResource("https://www.curseforge.com/minecraft/modpacks/example/files/123"));
+    }
 }
