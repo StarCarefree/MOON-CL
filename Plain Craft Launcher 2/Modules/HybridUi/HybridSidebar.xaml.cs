@@ -72,6 +72,7 @@ public partial class HybridSidebar : UserControl
     public HybridSidebar()
     {
         InitializeComponent();
+        Versions.ItemContainerGenerator.StatusChanged += Versions_ContainerChanged;
         Loaded += (_, _) =>
         {
             foreach (var button in Nav.Children.OfType<Button>().Append(AccountButton).Append(VersionList))
@@ -199,6 +200,20 @@ public partial class HybridSidebar : UserControl
             Versions.Dispatcher.BeginInvoke(ScrollVersionsToTop, DispatcherPriority.Loaded);
     }
 
+    private void Versions_ContainerChanged(object? sender, EventArgs e)
+    {
+        if (Versions.ItemContainerGenerator.Status != System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated) return;
+        for (var i = 0; i < Versions.Items.Count; i++)
+            RestVersionText(Versions.ItemContainerGenerator.ContainerFromIndex(i) as ListBoxItem);
+    }
+
+    private static void RestVersionText(ListBoxItem? item)
+    {
+        if (item is null) return;
+        if (FindNamed(item, "VersionText") is not FrameworkElement text) return;
+        if (text.RenderTransform is TranslateTransform) text.RenderTransform = Transform.Identity;
+    }
+
     private void ScrollVersionsToTop()
     {
         if (Versions.Items.Count == 0) return;
@@ -267,6 +282,8 @@ public partial class HybridSidebar : UserControl
         if (string.IsNullOrEmpty(path)) return;
         Dispatcher.BeginInvoke(() =>
         {
+            foreach (var entry in Versions.Items)
+                RestVersionText(Versions.ItemContainerGenerator.ContainerFromItem(entry) as ListBoxItem);
             if (Versions.ItemContainerGenerator.ContainerFromItem(Versions.SelectedItem) is not ListBoxItem item) return;
             if (!string.Equals((item.DataContext as VersionEntry)?.Instance.PathInstance, path, StringComparison.OrdinalIgnoreCase)) return;
             if (FindNamed(item, "VersionText") is FrameworkElement text)

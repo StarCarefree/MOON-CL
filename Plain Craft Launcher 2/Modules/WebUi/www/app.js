@@ -760,6 +760,7 @@ function render() {
   setText("recommend-empty", !others.length ? (!live ? t.recommendOffline : query ? t.recommendSearch : t.recommendNone) : "");
   ui["recommend-empty"].hidden = others.length > 0;
   syncButtons(ui["recommend-list"], others, "rec", openDetail);
+   fitRecommend();
   syncButtons(ui.cards, visible, "card", openDetail);
   syncPageTranslate();
   if (translation.page) translateVisible();
@@ -2701,3 +2702,16 @@ ui["servers-refresh"]?.addEventListener("click", loadServers);
 ui["close-server-join"]?.addEventListener("click", () => ui["server-join"].close());
 ui["server-join-cancel"]?.addEventListener("click", () => ui["server-join"].close());
 loadServers();
+ function fitRecommend() {
+   const stage = document.querySelector(".stage");
+   const aside = stage?.querySelector(".recommend");
+   const banner = ui.banner;
+   if (!aside || !banner) return;
+   if (stage.hidden || getComputedStyle(stage).gridTemplateColumns.split(" ").length < 2) {
+     aside.style.maxHeight = "";
+     return;
+   }
+   aside.style.maxHeight = `${Math.ceil(banner.getBoundingClientRect().height)}px`;
+ }
+ window.addEventListener("resize", fitRecommend);
+ if (document.fonts?.ready) document.fonts.ready.then(fitRecommend);

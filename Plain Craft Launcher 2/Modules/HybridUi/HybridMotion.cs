@@ -95,20 +95,17 @@ internal static class HybridMotion
     }
 
     /// <summary>
-    /// Version change on the games page: text slides in without a hard cut to transparent,
-    /// and without EaseOutBack's opening reverse kick.
+    /// Version change: put the text back at rest and pulse opacity.
+    /// Do not add a translate. List recycling and a cancelled animation group leave that offset in place.
     /// </summary>
     public static void Crossfade(FrameworkElement element)
     {
         if (element is null || element.Visibility != Visibility.Visible) return;
-        var current = element.RenderTransform is TranslateTransform shift ? shift.X : 0;
-        if (current < 0 || current > 10) current = 0;
-        element.Opacity = Math.Max(element.Opacity, 0.42);
-        element.RenderTransform = new TranslateTransform(current, 0);
+        element.RenderTransform = Transform.Identity;
+        element.Opacity = Math.Max(element.Opacity, 0.55);
         ModAnimation.AniStart(new[]
         {
-            ModAnimation.AaOpacity(element, 1 - element.Opacity, 180),
-            ModAnimation.AaTranslateX(element, 8 - current, 220, 0, new ModAnimation.AniEaseOutFluent(ModAnimation.AniEasePower.Weak))
+            ModAnimation.AaOpacity(element, 1 - element.Opacity, 160)
         }, "Hybrid Crossfade " + element.GetHashCode());
     }
 
