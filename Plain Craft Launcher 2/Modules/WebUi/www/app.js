@@ -2436,6 +2436,12 @@ function serverCard(item) {
   card.append(body);
   return card;
 }
+function instanceMatches(entry, minecraft) {
+  if (!minecraft) return true;
+  const exact = String(entry.minecraft || "").trim();
+  if (exact) return exact.toLocaleLowerCase() === minecraft.toLocaleLowerCase();
+  return String(entry.version || "").toLocaleLowerCase().includes(minecraft.toLocaleLowerCase());
+}
 function openServerJoin(item) {
   servers.selected = item;
   setText("server-join-title", item.name);
@@ -2443,13 +2449,24 @@ function openServerJoin(item) {
   const box = ui["server-choices"];
   box.replaceChildren();
   const instances = Array.isArray(state.launcher?.instances) ? state.launcher.instances : [];
-  for (const instance of instances.filter(entry => !item.minecraft || String(entry.version || "").includes(item.minecraft))) {
+  const matching = instances.filter(entry => instanceMatches(entry, item.minecraft));
+  for (const instance of matching) {
     box.append(choiceButton(`使用已安装：${instance.name}`, () => joinServer(item, { instance: instance.name })));
   }
+  if (matching.length === 1) {
+    joinServer(item, { instance: matching[0].name });
+    return;
+  }
   if (item.vanilla && item.minecraft) box.append(choiceButton(`下载并进入原版 ${item.minecraft}`, () => joinServer(item, { choice: "vanilla" })));
-  const offers = [{ id: "fabulously-optimized", name: "Fabulously Optimized", minecraft: item.minecraft, loader: "Fabric" }, ...(item.packs || [])]
-    .filter(offer => !item.minecraft || !offer.minecraft || offer.minecraft === item.minecraft);
-  for (const offer of offers) box.append(choiceButton(`下载推荐整合包：${offer.name}${offer.minecraft ? " · " + offer.minecraft : ""}`, () => joinServer(item, { choice: `pack:${offer.id}` })));
+  const seen = new Set();
+  const offers = [...(item.packs || []), { id: "fabulously-optimized", name: "Fabulously Optimized", minecraft: item.minecraft, loader: "Fabric" }]
+    .filter(offer => {
+      const key = offer.id || offer.name;
+      if (!key || seen.has(key) || (item.minecraft && offer.minecraft && offer.minecraft !== item.minecraft)) return false;
+      seen.add(key);
+      return true;
+    });
+  for (const offer of offers) box.append(choiceButton(`下载推荐整合包：${offer.name}${offer.minecraft ? " · " + offer.minecraft : ""}`, () => joinServer(item, { choice: `pack:${offer.id}`, packName: offer.name, loader: offer.loader || "" })));
   if (!box.childElementCount) box.append(choiceButton("没有可直接进入的版本，打开来源", () => post({ type: "openExternal", url: item.website || MCLISTS })));
   if (!ui["server-join"].open) ui["server-join"].showModal();
 }

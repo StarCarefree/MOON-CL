@@ -203,6 +203,9 @@ internal sealed class RoomMemberPresentation(string id) : RoomObservable
     public string Role => (_member?.IsHost == true ? "房主" : "成员") + (_self ? " · 你" : "");
     public string Initials => string.IsNullOrWhiteSpace(_member?.Name) ? "?" : System.Globalization.StringInfo.GetNextTextElement(_member.Name).ToUpperInvariant();
     public string Game => RoomPresentation.GameText(_member?.Game);
+    public bool CanJoinServer => !_self && !string.IsNullOrWhiteSpace(_member?.Game?.Server) && !string.IsNullOrWhiteSpace(_member?.Game?.Version);
+    public string JoinServerLabel => CanJoinServer ? "进入 " + _member!.Game!.Server : "";
+    internal RoomGameStatus? JoinableGame => CanJoinServer ? _member?.Game : null;
     public ImageSource? Avatar { get; private set; }
     internal void Update(RoomMember member, bool self, RoomAvatarCache cache)
     {
@@ -210,6 +213,7 @@ internal sealed class RoomMemberPresentation(string id) : RoomObservable
         if (_member?.Avatar != member.Avatar) { Avatar = cache.Decode(member.Avatar); Changed(nameof(Avatar)); }
         _member = member; _self = self;
         Changed(nameof(Name)); Changed(nameof(Role)); Changed(nameof(Initials)); Changed(nameof(Game));
+        Changed(nameof(CanJoinServer)); Changed(nameof(JoinServerLabel));
     }
 }
 

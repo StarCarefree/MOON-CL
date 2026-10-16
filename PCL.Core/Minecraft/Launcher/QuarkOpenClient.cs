@@ -70,12 +70,15 @@ public sealed class QuarkOwnedDownload
     public QuarkDownload Download { get; }
     public QuarkOpenSession Session { get; }
     public bool SavedToDrive { get; }
+    /// <summary>Exact archive size from the selected share file; zero when not supplied.</summary>
+    public long ExpectedSize { get; }
 
-    public QuarkOwnedDownload(QuarkDownload download, QuarkOpenSession session, bool savedToDrive = true)
+    public QuarkOwnedDownload(QuarkDownload download, QuarkOpenSession session, bool savedToDrive = true, long expectedSize = 0)
     {
         Download = download;
         Session = session;
         SavedToDrive = savedToDrive;
+        ExpectedSize = expectedSize;
     }
 
     public override string ToString() => Download.FileName;
@@ -105,6 +108,7 @@ public sealed class QuarkOpenClient
     private const string SignKey = "cf134812e2de4032bd1cb7c3727e84b3";
     private const string FolderName = "MOONCL";
     private const int MaxJsonBytes = 1024 * 1024;
+    private const string BatchDownloadPath = "/open/v1/file/multi_get_download_url";
     private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
     private readonly HttpClient _http;
@@ -193,12 +197,12 @@ public sealed class QuarkOpenClient
             {
                 // Quark rejects copying your own share; its selected FID is already owned.
                 var original = await DownloadForAsync(file.Fid, file, token, savedToDrive: false).ConfigureAwait(false);
-                return new QuarkOwnedDownload(original, _session, savedToDrive: false);
+                return new QuarkOwnedDownload(original, _session, savedToDrive: false, expectedSize: file.Size);
             }
             var ownedFid = await OwnedFidAsync(saved, file, folder, token).ConfigureAwait(false);
             savedToDrive = true;
             var download = await DownloadForAsync(ownedFid, file, token).ConfigureAwait(false);
-            return new QuarkOwnedDownload(download, _session);
+            return new QuarkOwnedDownload(download, _session, expectedSize: file.Size);
         }
         catch (QuarkOpenException ex) when (savedToDrive && !ex.SavedToDrive)
         {
@@ -369,16 +373,32 @@ public sealed class QuarkOpenClient
 
     private async Task<QuarkDownload> DownloadForAsync(string fid, QuarkShareFile file, CancellationToken token, bool savedToDrive = true)
     {
-        using var document = await CallAsync(HttpMethod.Post, "/open/v1/file/get_download_url", _session,
-            new { fid }, token, null, true).ConfigureAwait(false);
-        var data = Data(document);
-        if (data.TryGetProperty("size", out var sizeNode) && sizeNode.TryGetInt64(out var size) && size != file.Size)
+        if (string.IsNullOrWhiteSpace(fid))
+            throw new QuarkOpenException("网盘文件身份无效，已停止下载。", savedToDrive);
+        using var document = await CallAsync(HttpMethod.Post, BatchDownloadPath, _session,
+            new { fids = new[] { fid } }, token, null, true).ConfigureAwait(false);
+        var results = Data(document);
+        if (results.ValueKind != JsonValueKind.Array || results.GetArrayLength() != 1
+            || results[0].ValueKind != JsonValueKind.Object)
+            throw new QuarkOpenException("夸克下载结果不唯一或无效，已停止下载。", savedToDrive);
+        var data = results[0];
+        if (IsDirectory(data) || !data.TryGetProperty("fid", out var fidNode) || fidNode.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(fidNode.GetString()))
+            throw new QuarkOpenException("网盘文件身份无效，已停止下载。", savedToDrive);
+        var returnedFid = fidNode.GetString()!;
+        // Opaque FIDs may be re-encoded on each response; the one-FID request and
+        // exact name/size checks bind that result. Compare only ordinary FIDs.
+        if (!IsOpaqueFid(fid) && !IsOpaqueFid(returnedFid) && !string.Equals(fid, returnedFid, StringComparison.Ordinal))
+            throw new QuarkOpenException("网盘文件身份与请求不一致，已停止下载。", savedToDrive);
+        if (!data.TryGetProperty("size", out var sizeNode) || sizeNode.ValueKind != JsonValueKind.Number
+            || !sizeNode.TryGetInt64(out var size) || size != file.Size)
             throw new QuarkOpenException("网盘文件大小与分享文件不一致，已停止下载。", savedToDrive);
-        var name = data.TryGetProperty("file_name", out var nameNode) ? nameNode.GetString() : file.FileName;
-        if (!string.Equals(name, file.FileName, StringComparison.Ordinal)) name = file.FileName;
-        var url = Text(data, "download_url");
-        var uri = PackCatalog.HttpUri(url);
-        if (!uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) || uri.Fragment.Length != 0)
+        if (!data.TryGetProperty("file_name", out var nameNode) || nameNode.ValueKind != JsonValueKind.String
+            || !string.Equals(nameNode.GetString(), file.FileName, StringComparison.Ordinal))
+            throw new QuarkOpenException("网盘文件名与分享文件不一致，已停止下载。", savedToDrive);
+        if (!data.TryGetProperty("download_url", out var urlNode) || urlNode.ValueKind != JsonValueKind.String
+            || !Uri.TryCreate(urlNode.GetString(), UriKind.Absolute, out var uri)
+            || !uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) || uri.Fragment.Length != 0 || uri.UserInfo.Length != 0)
             throw new QuarkOpenException("夸克下载地址无效。", savedToDrive);
         var session = _session ?? throw new QuarkOpenException("夸克授权已丢失。", savedToDrive);
         if (session.AccessToken.Length == 0 || session.AccessToken.IndexOfAny(";,\r\n ".ToCharArray()) >= 0)
@@ -389,7 +409,7 @@ public sealed class QuarkOpenClient
             ["Referer"] = "https://pan.quark.cn/",
             ["Cookie"] = "x_pan_client_id=" + ClientId + "; x_pan_access_token=" + session.AccessToken
         };
-        return new QuarkDownload(uri.AbsoluteUri, name!, headers);
+        return new QuarkDownload(uri.AbsoluteUri, file.FileName, headers);
     }
 
     private async Task<JsonDocument> CallAsync(HttpMethod method, string path, QuarkOpenSession? session, object? body,
@@ -405,7 +425,8 @@ public sealed class QuarkOpenClient
             if (session is not null)
             {
                 query.Add("access_token=" + Uri.EscapeDataString(session.AccessToken));
-                if (session.DeviceId.Length > 0) query.Add("device_id=" + Uri.EscapeDataString(session.DeviceId));
+                if (session.DeviceId.Length > 0 && path != BatchDownloadPath)
+                    query.Add("device_id=" + Uri.EscapeDataString(session.DeviceId));
             }
             if (extraQuery is not null)
                 foreach (var pair in extraQuery) query.Add(Uri.EscapeDataString(pair.Key) + "=" + Uri.EscapeDataString(pair.Value));
@@ -414,6 +435,7 @@ public sealed class QuarkOpenClient
             request.Headers.TryAddWithoutValidation("x-pan-tm", tm);
             request.Headers.TryAddWithoutValidation("x-pan-token", Sign(method.Method, path, tm));
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            if (session is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
             if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             if (response.Content.Headers.ContentLength > MaxJsonBytes) throw new QuarkOpenException("夸克开放平台响应无效。");

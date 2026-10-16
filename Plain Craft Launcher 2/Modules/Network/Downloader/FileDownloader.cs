@@ -13,6 +13,18 @@ public static class FileDownloader
 {
     private const int RequestTimeoutMilliseconds = 30_000;
     private const int MaxDownloadRetries = 3;
+    // Authenticated file headers must not reach a redirect target or a shared cookie jar.
+    private static readonly HttpClient PrivateDownloadClient = new(new HttpClientHandler
+    {
+        UseCookies = false, AllowAutoRedirect = false
+    }) { Timeout = Timeout.InfiniteTimeSpan };
+
+    private static bool HasPrivateHeaders(DownloadFile? file) => file?.RequestHeaders.Count > 0;
+    private static string DownloadSource(string url, DownloadFile? file) => HasPrivateHeaders(file) ? "[已授权下载地址]" : url;
+
+    private static Exception SafePrivateError(Exception error) => error is HttpRequestException http
+        ? new HttpRequestException("已授权文件下载请求失败（" + (int?)http.StatusCode + "）。", null, http.StatusCode)
+        : new IOException("已授权文件下载失败。请重试或重新获取下载地址。");
 
     public static async Task DownloadAsync(string url, string localPath, bool useBrowserUserAgent = false,
         string customUserAgent = "", CancellationToken cancellationToken = default,
@@ -70,9 +82,12 @@ public static class FileDownloader
                 }
                 catch (Exception ex)
                 {
-                    lastException = ex;
+                    lastException = HasPrivateHeaders(trackedFile) ? SafePrivateError(ex) : ex;
                     CleanupTempFiles(localPath);
-                    ModBase.Log(ex, $"[Download] 下载源失败：{url}", ModBase.LogLevel.Debug);
+                    ModBase.Log(lastException, $"[Download] 下载源失败：{DownloadSource(url, trackedFile)}", ModBase.LogLevel.Debug);
+                    if (HasPrivateHeaders(trackedFile) && ex is HttpRequestException { StatusCode: { } status }
+                        && (int)status is >= 300 and < 500)
+                        throw lastException;
                 }
             }
 
@@ -90,7 +105,7 @@ public static class FileDownloader
     private static async Task DownloadSingleAsync(string url, string localPath, bool useBrowserUserAgent,
         string customUserAgent, CancellationToken cancellationToken, bool enableParallelChunks, DownloadFile? trackedFile)
     {
-        ModBase.Log($"[Download] 开始下载：{url} -> {localPath}");
+        ModBase.Log($"[Download] 开始下载：{DownloadSource(url, trackedFile)} -> {localPath}");
         CleanupTempFiles(localPath);
 
         var checker = trackedFile?.Check;
@@ -100,7 +115,7 @@ public static class FileDownloader
             ? DownloadRequestKind.SmallOrBatch
             : DownloadRequestKind.LargeOrUnknown;
 
-        if (enableParallelChunks && await AdaptiveRangeDownloader.TryDownloadAsync(url, localPath,
+        if (!HasPrivateHeaders(trackedFile) && enableParallelChunks && await AdaptiveRangeDownloader.TryDownloadAsync(url, localPath,
                 useBrowserUserAgent, customUserAgent, cancellationToken, trackedFile,
                 expectedSize).ConfigureAwait(false))
         {
@@ -126,9 +141,16 @@ public static class FileDownloader
         using var connection = await DownloadResourceManager.AcquireConnectionAsync(url, cancellationToken)
             .ConfigureAwait(false);
         using var request = CreateDownloadRequest(url, useBrowserUserAgent, customUserAgent, requestKind);
-        using var response = await SendDownloadRequestAsync(url, request, cancellationToken).ConfigureAwait(false);
+        if (trackedFile is not null)
+            foreach (var header in trackedFile.RequestHeaders)
+            {
+                request.Headers.Remove(header.Key);
+                if (!request.Headers.TryAddWithoutValidation(header.Key, header.Value))
+                    throw new IOException("下载请求头不受支持。");
+            }
+        using var response = await SendDownloadRequestAsync(url, request, cancellationToken, HasPrivateHeaders(trackedFile)).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"下载请求失败：{(int)response.StatusCode} {response.ReasonPhrase}");
+            throw new HttpRequestException($"下载请求失败：{(int)response.StatusCode}", null, response.StatusCode);
 
         var responseContentLength = response.Content.Headers.ContentLength ?? -1;
         var checker = trackedFile?.Check;
@@ -252,13 +274,13 @@ public static class FileDownloader
     }
 
     internal static async Task<HttpResponseMessage> SendDownloadRequestAsync(string url,
-        HttpRequestMessage request, CancellationToken cancellationToken)
+        HttpRequestMessage request, CancellationToken cancellationToken, bool privateHeaders = false)
     {
         using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         requestTimeout.CancelAfter(RequestTimeoutMilliseconds);
         try
         {
-            return await GetHttpClient(url)
+            return await (privateHeaders ? PrivateDownloadClient : GetHttpClient(url))
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestTimeout.Token)
                 .ConfigureAwait(false);
         }

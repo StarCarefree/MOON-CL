@@ -24,7 +24,7 @@ public static class RoomSetupAutomation
     public static string GenerateNetworkSecret() => Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
     public static string SuggestRouteName(string mode, int number) => (mode switch
     {
-        "ipv6" => "IPv6 直连", "frp" => "FRP 中继", "p2p" => "P2P 直连", "zerotier" => "ZeroTier 组网", "easytier" => "EasyTier 组网", _ => "游戏线路"
+        "ipv6" => "IPv6 直连", "ip" => "自定义 IP", "frp" => "FRP 中继", "p2p" => "P2P 直连", "zerotier" => "ZeroTier 组网", "easytier" => "EasyTier 组网", _ => "游戏线路"
     }) + " · " + Math.Clamp(number, 1, 12);
 
     public static string? FindExecutable(string fileName, IEnumerable<string> directories)

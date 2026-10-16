@@ -95,8 +95,11 @@ class RoomStoreTest {
             status(400, () -> new RoomConnection("ipv6", address, 25565, null, null, null, null).validated());
         }
         new RoomConnection("ipv6", "2606:4700:4700::1111", 25565, null, null, null, null).validated();
-        new RoomConnection("frp", "game.example.com", 1, null, null, null, null).validated();
+        new RoomConnection("ip", "192.0.2.10", 25566, null, null, null, null).validated();
+        new RoomConnection("ip", "play.example.com", 1, null, null, null, null).validated();
+        status(400, () -> new RoomConnection("ip", "https://example.com", 25565, null, null, null, null).validated());
         new RoomConnection("frp", "192.0.2.1", 65535, null, null, null, null).validated();
+        new RoomConnection("frp", "game.example.com", 1, null, null, null, null).validated();
         new RoomConnection("p2p", null, null, "frps.example.com", 7000, "moon-room", "visitor-secret").validated();
         for (String address : new String[]{"https://example.com", "a/b", "a:25565", "999.1.1.1", "-bad.example", "a".repeat(254)})
             status(400, () -> new RoomConnection("frp", address, 25565, null, null, null, null).validated());

@@ -12,6 +12,9 @@ public class LoaderDownload : ModLoader.LoaderBase
     private readonly object _fileRemainLock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     public int FailCount { get; set; }
+    private TaskCompletionSource? _completion;
+    /// <summary>Completes after file IO has stopped, including cancellation cleanup.</summary>
+    public Task Completion => _completion?.Task ?? Task.CompletedTask;
 
     public override double Progress
     {
@@ -47,7 +50,13 @@ public class LoaderDownload : ModLoader.LoaderBase
 
         ModNet.NetManager.Start(this);
 
-        ModBase.RunInNewThread(() => Run(_cancellationTokenSource.Token), $"DL/{Uuid}");
+        var source = _cancellationTokenSource;
+        var completion = _completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        ModBase.RunInNewThread(() =>
+        {
+            try { Run(source.Token); }
+            finally { completion.TrySetResult(); }
+        }, $"DL/{Uuid}");
     }
 
     private void Run(CancellationToken cancellationToken)

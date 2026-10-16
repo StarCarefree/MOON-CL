@@ -39,7 +39,7 @@ public partial class HybridRooms : UserControl, IDisposable
     private readonly string _settingsPath;
     private string SettingsPath => _settingsPath;
     private bool IsOfficial => Coordinator.SelectedIndex != 1;
-    private string Mode => RouteMode.SelectedIndex switch { 1 => "frp", 2 => "p2p", 3 => "zerotier", 4 => "easytier", _ => "ipv6" };
+    private string Mode => RouteMode.SelectedIndex switch { 1 => "ip", 2 => "frp", 3 => "p2p", 4 => "zerotier", 5 => "easytier", _ => "ipv6" };
     internal bool IsInRoom => _inRoom;
     internal int OwnedLeaseCount => _leases.Count;
     internal RoomPresence LocalPresence => _presence;
@@ -189,10 +189,11 @@ public partial class HybridRooms : UserControl, IDisposable
     }
     private void RenderMode()
     {
-        Ipv6Fields.Visibility = Show(Mode == "ipv6"); FrpFields.Visibility = Show(Mode == "frp");
+        Ipv6Fields.Visibility = Show(Mode == "ipv6"); IpFields.Visibility = Show(Mode == "ip"); FrpFields.Visibility = Show(Mode == "frp");
         ZtFields.Visibility = Show(Mode == "zerotier"); EtFields.Visibility = Show(Mode == "easytier");
         ModeHelp.Text = Mode switch
         {
+            "ip" => "填写房主游戏地址，支持 IPv4、IPv6 或域名；访客按此地址直连，不会启动中继。",
             "frp" => "公网游戏端口与 frps 控制端口不同；请在本机工具设置填写该节点凭据。",
             "p2p" => "从本机工具设置读取 frps 节点；使用 XTCP 打洞，不保证成功，可同时发布其他线路。",
             "zerotier" => "需要本机 ZeroTier 服务；请自行在网络控制台授权成员。已有用户网络不会被退出。",
@@ -322,6 +323,7 @@ public partial class HybridRooms : UserControl, IDisposable
         "zerotier" => new RoomConnection("zerotier", ZtAddress.Text.Trim(), local, NetworkId: NetworkId.Text.Trim()),
         "easytier" => new RoomConnection("easytier", EtAddress.Text.Trim(), local, SecretKey: NetworkSecret.Password,
             NetworkName: NetworkName.Text.Trim(), Peers: Peers.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
+        "ip" => new RoomConnection("ip", CustomHost.Text.Trim(), ParsePort(CustomPort.Text)),
         _ => new RoomConnection("ipv6", Ipv6Address.Text.Trim(), local)
     };
     private async void AddRoute_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
@@ -620,18 +622,30 @@ public partial class HybridRooms : UserControl, IDisposable
     private void JoinHost_Click(object sender, RoutedEventArgs e)
     {
         var game = _session?.Room?.Members.FirstOrDefault(member => member.IsHost)?.Game;
-        if (_session?.IsHost == true || game is null || string.IsNullOrWhiteSpace(game.Server) || string.IsNullOrWhiteSpace(game.Version)) return;
+        if (_session?.IsHost == true || game is null) return;
+        JoinServer(game, "房主");
+    }
+    private void JoinMemberServer_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not RoomMemberPresentation member) return;
+        var game = member.JoinableGame;
+        if (game is null) return;
+        JoinServer(game, member.Name);
+    }
+    private void JoinServer(RoomGameStatus game, string who)
+    {
+        if (string.IsNullOrWhiteSpace(game.Server) || string.IsNullOrWhiteSpace(game.Version)) return;
         game.Validate();
         var choices = RoomPresentation.SameVersion(game.Version);
         if (choices.Count == 0) { Status.Text = "本机没有 " + game.Version + " 的游戏版本。请先安装同版本的 Fabric、Forge 或其他客户端。"; return; }
         var dialog = new Window
         {
-            Title = "加入房主服务器", Width = 460, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = "进入 " + who + " 所在服务器", Width = 460, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize, Background = new SolidColorBrush(Color.FromRgb(23, 25, 27))
         };
         var list = new ListBox { Margin = new Thickness(16, 44, 16, 56), Background = new SolidColorBrush(Color.FromRgb(32, 34, 36)), Foreground = Brushes.WhiteSmoke };
         foreach (var instance in choices) list.Items.Add(instance.Name + " · " + RoomPresentation.LoaderText(instance));
-        var hint = new TextBlock { Text = "房主正在 " + game.Server + "。选择你的 " + game.Version + " 客户端后启动并连接。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)), TextWrapping = TextWrapping.Wrap };
+        var hint = new TextBlock { Text = who + " 正在 " + game.Server + "。选择你的 " + game.Version + " 客户端后启动并连接。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)), TextWrapping = TextWrapping.Wrap };
         var confirm = new Button { Content = "启动并连接", Width = 110, Height = 30, Margin = new Thickness(0, 0, 112, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
         var cancel = new Button { Content = "取消", Width = 88, Height = 30, Margin = new Thickness(0, 0, 16, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsCancel = true };
         confirm.Click += (_, _) => { if (list.SelectedIndex >= 0) dialog.DialogResult = true; };

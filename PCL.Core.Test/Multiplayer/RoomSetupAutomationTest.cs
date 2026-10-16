@@ -69,6 +69,7 @@ public sealed class RoomSetupAutomationTest
         Assert.AreEqual(20, secrets.Distinct().Count()); Assert.IsTrue(secrets.All(s => s.Length == 48 && s.All(char.IsAsciiHexDigit)));
         new RoomConnection("easytier", "10.144.14.1", 25565, SecretKey: secrets[0], NetworkName: name, Peers: ["tcp://localhost:11010"]).Validate();
         Assert.AreEqual("IPv6 直连 · 1", RoomSetupAutomation.SuggestRouteName("ipv6", 1));
+        Assert.AreEqual("自定义 IP · 2", RoomSetupAutomation.SuggestRouteName("ip", 2));
         Assert.AreEqual("EasyTier 组网 · 12", RoomSetupAutomation.SuggestRouteName("easytier", 99));
     }
     [TestMethod]

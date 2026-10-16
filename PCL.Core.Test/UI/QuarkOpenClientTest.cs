@@ -52,6 +52,220 @@ public sealed class QuarkOpenClientTest
         Assert.IsFalse(text.Contains("secret-page", StringComparison.Ordinal));
     }
 
+    private const string BatchPath = "/open/v1/file/multi_get_download_url";
+    private const long LargeSize = 235_008_058;
+
+    private static Dictionary<string, object?> BatchItem(string fid = "owned-fid") => new()
+    {
+        ["fid"] = fid, ["file_name"] = "pack.mrpack", ["size"] = LargeSize, ["download_url"] = Signed
+    };
+
+    private static Handler BatchHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> download,
+        string fid = "owned-fid", bool owner = false) => new(async (request, ct) =>
+    {
+        if (request.RequestUri!.Host == "drive-pc.quark.cn")
+            return request.RequestUri.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
+                ? Json(new { code = 0, data = new { stoken = Stoken } })
+                : Json(new { data = new { list = new[] { new { file_name = "pack.mrpack", fid = owner ? fid : "share-fid", dir = false, size = LargeSize, share_fid_token = "file-token" } } } });
+        switch (request.RequestUri.AbsolutePath)
+        {
+            case "/open/v1/dir":
+                return Json(new { status = 0, data = new { fid = "folder-fid" } });
+            case "/open/v1/share/saveas":
+                if (owner)
+                {
+                    var response = Json(new { status = -1, errno = 41017 });
+                    response.StatusCode = HttpStatusCode.BadRequest;
+                    return response;
+                }
+                return Json(new { status = 0, data = new { status = 2, fid } });
+            default:
+                return await download(request, ct);
+        }
+    });
+
+    private static async Task AssertBatchRequest(HttpRequestMessage request, CancellationToken ct, string fid, string access = Access)
+    {
+        Assert.AreEqual(BatchPath, request.RequestUri!.AbsolutePath);
+        Assert.AreEqual(HttpMethod.Post, request.Method);
+        Assert.AreEqual("Bearer", request.Headers.Authorization?.Scheme);
+        Assert.AreEqual(access, request.Headers.Authorization?.Parameter);
+        Assert.IsFalse(request.Headers.Contains("Cookie"));
+        var query = request.RequestUri.Query.TrimStart('?').Split('&');
+        Assert.AreEqual(2, query.Length);
+        Assert.IsTrue(query.Any(part => part.StartsWith("req_id=", StringComparison.Ordinal)));
+        Assert.IsTrue(query.Contains("access_token=" + access));
+        var tm = request.Headers.GetValues("x-pan-tm").Single();
+        Assert.AreEqual(QuarkOpenClient.Sign("POST", BatchPath, tm), request.Headers.GetValues("x-pan-token").Single());
+        Assert.AreEqual(QuarkOpenClient.ClientId, request.Headers.GetValues("x-pan-client-id").Single());
+        using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+        Assert.AreEqual(1, body.RootElement.EnumerateObject().Count());
+        Assert.AreEqual(1, body.RootElement.GetProperty("fids").GetArrayLength());
+        Assert.AreEqual(fid, body.RootElement.GetProperty("fids")[0].GetString());
+    }
+
+    [TestMethod]
+    [DataRow("owned-fid", "owned-fid", false)]
+    [DataRow("~request|tag", "~response|tag", false)]
+    [DataRow("~request|tag", "raw-fid", false)]
+    [DataRow("raw-fid", "~response|tag", false)]
+    [DataRow("~share|tag", "~owner-response|tag", true)]
+    public async Task BatchDownloadsLargeFileWithSessionAndOpaqueFids(string fid, string returnedFid, bool owner)
+    {
+        using var handler = BatchHandler(async (request, ct) =>
+        {
+            await AssertBatchRequest(request, ct, fid);
+            return Json(new { status = 0, data = new[] { BatchItem(returnedFid) } });
+        }, fid, owner);
+        using var http = new HttpClient(handler);
+        var owned = await new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None);
+        Assert.AreEqual(Signed, owned.Download.Url);
+        Assert.AreEqual(LargeSize, owned.ExpectedSize);
+        Assert.AreEqual(0L, new QuarkOwnedDownload(owned.Download, owned.Session).ExpectedSize);
+        Assert.AreEqual(!owner, owned.SavedToDrive);
+        Assert.AreEqual("x_pan_client_id=third_party_agent; x_pan_access_token=" + Access, owned.Download.Headers["Cookie"]);
+        Assert.IsFalse(owned.Download.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual(1, handler.Paths.Count(path => path == BatchPath));
+        Assert.IsFalse(handler.Paths.Contains("/open/v1/file/get_download_url"));
+    }
+
+    [TestMethod]
+    [DataRow("empty")]
+    [DataRow("multiple")]
+    [DataRow("object")]
+    [DataRow("null-item")]
+    [DataRow("scalar-item")]
+    [DataRow("fid")]
+    [DataRow("missing-fid")]
+    [DataRow("empty-fid")]
+    [DataRow("numeric-fid")]
+    [DataRow("name")]
+    [DataRow("missing-name")]
+    [DataRow("numeric-name")]
+    [DataRow("size")]
+    [DataRow("missing-size")]
+    [DataRow("string-size")]
+    [DataRow("zero-size")]
+    [DataRow("http")]
+    [DataRow("fragment")]
+    [DataRow("userinfo")]
+    [DataRow("missing-url")]
+    [DataRow("directory")]
+    public async Task BatchRejectsAmbiguousOrDifferentFileWithoutSingleFallback(string invalid)
+    {
+        var item = BatchItem();
+        object? data = new[] { item };
+        switch (invalid)
+        {
+            case "empty": data = Array.Empty<object>(); break;
+            case "multiple": data = new[] { item, BatchItem("other-fid") }; break;
+            case "object": data = item; break;
+            case "null-item": data = new object?[] { null }; break;
+            case "scalar-item": data = new[] { 123 }; break;
+            case "fid": item["fid"] = "other-fid"; break;
+            case "missing-fid": item.Remove("fid"); break;
+            case "empty-fid": item["fid"] = ""; break;
+            case "numeric-fid": item["fid"] = 123; break;
+            case "name": item["file_name"] = "other.mrpack"; break;
+            case "missing-name": item.Remove("file_name"); break;
+            case "numeric-name": item["file_name"] = 123; break;
+            case "size": item["size"] = LargeSize - 1; break;
+            case "missing-size": item.Remove("size"); break;
+            case "string-size": item["size"] = LargeSize.ToString(); break;
+            case "zero-size": item["size"] = 0; break;
+            case "http": item["download_url"] = "http://cdn.example/pack"; break;
+            case "fragment": item["download_url"] = Signed + "#secret-download-query"; break;
+            case "userinfo": item["download_url"] = "https://user:secret-download-query@cdn.example/pack"; break;
+            case "missing-url": item.Remove("download_url"); break;
+            case "directory": item["dir"] = true; break;
+        }
+        using var handler = BatchHandler((_, _) => Task.FromResult(Json(new { status = 0, data })));
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<QuarkOpenException>(() => new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None));
+        Assert.IsTrue(ex.SavedToDrive);
+        Redacted(ex);
+        Assert.AreEqual(1, handler.Paths.Count(path => path == BatchPath));
+        Assert.IsFalse(handler.Paths.Contains("/open/v1/file/get_download_url"));
+    }
+
+    [TestMethod]
+    public async Task BatchRefreshRetriesWithRotatedBearerAndCookieAndPersistsImmediately()
+    {
+        var attempts = 0;
+        QuarkOpenSession? persisted = null;
+        using var handler = BatchHandler(async (request, ct) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/agent/v1/oauth/access_token/rotate")
+            {
+                Assert.IsNull(request.Headers.Authorization);
+                Assert.IsFalse(request.RequestUri.Query.Contains("access_token=", StringComparison.Ordinal));
+                return Json(new { status = 0, data = new { access_token = "rotated-access", refresh_token = "rotated-refresh", device_id = "device-2" } });
+            }
+            attempts++;
+            await AssertBatchRequest(request, ct, "owned-fid", attempts == 1 ? Access : "rotated-access");
+            if (attempts == 1)
+            {
+                var expired = Json(new { status = -1, errno = 11001 });
+                expired.StatusCode = HttpStatusCode.BadRequest;
+                return expired;
+            }
+            Assert.IsTrue(persisted?.Matches("rotated-access", "rotated-refresh") == true);
+            return Json(new { status = 0, data = new[] { BatchItem() } });
+        });
+        using var http = new HttpClient(handler);
+        var client = new QuarkOpenClient(http);
+        client.SessionRefreshed += session => persisted = session;
+        var owned = await client.ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None);
+        Assert.AreEqual(2, attempts);
+        Assert.AreSame(persisted, owned.Session);
+        Assert.AreEqual("x_pan_client_id=third_party_agent; x_pan_access_token=rotated-access", owned.Download.Headers["Cookie"]);
+    }
+
+    [TestMethod]
+    public async Task BatchCancellationRemainsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var handler = BatchHandler(async (request, ct) =>
+        {
+            Assert.AreEqual(BatchPath, request.RequestUri!.AbsolutePath);
+            cancellation.Cancel();
+            await Task.Delay(Timeout.Infinite, ct);
+            return Json(new { });
+        });
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", cancellation.Token));
+        Assert.AreEqual(cancellation.Token, ex.CancellationToken);
+        Assert.AreEqual(1, handler.Paths.Count(path => path == BatchPath));
+        Redacted(ex);
+    }
+
+    [TestMethod]
+    public async Task AnonymousAuthorizationDoesNotReuseOwnedBearer()
+    {
+        using var handler = BatchHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == BatchPath)
+                return Task.FromResult(Json(new { status = 0, data = new[] { BatchItem() } }));
+            Assert.IsNull(request.Headers.Authorization);
+            Assert.IsFalse(request.Headers.Contains("Cookie"));
+            Assert.IsFalse(request.RequestUri.Query.Contains("access_token=", StringComparison.Ordinal));
+            return Task.FromResult(request.RequestUri.AbsolutePath switch
+            {
+                "/agent/v1/get_authorize_page_url" => Json(new { status = 0, data = new { authorize_page_url = "https://pan.quark.cn/open/authorize", page_code = "secret-page", device_id = "device-1" } }),
+                "/agent/v1/oauth/get_aac_by_pagecode" => Json(new { status = 0, data = new { agent_auth_code = "auth-code" } }),
+                "/agent/v1/oauth/agent_auth_code" => Json(new { status = 0, data = new { access_token = Access, refresh_token = Refresh, device_id = "device-1" } }),
+                _ => throw new AssertFailedException(request.RequestUri.AbsolutePath)
+            });
+        });
+        using var http = new HttpClient(handler);
+        var client = new QuarkOpenClient(http);
+        await client.ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None);
+        var start = await client.BeginAuthorizeAsync(CancellationToken.None);
+        var session = await client.PollAsync(start, CancellationToken.None);
+        Assert.IsTrue(session?.Matches(Access, Refresh) == true);
+        Assert.IsNull(http.DefaultRequestHeaders.Authorization);
+    }
+
     private static Handler OwnShareHandler(HttpStatusCode saveStatus, bool wrongSize = false, bool owner = true, bool limited = false) => new(async (request, ct) =>
     {
         if (request.RequestUri!.Host == "drive-pc.quark.cn")
@@ -67,16 +281,19 @@ public sealed class QuarkOpenClientTest
                 var rejected = Json(new { status = -1, errno = 41017, error_info = "用户禁止转存自己的分享 " + Stoken });
                 rejected.StatusCode = saveStatus;
                 return rejected;
-            case "/open/v1/file/get_download_url":
+            case "/open/v1/file/multi_get_download_url":
                 using (var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)))
-                    Assert.AreEqual(owner ? "share-fid" : "owned-fid", body.RootElement.GetProperty("fid").GetString());
+                {
+                    Assert.AreEqual(1, body.RootElement.GetProperty("fids").GetArrayLength());
+                    Assert.AreEqual(owner ? "share-fid" : "owned-fid", body.RootElement.GetProperty("fids")[0].GetString());
+                }
                 if (limited)
                 {
                     var limit = Json(new { status = -1, errno = 23018, error_info = "download file size limit[52428800]" });
                     limit.StatusCode = HttpStatusCode.BadRequest;
                     return limit;
                 }
-                return Json(new { status = 0, data = new { fid = "share-fid", file_name = "pack.mrpack", size = wrongSize ? 99 : 100, download_url = Signed } });
+                return Json(new { status = 0, data = new[] { new { fid = owner ? "share-fid" : "owned-fid", file_name = "pack.mrpack", size = wrongSize ? 99 : 100, download_url = Signed } } });
             default:
                 throw new AssertFailedException("Owner share must not poll a save task or search for a new copy.");
         }
@@ -92,9 +309,11 @@ public sealed class QuarkOpenClientTest
         var owned = await new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None);
         Assert.AreEqual("pack.mrpack", owned.Download.FileName);
         Assert.AreEqual(Signed, owned.Download.Url);
+        Assert.AreEqual(100L, owned.ExpectedSize);
         Assert.IsFalse(owned.SavedToDrive);
         Assert.AreEqual(1, handler.Paths.Count(path => path == "/open/v1/share/saveas"));
-        Assert.AreEqual(1, handler.Paths.Count(path => path == "/open/v1/file/get_download_url"));
+        Assert.AreEqual(1, handler.Paths.Count(path => path == "/open/v1/file/multi_get_download_url"));
+        Assert.IsFalse(handler.Paths.Contains("/open/v1/file/get_download_url"));
         Assert.IsFalse(handler.Paths.Any(path => path is "/open/v1/task/query" or "/open/v1/file/list"));
     }
 
@@ -204,8 +423,8 @@ public sealed class QuarkOpenClientTest
     public void SignUsesMethodPathTimeAndDocumentedKey()
     {
         var expected = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            "POST&/open/v1/file/get_download_url&1700000000000&cf134812e2de4032bd1cb7c3727e84b3"))).ToLowerInvariant();
-        Assert.AreEqual(expected, QuarkOpenClient.Sign("POST", "/open/v1/file/get_download_url", "1700000000000"));
+            "POST&/open/v1/file/multi_get_download_url&1700000000000&cf134812e2de4032bd1cb7c3727e84b3"))).ToLowerInvariant();
+        Assert.AreEqual(expected, QuarkOpenClient.Sign("POST", "/open/v1/file/multi_get_download_url", "1700000000000"));
     }
 
     [TestMethod]
@@ -218,11 +437,14 @@ public sealed class QuarkOpenClientTest
             if (request.RequestUri.Host == "drive-pc.quark.cn")
             {
                 Assert.IsTrue(request.RequestUri.Query.Contains("fr=win", StringComparison.Ordinal));
+                Assert.IsNull(request.Headers.Authorization);
                 if (request.RequestUri.AbsolutePath.EndsWith("/token", StringComparison.Ordinal))
                     return Json(new { code = 0, data = new { stoken = Stoken } });
                 return Json(new { data = new { list = new[] { new { file_name = "pack.mrpack", fid = "share-fid", dir = false, size = 93_571_003, share_fid_token = "file-token" } } } });
             }
             Assert.AreEqual("open-api-drive.quark.cn", request.RequestUri.Host);
+            Assert.AreEqual("Bearer", request.Headers.Authorization?.Scheme);
+            Assert.AreEqual(Access, request.Headers.Authorization?.Parameter);
             var tm = request.Headers.GetValues("x-pan-tm").Single();
             Assert.AreEqual(QuarkOpenClient.Sign(request.Method.Method, request.RequestUri.AbsolutePath, tm), request.Headers.GetValues("x-pan-token").Single());
             Assert.AreEqual(QuarkOpenClient.ClientId, request.Headers.GetValues("x-pan-client-id").Single());
@@ -232,7 +454,7 @@ public sealed class QuarkOpenClientTest
             {
                 "/open/v1/dir" => Json(new { status = 0, errno = 0, data = new { fid = "folder-fid" } }),
                 "/open/v1/share/saveas" => SaveAs(body),
-                "/open/v1/file/get_download_url" => Json(new { status = 0, errno = 0, data = new { fid = "owned-fid", file_name = "pack.mrpack", size = 93_571_003, download_url = Signed } }),
+                "/open/v1/file/multi_get_download_url" => DownloadFor(body),
                 _ => throw new AssertFailedException(request.RequestUri.AbsolutePath)
             };
         });
@@ -277,7 +499,7 @@ public sealed class QuarkOpenClientTest
                 "/open/v1/dir" => Json(new { status = 0, errno = 0, data = new { fid = "folder-fid" } }),
                 "/open/v1/share/saveas" => SaveAsWithoutFid(body),
                 "/open/v1/file/list" => ListPage(body, listBodies, opaqueParent),
-                "/open/v1/file/get_download_url" => DownloadFor(body),
+                "/open/v1/file/multi_get_download_url" => DownloadFor(body),
                 _ => throw new AssertFailedException(request.RequestUri.AbsolutePath)
             };
         });
@@ -345,8 +567,10 @@ public sealed class QuarkOpenClientTest
     private static HttpResponseMessage DownloadFor(string body)
     {
         using var json = JsonDocument.Parse(body);
-        Assert.AreEqual("owned-fid", json.RootElement.GetProperty("fid").GetString());
-        return Json(new { status = 0, errno = 0, data = new { fid = "owned-fid", file_name = "pack.mrpack", size = 93_571_003, download_url = Signed } });
+        Assert.AreEqual(1, json.RootElement.GetProperty("fids").GetArrayLength());
+        Assert.AreEqual("owned-fid", json.RootElement.GetProperty("fids")[0].GetString());
+        Assert.AreEqual(1, json.RootElement.EnumerateObject().Count());
+        return Json(new { status = 0, errno = 0, data = new[] { new { fid = "owned-fid", file_name = "pack.mrpack", size = 93_571_003, download_url = Signed } } });
     }
 
     [TestMethod]
@@ -388,7 +612,7 @@ public sealed class QuarkOpenClientTest
                     return Json(new { status = 0, data = new { last_page = true, file_list = listed.Last() == destination
                         ? new[] { new { fid = "owned-fid", filename = "pack.mrpack", size = 93_571_003, parent_fid = destination, file_type = 1 } }
                         : Array.Empty<object>() } });
-                case "/open/v1/file/get_download_url":
+                case "/open/v1/file/multi_get_download_url":
                     return DownloadFor(body);
                 default:
                     throw new AssertFailedException(request.RequestUri.AbsolutePath);
@@ -543,6 +767,7 @@ public sealed class QuarkOpenClientTest
             new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None));
         Redacted(ex);
         Assert.IsFalse(ex.SavedToDrive);
+        Assert.IsFalse(handler.Paths.Any(path => path.Contains("get_download_url", StringComparison.Ordinal)));
     }
 
     [TestMethod]

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <LauncherBuildDir Condition="'$(LauncherBuildDir)' == ''">$(MSBuildThisFileDirectory)..\..\Plain Craft Launcher 2\bin\Debug\net10.0-windows\win-x64</LauncherBuildDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Plain Craft Launcher 2"><HintPath>$(LauncherBuildDir)\Plain Craft Launcher 2.dll</HintPath></Reference>
+    <Reference Include="PCL.Core"><HintPath>$(LauncherBuildDir)\PCL.Core.dll</HintPath></Reference>
+    <EmbeddedResource Include="..\..\Plain Craft Launcher 2\metadata.json" LogicalName="PCL.metadata.json" />
+  </ItemGroup>
+</Project>

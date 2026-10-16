@@ -366,6 +366,20 @@ public partial class PageComp
             StartNewSearch();
     }
 
+    public void SearchFor(string name, string? minecraft, ModComp.CompLoaderType loaderType)
+    {
+        PanSearchBox.Text = name ?? "";
+        TextSearchVersion.Text = string.IsNullOrWhiteSpace(minecraft)
+            ? Lang.Text("Download.Comp.Filter.Version.AllInputAvailable")
+            : minecraft;
+        var tag = ((int)loaderType).ToString();
+        foreach (MyComboBoxItem item in ComboSearchLoader.Items)
+            if (string.Equals(item.Tag?.ToString(), tag, StringComparison.Ordinal))
+                ComboSearchLoader.SelectedItem = item;
+        loader.lastFinishedTime = 0L;
+        StartNewSearch();
+    }
+
     // 重置按钮
     private void ResetFilter()
     {

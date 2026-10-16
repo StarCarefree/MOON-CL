@@ -260,16 +260,16 @@ internal static class Program
                 AssertPrivate(host); Screenshot(host, Path.Combine(args[2], "multiplayer-room.png"));
                 Click(host, "Rooms.OpenRouteEditor");
                 await ResizeViewport(window, host, 750, 540);
-                for (var mode = 0; mode < 5; mode++)
+                for (var mode = 0; mode < 6; mode++)
                 {
                     Click(host, "Rooms.RouteBasic");
                     Control<ComboBox>(host, "RouteMode").SelectedIndex = mode;
                     Click(host, "Rooms.RouteAdvanced");
-                    var visible = new[] { "Ipv6Fields", "FrpFields", "ZtFields", "EtFields" }.Count(n => Control<FrameworkElement>(host, n).Visibility == Visibility.Visible);
-                    Check(visible == (mode == 2 ? 0 : 1), "Mode-specific fields overlap");
+                    var visible = new[] { "Ipv6Fields", "IpFields", "FrpFields", "ZtFields", "EtFields" }.Count(n => Control<FrameworkElement>(host, n).Visibility == Visibility.Visible);
+                    Check(visible == (mode == 3 ? 0 : 1), "Mode-specific fields overlap");
                     AssertNoScrollBars(host);
                     AssertInViewport(host, ButtonById(host, "Rooms.PublishRoute"), "Publish button at compact size");
-                    foreach (var field in new[] { "Ipv6Address", "PublicHost", "NetworkId", "ZtAddress", "EtAddress", "NetworkName", "NetworkSecret", "Peers" })
+                    foreach (var field in new[] { "Ipv6Address", "CustomHost", "CustomPort", "PublicHost", "NetworkId", "ZtAddress", "EtAddress", "NetworkName", "NetworkSecret", "Peers" })
                         if (Control<FrameworkElement>(host, field).IsVisible) AssertInViewport(host, Control<FrameworkElement>(host, field), "Visible mode field " + field);
                 }
                 Invoke(host, "PreparePublication");

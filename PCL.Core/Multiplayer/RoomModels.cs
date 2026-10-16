@@ -31,6 +31,7 @@ public sealed record RoomConnection(string Mode, string Address = "", int Port =
             case "ipv6":
                 if (!IsGlobalIpv6(Address)) throw new ArgumentException("请输入有效的公网 IPv6 地址。");
                 CheckPort(Port); break;
+            case "ip": CheckHost(Address); CheckPort(Port); break;
             case "frp": CheckHost(Address); CheckPort(Port); break;
             case "p2p":
                 CheckHost(ServerHost); CheckPort(ServerPort);

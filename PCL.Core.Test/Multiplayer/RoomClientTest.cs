@@ -112,6 +112,11 @@ public sealed class RoomClientTest
         Assert.AreEqual("[2606:4700::1]:25565", c.Endpoint);
         Assert.ThrowsExactly<ArgumentException>(() => new RoomConnection("ipv6", "2001:db8::1", 25565).Validate());
         Assert.ThrowsExactly<ArgumentException>(() => (c with { Port = 65536 }).Validate());
+        var custom = new RoomConnection("ip", "192.0.2.10", 25566); custom.Validate();
+        Assert.AreEqual("192.0.2.10:25566", custom.Endpoint);
+        new RoomConnection("ip", "play.example.com", 25565).Validate();
+        Assert.ThrowsExactly<ArgumentException>(() => new RoomConnection("ip", "https://example.com", 25565).Validate());
+        Assert.ThrowsExactly<ArgumentException>(() => new RoomConnection("ip", "192.0.2.10:25565", 25565).Validate());
     }
 
     [TestMethod]

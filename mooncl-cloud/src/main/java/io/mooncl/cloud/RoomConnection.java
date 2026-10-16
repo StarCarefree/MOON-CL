@@ -22,6 +22,10 @@ record RoomConnection(String mode, String address, Integer port, String serverHo
                 if (!globalIpv6(address) || !validPort(port) || serverHost != null || serverPort != null
                         || proxyName != null || secretKey != null) throw invalid();
             }
+            case "ip" -> {
+                if (!host(address) || !validPort(port) || serverHost != null || serverPort != null
+                        || proxyName != null || secretKey != null) throw invalid();
+            }
             case "frp" -> {
                 if (!host(address) || !validPort(port) || serverHost != null || serverPort != null
                         || proxyName != null || secretKey != null) throw invalid();

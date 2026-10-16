@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using PCL.Core.Utils;
 using PCL.Network.Loaders;
 
@@ -12,6 +13,8 @@ public class DownloadFile
     public ModBase.FileChecker? Check { get; }
     public bool UseBrowserUserAgent { get; }
     public string CustomUserAgent { get; }
+    /// <summary>Immutable per-file request headers; never applied to a shared HttpClient.</summary>
+    public IReadOnlyDictionary<string, string> RequestHeaders { get; }
     public NetState State { get; set; } = NetState.WaitingToCheck;
     public long TotalSize { get; set; } = -1;
     public bool IsUnknownSize { get; set; } = true;
@@ -77,7 +80,7 @@ public class DownloadFile
     }
 
     public DownloadFile(IEnumerable<string> urls, string localPath, ModBase.FileChecker? checker = null,
-        bool useBrowserUserAgent = false, string customUserAgent = "")
+        bool useBrowserUserAgent = false, string customUserAgent = "", IReadOnlyDictionary<string, string>? requestHeaders = null)
     {
         Urls = urls.Where(url => !string.IsNullOrWhiteSpace(url)).Distinct().ToList();
         LocalPath = localPath;
@@ -85,5 +88,14 @@ public class DownloadFile
         Check = checker;
         UseBrowserUserAgent = useBrowserUserAgent;
         CustomUserAgent = customUserAgent;
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (requestHeaders is not null)
+            foreach (var pair in requestHeaders)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Any(char.IsControl) || pair.Value.Any(char.IsControl))
+                    throw new ArgumentException("下载请求头无效。", nameof(requestHeaders));
+                headers.Add(pair.Key, pair.Value);
+            }
+        RequestHeaders = new ReadOnlyDictionary<string, string>(headers);
     }
 }

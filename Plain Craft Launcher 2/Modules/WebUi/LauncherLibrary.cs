@@ -72,6 +72,7 @@ internal sealed class LauncherLibrary : IDisposable
     }
     private CancellationTokenSource? _work;
     private ModLoader.LoaderCombo<string>? _installer;
+    private ModLoader.LoaderCombo<string>? _downloadTask;
     private string _selected = PackCatalog.StarRailId;
     private string _phase = "就绪";
     private string _error = "";
@@ -122,7 +123,8 @@ internal sealed class LauncherLibrary : IDisposable
         var instances = new JsonArray();
         foreach (var instance in Instances())
             instances.Add(new JsonObject { ["id"] = "instance:" + instance.Name, ["name"] = instance.Name,
-                ["version"] = instance.Desc, ["selected"] = _selected == "instance:" + instance.Name });
+                ["version"] = instance.Desc, ["minecraft"] = instance.Info.VanillaName ?? "",
+                ["selected"] = _selected == "instance:" + instance.Name });
         var presets = new JsonArray();
         foreach (var pack in _packs)
         {
@@ -154,8 +156,9 @@ internal sealed class LauncherLibrary : IDisposable
             ["task"] = new JsonObject { ["busy"] = _work is not null || ModLaunch.isLaunching,
                 ["gameRunning"] = ModWatcher.hasRunningMinecraft,
                 ["phase"] = ModLaunch.isLaunching ? "正在启动游戏" : ModWatcher.hasRunningMinecraft ? "游戏运行中" : _phase,
-                ["indeterminate"] = _work is not null && _installer is null && !_phase.StartsWith("下载整合包", StringComparison.Ordinal),
-                ["progress"] = ModLaunch.isLaunching ? ModLaunch.mcLaunchLoader.Progress : _installer is not null ? .25 + .75 * _installer.Progress : _progress,
+                ["indeterminate"] = _work is not null && _installer is null && _downloadTask is null && !_phase.StartsWith("下载整合包", StringComparison.Ordinal),
+                ["progress"] = ModLaunch.isLaunching ? ModLaunch.mcLaunchLoader.Progress : _installer is not null ? .25 + .75 * _installer.Progress
+                    : _downloadTask is not null ? .25 * _downloadTask.Progress : _progress,
                 ["scope"] = _taskScope, ["error"] = _error },
             ["config"] = new JsonObject { ["catalogUrl"] = _settings.CatalogUrl,
                 ["catalogUrls"] = new JsonArray(_settings.CatalogUrls!.Select(url => (JsonNode?)JsonValue.Create(url)).ToArray()),
@@ -357,7 +360,7 @@ internal sealed class LauncherLibrary : IDisposable
         var operation = message["operation"]?.GetValue<string>() ?? "";
         if (operation == "cancel")
         {
-            _work?.Cancel(); _installer?.Abort();
+            _work?.Cancel(); _downloadTask?.Abort(); _installer?.Abort();
             if (_work is null && ModLaunch.isLaunching) ModLaunch.AbortActiveLaunches();
             return;
         }
@@ -541,9 +544,8 @@ internal sealed class LauncherLibrary : IDisposable
             var offer = server?.Packs.FirstOrDefault(item => item.Id == offerId)
                 ?? (offerId == PackCatalog.FabulouslyOptimizedId ? PackCatalog.RecommendedFabric(minecraft) : null)
                 ?? throw new InvalidOperationException("没有这个推荐整合包。");
-            if (!string.Equals(offer.Minecraft, minecraft, StringComparison.OrdinalIgnoreCase) && offer.Minecraft.Length > 0)
-                throw new InvalidOperationException("推荐整合包版本与服务器不一致。");
-            instance = await InstallOfferAsync(offer, minecraft);
+            OpenPackDownload(form, offer, message["packName"]?.GetValue<string>() ?? "", message["loader"]?.GetValue<string>() ?? "");
+            return;
         }
         if (instance is null || !VersionMatches(instance, minecraft))
             throw new InvalidOperationException("没有与服务器版本 " + minecraft + " 匹配的可启动实例。");
@@ -589,6 +591,25 @@ internal sealed class LauncherLibrary : IDisposable
         return VanillaInstance(minecraft) ?? throw new InvalidOperationException("原版已下载，但没有找到可启动实例。");
     }
 
+    private static void OpenPackDownload(FormMain form, CatalogPackOffer offer, string requestedName, string requestedLoader)
+    {
+        var name = string.IsNullOrWhiteSpace(offer.Name) ? requestedName : offer.Name;
+        var loader = string.IsNullOrWhiteSpace(offer.Loader) ? requestedLoader : offer.Loader;
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("没有这个推荐整合包。");
+        form.PageChange(FormMain.PageType.Download, FormMain.PageSubType.DownloadPack);
+        var page = ModMain.frmDownloadPack?.Content ?? throw new InvalidOperationException("整合包下载页尚未就绪。");
+        page.SearchFor(name, offer.Minecraft, PackLoader(loader));
+    }
+
+    private static ModComp.CompLoaderType PackLoader(string loader) => loader.Trim().ToLowerInvariant() switch
+    {
+        "fabric" => ModComp.CompLoaderType.Fabric,
+        "quilt" => ModComp.CompLoaderType.Quilt,
+        "forge" => ModComp.CompLoaderType.Forge,
+        "neoforge" => ModComp.CompLoaderType.NeoForge,
+        _ => ModComp.CompLoaderType.Any
+    };
+
     private async Task<McInstance> InstallOfferAsync(CatalogPackOffer offer, string minecraft)
     {
         if (!string.IsNullOrWhiteSpace(offer.DownloadUrl))
@@ -632,7 +653,7 @@ internal sealed class LauncherLibrary : IDisposable
         catch (ModBase.CancelledException) { _phase = "已取消"; }
         catch (ThreadInterruptedException) when (cts.IsCancellationRequested) { _phase = "已取消"; }
         catch (Exception ex) { _phase = "操作失败"; _error = ex.Message; ModBase.Log(ex, "整合包服务操作失败", ModBase.LogLevel.Debug); }
-        finally { _installer = null; _work = null; PackWorkInProgress = false; _nextScan = DateTime.MinValue; PublishWork(); }
+        finally { _downloadTask = null; _installer = null; _work = null; PackWorkInProgress = false; _nextScan = DateTime.MinValue; PublishWork(); }
     }
 
     private bool HasQuarkSession() =>
@@ -672,16 +693,27 @@ internal sealed class LauncherLibrary : IDisposable
         var owned = await client.ResolveOwnedAsync(session, pack.ShareUrl, pack.SharePath, token).ConfigureAwait(false);
         _quarkSessions.Save(owned.Session);
         var archive = PackCatalog.SafePath(temp, owned.Download.FileName);
-        _phase = "下载已授权的整合包";
+        _phase = "正在使用启动器原生下载任务";
+        var task = QuarkNativeDownload.Create(pack.Name, archive, owned);
+        _downloadTask = task;
         try
         {
-            await _transfer.DownloadAsync(owned.Download.Url, archive, "", HashAlgorithmName.SHA256,
-                new Progress<double>(p => _progress = p * .25), token, owned.Download.Headers).ConfigureAwait(false);
+            ModBase.RunInUiWait(() =>
+            {
+                token.ThrowIfCancellationRequested();
+                task.Start(archive);
+                ModLoader.LoaderTaskbarAdd(task);
+                if (ModMain.frmMain is { } form)
+                {
+                    form.BtnExtraDownload.ShowRefresh();
+                    form.BtnExtraDownload.Ribble();
+                    _ = form.NavigateHybridAsync("tasks");
+                }
+            });
+            await QuarkNativeDownload.WaitAsync(task, token).ConfigureAwait(false);
+            _progress = .25;
         }
-        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
-        {
-            throw new QuarkOpenException("夸克拒绝了目标文件的下载。请在夸克客户端手动下载后导入。没有转存整个分享。", owned.SavedToDrive);
-        }
+        finally { _downloadTask = null; }
         setArchive(archive);
         return true;
     }
@@ -747,37 +779,47 @@ internal sealed class LauncherLibrary : IDisposable
         {
             if (quark || string.IsNullOrEmpty(archive) || !File.Exists(archive))
             {
-                _phase = quark ? "解析夸克分享文件" : "下载整合包";
-                var url = pack.DownloadUrl;
-                IReadOnlyDictionary<string, string>? headers = null;
-                var fileName = pack.FileName;
-                if (quark || string.IsNullOrEmpty(url))
-                {
-                    if (string.IsNullOrEmpty(pack.ShareUrl)) throw new InvalidOperationException("此预设未配置下载地址或夸克链接。");
-                    var resolved = await new QuarkPackClient(_http).ResolveAsync(_settings.QuarkServiceUrl, pack.ShareUrl, pack.SharePath, token);
-                    url = resolved.Url; headers = resolved.Headers; fileName = resolved.FileName;
-                }
-                archive = PackCatalog.SafePath(temp, fileName);
-                _phase = "下载整合包";
-                try
-                {
-                    await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, HashAlgorithmName.SHA256,
-                        new Progress<double>(p => _progress = p * .25), token, headers);
-                }
-                catch (HttpRequestException ex) when (quark && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+                if (quark && HasQuarkSession())
                 {
                     string? ownedArchive = null;
+                    if (!await TryOwnedDownloadAsync(pack, temp, token, path => ownedArchive = path).ConfigureAwait(false))
+                        throw new QuarkOpenException("夸克授权不可用，请重新授权。");
+                    archive = ownedArchive ?? throw new InvalidOperationException("夸克下载没有产生目标文件。");
+                }
+                else
+                {
+                    _phase = quark ? "解析夸克分享文件" : "下载整合包";
+                    var url = pack.DownloadUrl;
+                    IReadOnlyDictionary<string, string>? headers = null;
+                    var fileName = pack.FileName;
+                    if (quark || string.IsNullOrEmpty(url))
+                    {
+                        if (string.IsNullOrEmpty(pack.ShareUrl)) throw new InvalidOperationException("此预设未配置下载地址或夸克链接。");
+                        var resolved = await new QuarkPackClient(_http).ResolveAsync(_settings.QuarkServiceUrl, pack.ShareUrl, pack.SharePath, token);
+                        url = resolved.Url; headers = resolved.Headers; fileName = resolved.FileName;
+                    }
+                    archive = PackCatalog.SafePath(temp, fileName);
+                    _phase = "下载整合包";
                     try
                     {
-                        if (!await TryOwnedDownloadAsync(pack, temp, token, path => ownedArchive = path).ConfigureAwait(false))
-                            throw new InvalidOperationException(OpenShareFallback(pack.ShareUrl, false));
+                        await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, HashAlgorithmName.SHA256,
+                            new Progress<double>(p => _progress = p * .25), token, headers);
                     }
-                    catch (QuarkOpenException owned)
+                    catch (HttpRequestException ex) when (quark && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
                     {
-                        // Keep the precise API failure in this operation; don't open another window.
-                        throw new InvalidOperationException(owned.Message);
+                        string? ownedArchive = null;
+                        try
+                        {
+                            if (!await TryOwnedDownloadAsync(pack, temp, token, path => ownedArchive = path).ConfigureAwait(false))
+                                throw new InvalidOperationException(OpenShareFallback(pack.ShareUrl, false));
+                        }
+                        catch (QuarkOpenException owned)
+                        {
+                            // Keep the precise API failure in this operation; don't open another window.
+                            throw new InvalidOperationException(owned.Message);
+                        }
+                        archive = ownedArchive ?? throw new InvalidOperationException("夸克下载没有产生目标文件。");
                     }
-                    archive = ownedArchive ?? throw new InvalidOperationException("夸克下载没有产生目标文件。");
                 }
             }
             token.ThrowIfCancellationRequested();
@@ -852,6 +894,6 @@ internal sealed class LauncherLibrary : IDisposable
     public void Dispose()
     {
         if (_disposed) return; _disposed = true;
-        _work?.Cancel(); _installer?.Abort(); _http.Dispose(); _catalogHttp.Dispose();
+        _work?.Cancel(); _downloadTask?.Abort(); _installer?.Abort(); _http.Dispose(); _catalogHttp.Dispose();
     }
 }

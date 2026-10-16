@@ -92,7 +92,7 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 
 实测（本机直接调用官方接口，未使用自建解析服务）：分享目录和目标 `.mrpack` 都存在，约 93,571,003 字节，匿名 `fr=win` 能解析出签名 URL，但 CDN GET 仍返回 **HTTP 412**。改用 `fr=pc` 时官方直接拒绝，业务码 `23018`，提示 `download file size limit`。已按官方协议唤起夸克网盘客户端 `qkclouddrive://openShareModal?pwdid=e3f623dd58d6&source=13&pwd_id=e3f623dd58d6&share_dn=e3f623dd58d6`（不带 user_token）。窗口标题为「分享链接」，监听的下载目录没有新的 `.mrpack`。浏览器本地接口 `127.0.0.1:9128` 只有通知路由，没有下载路由。因此未授权时，夸克客户端只能打开分享窗口。
 
-已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 整理的开放平台契约，网关 `https://open-api-drive.quark.cn`）：下载时如果还没有夸克授权，会先弹出窗口询问是否授权并下载。同意后才打开 `https://pan.quark.cn` 授权页；服务配置里的「授权夸克网盘」仍可单独授权。令牌用 DPAPI 存在 `%LOCALAPPDATA%/MOONCL/quark-open-session.bin`，首次读取会迁移旧 `PCL/quark-open-session.bin` 及单文件解包缓存中的有效授权；刷新令牌成功后立即落盘，不依赖下载成功，不进入 WebUI，也不从浏览器 Cookie 读取。授权后若匿名直链返回 412，只把路径指向的那一个 `.mrpack`/`.zip` 转存到用户网盘目录 `MOONCL`（不传 `save_all`，大于 512 MiB 直接拒绝），再调用 `get_download_url`，下载时只带该会话自己的 `x_pan_client_id` / `x_pan_access_token`。拒绝授权且没有普通下载地址时不会转存，也不会打开分享窗口。浏览页整合包的夸克来源同样使用这条路径：点击后可选跳转或直接下载，直接下载先进入版本页，玩家选定一个文件后才转存那一个文件。开放平台签名探测已返回 HTTP 200、`status=0`、授权页主机为 `pan.quark.cn`；本次没有完成用户授权，因此没有实测这个 `.mrpack` 的转存或下载。匿名 412 仍然成立，不能把已有同名文件当作成功。
+已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 及用户提供的 quarkclouddrive 1.0.24）：未授权时先询问，同意后才打开 `pan.quark.cn` 授权页。DPAPI 令牌固定保存在 `%LOCALAPPDATA%/MOONCL/quark-open-session.bin`，可迁移旧缓存授权；刷新令牌成功立即落盘，不依赖下载成功。已授权的夸克下载直接定位所选 `.mrpack`/`.zip`，只转存一个文件到 `MOONCL`（不传 `save_all`，仍保留 512 MiB 本地转存保护），等待任务完成后调用 `multi_get_download_url`，不再先尝试匿名下载或回退到单文件直链接口。当前账号自己的分享收到 41017 时使用原文件 FID。CDN 只携带该会话自己的授权 Cookie，不读取浏览器 Cookie，也不把令牌/签名直链发往 WebUI。拒绝授权且无普通地址时不转存、不打开分享窗口。
 
 转存接口可能仅返回 `{task_id, task_sync}`，不能把缺少 `status` 当成完成；必须查询 `/open/v1/task/query` 到 `status=2` 后再取 `save_as_top_fids` 或回查目录。目录回查以 `save_as.to_pdir_fid` 为准（`"0"` 也是有效的根目录）；轮询响应省略目录时保留前一响应值，未返回目录才回退到请求目录。`file/list` 的 `parent_fid` 参数实测生效，`pdir_fid` 会被忽略。响应中的 `~…|…` 编码 FID 不可与原始 FID 或另一个编码 FID 直接比较；只能依赖已限定父目录的列表，并精确匹配文件名、大小，普通 FID 父目录不匹配和结果不唯一仍需拒绝。
 
@@ -114,7 +114,25 @@ HTTP 400 不能在读取 JSON 前直接丢弃响应；应保留安全的 `errno`
 
 验证不仅生成直链：在偏移 52,428,800 字节读取 1 字节返回 HTTP 206；完整 GET 返回 HTTP 200，实际下载 235,008,058 字节，与网盘元数据一致。ZIP 全量 CRC 校验通过，6,587 个条目；本地 SHA256 为 `F1212EF8A29999EA8429A4AB47728D6F060A2A1AB504DE91CEF9E4F32EBF77A3`（仅本地摘要，未与服务端摘要比对）。测试文件保存在会话临时目录，没有导入或运行。
 
-结论：当前账号通过此版本提供的批量接口可以下载这份超过 50 MiB 的已拥有文件；不能保证其他账号或文件无权限/配额限制。本轮仅完成验证，启动器尚未接入批量直链接口。
+结论：当前账号通过此版本提供的批量接口可以下载这份超过 50 MiB 的已拥有文件；不能保证其他账号或文件无权限/配额限制。后续已完成启动器接入，具体行为见下节。
+
+### 启动器接入与原生下载进度
+
+`QuarkOpenClient.DownloadForAsync` 现在只调用批量端点并传入一个 FID；验证响应数组恰有一个文件，匹配名称、准确大小及可比较的 FID，拒绝目录、非 HTTPS/带凭据/片段地址。批量 API 请求省略 device_id、附带签名及当前会话 Bearer；刷新重试也更新 Bearer，匿名授权请求不带此头。
+
+授权直链解析完成后，`QuarkNativeDownload` 建立真实 `LoaderCombo<string>` / `LoaderDownload`，登记 `LoaderTaskbarAdd` 并自动打开原生任务管理页。百分比、字节数、速度及取消使用启动器原生下载跟踪，不另建 Web 下载进度。下载完成并按分享文件大小校验后，再衔接现有原生整合包导入器。
+
+`DownloadFile.RequestHeaders` 是每个文件独立的不可变快照；带授权头的文件走原生顺序通道，不执行缺少这些头的分段探测。专用 HTTP 客户端关闭 Cookie jar 和自动跳转，避免凭据串到其他文件；日志与异常不含签名 URL/令牌。普通无请求头下载保留原通道。取消使用永久标记和启动门闩，阻止完成覆盖取消和延迟子任务重启；等待下载线程退出、清理临时文件后才返回，因此取消不会继续安装。
+
+验证：夸克接口专项 111 项通过；原生隔离测试覆盖实时进度/速度、授权头隔离、拒绝跳转、尺寸错误、普通取消/原生取消及两种收尾竞态。真实 `QuarkOpenClient` 加原生下载器已完整下载内置 SRE 文件 93,571,003 字节，135 个 ZIP 条目 CRC 校验通过，未安装或启动游戏。全核心测试运行 625 项：573 通过、49 失败、3 跳过；失败分布在缓存/哈希数据库占用、配置/事件/本地化/网络等其他测试，夸克专项无失败，不宣称全量测试通过。
+
+原生隔离测试（先构建启动器；测试输出目录应为 session scratch）：
+
+```powershell
+$launcher = (Resolve-Path '.\Plain Craft Launcher 2\bin\Debug\net10.0-windows\win-x64').Path
+& 'D:\dotnet\dotnet.exe' run --project '.\scripts\quark-download-smoke\Quark.DownloadSmoke.csproj' -- $launcher "$env:PI_SCRATCH_DIR\quark-native-check"
+# 可选 --live：显式使用已有授权，下载内置测试整合包到临时目录，不执行安装。
+```
 
 ## 验证命令
 
