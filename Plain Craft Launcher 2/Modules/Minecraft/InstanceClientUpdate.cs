@@ -10,7 +10,8 @@ namespace PCL;
 
 internal static class InstanceClientUpdate
 {
-    public static async Task StartAsync(McInstance old, bool deleteOld, bool keepOldSelected)
+    public static async Task StartAsync(McInstance old, bool deleteOld, bool keepOldSelected,
+        string? archive = null, PackIdentity? downloadedProject = null)
     {
         if (ModLaunch.IsInstanceLaunching(old))
         {
@@ -18,7 +19,7 @@ internal static class InstanceClientUpdate
             return;
         }
         var shared = ModFolder.mcFolderSelected;
-        var file = SystemDialogs.SelectFile("整合包 (*.zip;*.mrpack)|*.zip;*.mrpack", "选择新的客户端整合包");
+        var file = archive ?? SystemDialogs.SelectFile("整合包 (*.zip;*.mrpack)|*.zip;*.mrpack", "选择新的客户端整合包");
         if (string.IsNullOrEmpty(file)) return;
         if (!(file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)))
         {
@@ -34,7 +35,7 @@ internal static class InstanceClientUpdate
             var result = await Task.Run(() =>
             {
                 var clues = PackCluesReader.Read(file);
-                return (Clues: clues, Installed: PackIdentityLookup.ResolveInstalled(old), Downloaded: PackIdentityLookup.Resolve(clues));
+                return (Clues: clues, Installed: PackIdentityLookup.ResolveInstalled(old), Downloaded: downloadedProject ?? PackIdentityLookup.Resolve(clues));
             });
             installed = result.Installed;
             downloaded = result.Downloaded;

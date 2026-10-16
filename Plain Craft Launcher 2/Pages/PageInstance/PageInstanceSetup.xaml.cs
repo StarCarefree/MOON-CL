@@ -1150,28 +1150,23 @@ public partial class PageInstanceSetup
     private async void PackProject_Click(object sender, MouseButtonEventArgs e)
     {
         var instance = PageInstanceLeft.McInstance;
-        BtnPackProject.IsEnabled = false;
+        var deleteOld = CheckUpdateDeleteOld.Checked == true;
+        var keepOld = CheckUpdateKeepOld.Checked == true;
+        BtnPackProject.IsEnabled = BtnClientUpdate.IsEnabled = false;
         try
         {
-            HintService.Hint("正在查找整合包项目……");
-            var identity = await System.Threading.Tasks.Task.Run(() => PackIdentityLookup.ResolveInstalled(instance));
-            PackIdentityStore.Save(instance.PathInstance, identity);
+            var window = new PackUpdateDownloadWindow(instance) { Owner = Window.GetWindow(this) };
+            var useDownload = window.ShowDialog() == true;
             if (PageInstanceLeft.McInstance?.PathInstance == instance.PathInstance) ShowPackIdentity();
-            var url = PackUpdateProject.DownloadPage(identity);
-            if (url.Length == 0)
-            {
-                ModMain.MyMsgBox("未找到匹配的项目。你仍可以从作者处下载客户端 zip 或 mrpack，再选择已下载整合包更新。", "查找整合包项目");
-                return;
-            }
-            if (ModMain.MyMsgBox($"找到项目：{identity.Name}\n{url}\n\n请下载需要的客户端整合包，然后返回此处选择文件更新。", "整合包项目", "打开项目页面", "取消") == 1)
-                ModBase.OpenWebsite(url);
+            if (useDownload && window.SelectedArchive is not null && window.DownloadedIdentity is not null)
+                await InstanceClientUpdate.StartAsync(instance, deleteOld, keepOld, window.SelectedArchive, window.DownloadedIdentity);
         }
         catch (Exception ex)
         {
-            ModBase.Log(ex, "查找更新项目失败", ModBase.LogLevel.Debug);
-            HintService.Hint("查找失败，请稍后重试，或直接选择已下载的整合包。");
+            ModBase.Log(ex, "打开整合包下载更新失败", ModBase.LogLevel.Debug);
+            HintService.Hint("下载更新没有开始，旧版本没有改动。");
         }
-        finally { BtnPackProject.IsEnabled = true; }
+        finally { BtnPackProject.IsEnabled = BtnClientUpdate.IsEnabled = true; }
     }
 
     private async void ClientUpdate_Click(object sender, MouseButtonEventArgs e)
