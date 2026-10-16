@@ -120,7 +120,9 @@ HTTP 400 不能在读取 JSON 前直接丢弃响应；应保留安全的 `errno`
 
 `QuarkOpenClient.DownloadForAsync` 现在只调用批量端点并传入一个 FID；验证响应数组恰有一个文件，匹配名称、准确大小及可比较的 FID，拒绝目录、非 HTTPS/带凭据/片段地址。批量 API 请求省略 device_id、附带签名及当前会话 Bearer；刷新重试也更新 Bearer，匿名授权请求不带此头。
 
-授权直链解析完成后，`QuarkNativeDownload` 建立真实 `LoaderCombo<string>` / `LoaderDownload`，登记 `LoaderTaskbarAdd` 并自动打开原生任务管理页。百分比、字节数、速度及取消使用启动器原生下载跟踪，不另建 Web 下载进度。下载完成并按分享文件大小校验后，再衔接现有原生整合包导入器。
+授权直链解析完成后，`QuarkNativeDownload` 建立真实 `LoaderCombo<string>` / `LoaderDownload`，登记 `LoaderTaskbarAdd` 并自动打开原生任务管理页。百分比、字节数、速度及取消使用启动器原生下载跟踪，不另建 Web 下载进度。下载完成并按分享文件大小校验后，再衔接现有原生整合包导入器。导入前弹出实例名，默认是压缩包文件名（去掉路径和 `.zip`/`.mrpack`），用户可改；取消则不安装。不再使用 `mcmod-<百科ID>-<随机后缀>`。同名已有实例时默认名自动加 ` (2)`。任务标题里的实例名因此是这个文件夹名，例如 `Modrinth 整合包安装：【最新】Sword Strange Tales v2.1.11`。
+
+本机下载缓存是 `PCL-PackDownloads`，优先放在系统临时目录，空间不足时才改用 `I:\tmp-pcl`、`D:\pcl-cy\tmp` 或 `G:\download`。设置 → 启动显示这个路径和文件数，并可打开或一键清空；正在下载时拒绝清空。夸克网盘里的转存位置仍是根目录 `MOONCL`，只在设置中展示，清空不会删除网盘文件或已安装实例。
 
 `DownloadFile.RequestHeaders` 是每个文件独立的不可变快照；带授权头的文件走原生顺序通道，不执行缺少这些头的分段探测。专用 HTTP 客户端关闭 Cookie jar 和自动跳转，避免凭据串到其他文件；日志与异常不含签名 URL/令牌。普通无请求头下载保留原通道。取消使用永久标记和启动门闩，阻止完成覆盖取消和延迟子任务重启；等待下载线程退出、清理临时文件后才返回，因此取消不会继续安装。
 

@@ -8,7 +8,7 @@ CurseForge、Modrinth、MC百科、MCL 的列表状态合并为一条提示：�
 
 ## 分类标签
 
-分类下拉框按已选择的探索器与当前资源类型生成，选项标注来源（如 `CurseForge · Survival`、`Modrinth · 16x`）。选中某来源分类只筛选该来源，其他已启用来源保持当前未分类查询；帮助文字明确说明范围。分类请求、缓存、迟到响应按来源与资源类型隔离，列表缓存包含分类。取消来源或分类失效后清除无效选择并恢复查询。
+分类下拉框按已选择的探索器与当前资源类型生成，选项标注来源。常见英文分类显示为「中文 · 原文」（如 `CurseForge · 生存 · Survival`、`Modrinth · 冒险 · adventure`），筛选仍提交平台原文或编号。详情里的分类用同一对照表。没有对照的名称保持原文。
 
 - CurseForge：`/v1/categories?gameId=432&classId=...`。按资源 classId 筛选响应，排除根分类，列表请求传 `categoryId`。数据包/地图/光影/材质包的分类分别来自对应 classId。
 - Modrinth：`/v2/tag/category`。按 project_type 提取真实标签，保留材质分辨率、光影视觉等类别，排除加载器分组；数据包若无单独标签表则使用 API 提供的 mod 类别（与实际 datapack 查询兼容）。筛选增加独立 AND facet `categories:...`，不会替换资源类型约束。

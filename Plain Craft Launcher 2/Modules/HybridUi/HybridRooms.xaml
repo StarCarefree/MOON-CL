@@ -132,7 +132,7 @@
  </UserControl.Resources>
  <Grid x:Name="LobbyRoot" Background="#1B1D1F" Margin="0">
   <Grid x:Name="LobbyContent" Margin="18">
-   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <DockPanel Margin="0,0,0,12"><Button DockPanel.Dock="Right" Content="设置 / 工具" Style="{StaticResource Action}" Click="OpenSettings_Click" AutomationProperties.AutomationId="Rooms.OpenSettings"/><StackPanel Orientation="Horizontal"><TextBlock Text="MULTIPLAYER" Foreground="#D9BC75" FontWeight="Bold" FontSize="20"/><TextBlock x:Name="IdentitySummary" Margin="14,5,0,0" Foreground="#ADA99F" Text="联机大厅"/></StackPanel></DockPanel>
    <Grid Grid.Row="1" x:Name="HallPanel">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -266,7 +266,23 @@
               ToolTip="当前已验证的游戏接入地址" AutomationProperties.AutomationId="Rooms.Endpoint"/>
     </Grid>
    </Grid>
-   <Border Grid.Row="2" Background="#29271F" Padding="9" CornerRadius="5" Margin="0,10,0,0"><DockPanel><Button x:Name="CancelButton" Content="取消" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="Cancel_Click" Visibility="Collapsed" AutomationProperties.AutomationId="Rooms.Cancel"/><TextBlock x:Name="Status" Text="创建或加入房间，开始联机。" FontSize="11" MaxHeight="32" VerticalAlignment="Center" Foreground="#D9BC75" AutomationProperties.AutomationId="Rooms.Status" AutomationProperties.LiveSetting="Polite"/></DockPanel></Border>
+   <Border Grid.Row="2" Background="#25282B" CornerRadius="5" Padding="9" Margin="0,8,0,0">
+    <Expander x:Name="GameLinkPanel" Header="游戏联动 · 选服 / 切服 / 实时状态" Foreground="#D9BC75" IsExpanded="False"><StackPanel Margin="0,6,0,0">
+     <DockPanel>
+      <TextBlock Text="游戏联动" Foreground="#D9BC75" Margin="0,0,10,0" VerticalAlignment="Center"/>
+      <ComboBox x:Name="GameLinkClients" MinWidth="180" DisplayMemberPath="Label" SelectedValuePath="Id" SelectionChanged="GameLinkClient_Changed" AutomationProperties.AutomationId="Rooms.GameClients"/>
+     </DockPanel>
+     <WrapPanel Margin="0,5,0,0">
+      <TextBox x:Name="GameLinkAddress" MinWidth="175" MaxLength="255" ToolTip="服务器域名或 IP，可附带端口；IPv6 使用 [地址]:端口" AutomationProperties.AutomationId="Rooms.GameServer"/>
+      <Button Content="启动并进服" Style="{StaticResource Action}" Click="GameLinkLaunch_Click" AutomationProperties.AutomationId="Rooms.GameLaunch"/>
+      <Button x:Name="GameLinkConnect" Content="进入 / 切服" Style="{StaticResource Action}" Click="GameLinkConnect_Click" AutomationProperties.AutomationId="Rooms.GameConnect"/>
+      <Button x:Name="GameLinkRoom" Content="进入房间线路" Style="{StaticResource Action}" Click="GameLinkRoom_Click" AutomationProperties.AutomationId="Rooms.GameRoom"/>
+      <Button x:Name="GameLinkDisconnect" Content="断开游戏" Style="{StaticResource Action}" Click="GameLinkDisconnect_Click" AutomationProperties.AutomationId="Rooms.GameDisconnect"/>
+     </WrapPanel>
+     <TextBlock x:Name="GameLinkStatus" Text="尚无运行中的游戏；选择版本后可启动并进服。" Foreground="#ADA99F" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0" AutomationProperties.AutomationId="Rooms.GameStatus" AutomationProperties.LiveSetting="Polite"/>
+    </StackPanel></Expander>
+   </Border>
+   <Border Grid.Row="3" Background="#29271F" Padding="9" CornerRadius="5" Margin="0,10,0,0"><DockPanel><Button x:Name="CancelButton" Content="取消" DockPanel.Dock="Right" Style="{StaticResource Action}" Click="Cancel_Click" Visibility="Collapsed" AutomationProperties.AutomationId="Rooms.Cancel"/><TextBlock x:Name="Status" Text="创建或加入房间，开始联机。" FontSize="11" MaxHeight="32" VerticalAlignment="Center" Foreground="#D9BC75" AutomationProperties.AutomationId="Rooms.Status" AutomationProperties.LiveSetting="Polite"/></DockPanel></Border>
   </Grid>
   <Grid x:Name="Overlay" Visibility="Collapsed" Background="#17191B" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.AutomationId="Rooms.Overlay">
    <Border Style="{StaticResource Card}" x:Name="OverlayFrame" Margin="18" MaxWidth="690" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="16">

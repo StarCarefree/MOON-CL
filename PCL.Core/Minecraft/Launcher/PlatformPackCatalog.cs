@@ -28,6 +28,7 @@ public sealed record PlatformPack
     public string[] Authors { get; init; } = [];
     public string[] Categories { get; init; } = [];
     public string Version { get; init; } = "";
+    public int DownloadCount { get; init; }
 }
 public sealed record PlatformPackPage(string Source, int Page, int TotalPages, int TotalItems, IReadOnlyList<PlatformPack> Items);
 
@@ -133,18 +134,26 @@ public static class PlatformPackCatalog
         return new PlatformPack
         {
             Source = source, ProjectId = id, Slug = slug, ResourceType = resourceType, Name = PlainText(Str(item, cf ? "name" : "title"), 512),
-            Description = PlainText(Str(item, cf ? "summary" : "body", Str(item, "description")), 18000),
+            Description = DescriptionText(source, item, cf),
             Icon = SafeUrl(cf ? item["logo"]?["thumbnailUrl"]?.ToString() ?? item["logo"]?["url"]?.ToString() ?? "" : Str(item, "icon_url")),
             Website = SafeUrl(website),
             MinecraftVersions = Unique(gameValues.Where(s => Regex.IsMatch(s, @"^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?(?:[-a-zA-Z0-9.]+)?$"))),
             Loaders = Unique(loaderValues.Select(LoaderName)), Authors = Unique(authors),
             Categories = Unique(cf ? Array(item["categories"]).Select(c => c?["name"]?.ToString() ?? "") : Strings(item["categories"]).Where(s => LoaderName(s).Length == 0)),
-            Version = cf && newest is not null ? PlainText(Str(newest, "displayName"), 512) : ""
+            Version = cf && newest is not null ? PlainText(Str(newest, "displayName"), 512) : "",
+            DownloadCount = Count(item, cf ? "downloadCount" : "downloads")
         };
     }
     internal static IEnumerable<JsonNode?> Array(JsonNode? node) => node is JsonArray array ? array : [];
     internal static IEnumerable<string> Strings(JsonNode? node) => Array(node).OfType<JsonValue>().Select(n => n.TryGetValue<string>(out var s) ? s : "");
     internal static string Str(JsonObject node, string key, string fallback = "") => node[key] is JsonValue value && value.TryGetValue<string>(out var text) ? text : node[key] is JsonValue v && v.TryGetValue<int>(out var n) ? n.ToString() : fallback;
+    internal static int Count(JsonObject node, string key)
+    {
+        if (node[key] is not JsonValue value) return 0;
+        if (value.TryGetValue<int>(out var count)) return Math.Max(count, 0);
+        if (value.TryGetValue<long>(out var wide)) return wide <= 0 ? 0 : wide > int.MaxValue ? int.MaxValue : (int)wide;
+        return 0;
+    }
     internal static string[] Unique(IEnumerable<string> values) => values.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Take(256).ToArray();
     internal static string LoaderName(string value) => Loaders.TryGetValue(value, out var known) ? known.Name : value.ToLowerInvariant() switch
     {
@@ -157,6 +166,12 @@ public static class PlatformPackCatalog
         foreach (var script in doc.DocumentNode.Descendants().Where(n => n.Name is "script" or "style" or "noscript").ToArray()) script.Remove();
         var text = WebUtility.HtmlDecode(doc.DocumentNode.InnerText).Trim();
         return text.Length > limit ? text[..limit] : text;
+    }
+    private static string DescriptionText(string source, JsonObject item, bool cf)
+    {
+        var body = Str(item, cf ? "summary" : "body", Str(item, "description"));
+        if (!cf && body.Contains('\n')) return body.Length > 18000 ? body[..18000] : body;
+        return PlainText(body, 18000);
     }
 }
 

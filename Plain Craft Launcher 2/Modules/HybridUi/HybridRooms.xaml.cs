@@ -57,7 +57,7 @@ public partial class HybridRooms : UserControl, IDisposable
         _heartbeat = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _heartbeat.Tick += Heartbeat_Tick;
         _heartbeat.Start();
-        RenderMode(); Render();
+        RenderMode(); Render(); RefreshGameLink();
     }
 
     /// <summary>Called by the native shell even while the hall or another page is displayed.</summary>
@@ -454,6 +454,7 @@ public partial class HybridRooms : UserControl, IDisposable
     private async void Heartbeat_Tick(object? sender, EventArgs e)
     {
         if (_closed) return;
+        RefreshGameLink();
         RefreshEasyTierDownload();
         if (_refreshing || _session?.Room is null) return;
         var now = DateTime.UtcNow;

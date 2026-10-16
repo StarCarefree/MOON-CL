@@ -16,12 +16,13 @@ try {
  const pack=(source,id,slug,name)=>({id:`${source}-${id}`,source,projectId:id,slug,name,resourceType:'modpack',website:`https://${source==='curseforge'?'www.curseforge.com/minecraft/modpacks':'modrinth.com/modpack'}/${slug}`});
  const cf=pack('curseforge','123','real-pack','DEMO CF'), mr=pack('modrinth','abcd1234','other-pack','DEMO MR');
  const index={id:'mcl-demo',name:'DEMO MCL index row',version:'DEMO-1',minecraft:'1.21.1',author:'DEMO index author',loader:'NeoForge'};
+ const sre={id:'starrail-harpy-express',name:'SRE DEMO fixture',version:'DEMO',minecraft:'1.21.1',author:'DEMO author',loader:'NeoForge'};
  const snapshot=(presets=[index],config={})=>({type:'browse',launcher:{presets,selected:index.id,task:{},config}});
  const reply=(req,items,totalPages=3)=>send({type:'platformList',source:req.source,page:req.page,resourceType:req.resourceType||'modpack',requestId:req.requestId,totalPages,items});
  assert.equal(await page.locator('#source-mcl').isChecked(),true); assert.equal(await page.locator('#source-curseforge').isChecked(),true);
  assert.equal(await page.locator('#source-modrinth').isChecked(),false); assert.equal(await page.locator('#include-mcmod').isChecked(),true);
  assert.equal(await page.locator('.explorer-option input').first().getAttribute('id'),'source-mcl');
- await send(snapshot()); let cfReq=await last('curseforge'); await reply(cfReq,[cf]);
+ await send(snapshot([sre,index])); let cfReq=await last('curseforge'); await reply(cfReq,[cf]);
  assert.equal(await page.locator('#cards [data-pack-id]').nth(1).getAttribute('data-pack-id'),index.id);
  await page.locator('#source-modrinth').check(); let mrReq=await last('modrinth'); await reply(mrReq,[mr]);
  assert.equal(await page.locator('#source-curseforge').isChecked(),true); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),1);
@@ -93,13 +94,13 @@ try {
 
  await page.locator('#source-curseforge').uncheck();
  const url='https://catalog.example/index.json';
- await send(snapshot([index],{catalogUrls:[url],catalogUrl:url}));
+ await send(snapshot([sre,index],{catalogUrls:[url],catalogUrl:url}));
  assert.equal((await messages()).at(-1).operation,'refresh'); const refreshes=(await messages()).filter(m=>m.type==='launcher'&&m.operation==='refresh').length;
- await send(snapshot([index],{catalogUrls:[url],catalogUrl:url})); assert.equal((await messages()).filter(m=>m.type==='launcher'&&m.operation==='refresh').length,refreshes);
+ await send(snapshot([sre,index],{catalogUrls:[url],catalogUrl:url})); assert.equal((await messages()).filter(m=>m.type==='launcher'&&m.operation==='refresh').length,refreshes);
  const updated={...index,name:'DEMO actual refreshed index',version:'DEMO-2'};
- await send(snapshot([updated],{catalogUrls:[url],catalogUrl:url,catalogSource:url}));
+ await send(snapshot([sre,{...index,name:'DEMO actual refreshed index',version:'DEMO-2'}],{catalogUrls:[url],catalogUrl:url,catalogSource:url}));
  assert.match(await card(index.id).textContent(),/DEMO actual refreshed index/); assert.match(await page.locator('#mcl-message').textContent(),/catalog\.example/);
- assert.equal(await page.locator('#cards >button').first().getAttribute('data-pack-id'),'starrail-harpy-express');
+ assert.equal(await card(sre.id).count(),1);
  await page.locator('#source-mcl').uncheck(); assert.equal(await card(index.id).count(),0); assert.equal(await page.locator('#cards >button').count(),0);
  assert.equal(await page.locator('#cards >button').count(),0);
  await page.locator('#source-mcl').check(); assert.equal(await card(index.id).count(),1);

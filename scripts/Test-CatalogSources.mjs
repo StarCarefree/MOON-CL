@@ -67,7 +67,7 @@ try {
     return result.result.value;
   };
   const config = {catalogUrl:'https://legacy.example/index.json', quarkServiceUrl:''};
-  const snapshot = {type:'browse', launcher:{presets:[{id:'starrail-harpy-express',name:'测试整合包',version:'1.0'}],
+  const snapshot = {type:'browse', launcher:{presets:[{id:'mcl-demo',name:'目录整合包',version:'1.0'}],
     instances:[],selected:'starrail-harpy-express',task:{busy:false,phase:'就绪'},config}};
   await call('Runtime.enable'); await call('Page.enable');
   await call('Page.addScriptToEvaluateOnNewDocument', {source:`window.__messages=[]; window.__bridgeHandlers=[];

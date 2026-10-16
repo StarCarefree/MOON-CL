@@ -134,6 +134,7 @@ public partial class HybridSidebar : UserControl
         if (_synchronising || e.Handled) return;
         if (Versions.InputHitTest(e.GetPosition(Versions)) is not DependencyObject hit) return;
         if (ItemsControl.ContainerFromElement(Versions, hit) is not ListBoxItem { DataContext: VersionEntry entry }) return;
+        if (IsVersionGear(hit)) return;
         if (!ReferenceEquals(Versions.SelectedItem, entry)) return;
         NavigationRequested?.Invoke(this, new HybridNavigationEventArgs("instance", entry.Instance));
     }
@@ -142,7 +143,19 @@ public partial class HybridSidebar : UserControl
     {
         if (sender is not FrameworkElement { DataContext: VersionEntry entry }) return;
         e.Handled = true;
+        Versions.SelectedItem = entry;
         NavigationRequested?.Invoke(this, new HybridNavigationEventArgs("instanceSettings", entry.Instance));
+    }
+
+    private static bool IsVersionGear(DependencyObject? node)
+    {
+        var gear = Application.Current?.TryFindResource("Hybrid.VersionGear");
+        while (node is not null and not ListBoxItem)
+        {
+            if (node is FrameworkElement element && ReferenceEquals(element.Style, gear)) return true;
+            node = VisualTreeHelper.GetParent(node);
+        }
+        return false;
     }
 
     public void SetActive(string route)

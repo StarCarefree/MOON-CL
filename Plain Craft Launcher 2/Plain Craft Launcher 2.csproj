@@ -137,8 +137,21 @@
         <EmbeddedResource Include="Modules\WebUi\www\sre-cover.png">
             <LogicalName>PCL.WebUi.www.sre-cover.png</LogicalName>
         </EmbeddedResource>
+        <EmbeddedResource Include="Modules\WebUi\www\starcarefree-banner.png">
+            <LogicalName>PCL.WebUi.www.starcarefree-banner.png</LogicalName>
+        </EmbeddedResource>
     </ItemGroup>
     <ItemGroup>
+        <EmbeddedResource Include="..\tools\multiplayer-agent\build\mooncl-multiplayer-agent.jar">
+            <LogicalName>PCL.GameLink.agent.jar</LogicalName>
+        </EmbeddedResource>
         <Content Include="LICENCE" />
+    </ItemGroup>
+    <Target Name="BuildMultiplayerAgent" BeforeTargets="PrepareForBuild"
+            Inputs="@(GameLinkAgentSource)" Outputs="$(MSBuildProjectDirectory)\..\tools\multiplayer-agent\build\mooncl-multiplayer-agent.jar">
+        <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\tools\multiplayer-agent\build.ps1&quot;" />
+    </Target>
+    <ItemGroup>
+        <GameLinkAgentSource Include="..\tools\multiplayer-agent\src\**\*.java;..\tools\multiplayer-agent\MANIFEST.MF;..\tools\multiplayer-agent\build.ps1" />
     </ItemGroup>
 </Project>

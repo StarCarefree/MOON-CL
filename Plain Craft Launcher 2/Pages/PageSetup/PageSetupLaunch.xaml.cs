@@ -25,6 +25,7 @@ public partial class PageSetupLaunch
         // 重复加载部分
         PanBack.ScrollToHome();
         RefreshRam(false);
+        RefreshDownloadCache();
         if (ModInstanceList.McMcInstanceSelected is null)
             BtnSwitch.Visibility = Visibility.Collapsed;
         else
@@ -194,6 +195,45 @@ public partial class PageSetupLaunch
         ModInstanceList.McMcInstanceSelected.Load();
         PageInstanceLeft.McInstance = ModInstanceList.McMcInstanceSelected;
         ModMain.frmMain.PageChange(FormMain.PageType.InstanceSetup, FormMain.PageSubType.VersionSetup);
+    }
+
+    private void RefreshDownloadCache()
+    {
+        try
+        {
+            var path = LauncherLibrary.PackDownloadRoot();
+            var exists = Directory.Exists(path);
+            var count = exists ? Directory.EnumerateFileSystemEntries(path).Count() : 0;
+            LabDownloadCache.Text = Lang.Text("Setup.Launch.DownloadCache.Local", path, count);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LabDownloadCache.Text = Lang.Text("Setup.Launch.DownloadCache.Unavailable");
+        }
+        LabQuarkDrive.Text = Lang.Text("Setup.Launch.DownloadCache.Quark", LauncherLibrary.QuarkDriveFolder);
+    }
+
+    private void BtnOpenDownloadCache_Click(object sender, MouseButtonEventArgs e)
+    {
+        try
+        {
+            var path = LauncherLibrary.PackDownloadRoot();
+            Directory.CreateDirectory(path);
+            ModBase.OpenExplorer(path.TrimEnd('\\') + "\\");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            HintService.Hint(ex.Message, HintType.Error);
+        }
+    }
+
+    private void BtnClearDownloadCache_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (ModMain.MyMsgBox(Lang.Text("Setup.Launch.DownloadCache.Confirm"),
+                Lang.Text("Setup.Launch.DownloadCache.Clear"), "清空", "取消") != 1) return;
+        var ok = LauncherLibrary.TryClearDownloadCache(out var message);
+        HintService.Hint(message, ok ? HintType.Success : HintType.Error);
+        RefreshDownloadCache();
     }
 
     private void ComboAdvanceRenderer_OnSelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -3,7 +3,7 @@ using System.Windows.Media;
 
 namespace PCL;
 
-/// <summary>PCL CE page motion (opacity, slide, ease-out-back) for the hybrid shell.</summary>
+/// <summary>MOONCL page motion (opacity, slide, ease-out-back) for the hybrid shell.</summary>
 internal static class HybridMotion
 {
     public static void Rise(params FrameworkElement?[] elements)
@@ -159,7 +159,7 @@ internal static class HybridMotion
     }
 
     /// <summary>
-    /// PCL CE 列表项悬停：浮层从中心放大并淡入，离开时收回。底下的选中色不动。
+    /// MOONCL 列表项悬停：浮层从中心放大并淡入，离开时收回。底下的选中色不动。
     /// </summary>
     public static void Float(FrameworkElement surface, bool over, string name)
     {

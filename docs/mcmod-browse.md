@@ -6,9 +6,9 @@ MC百科现同时接入整合包和数据包；数据包使用独立 class 页�
 
 ## 使用
 
-- SRE（`starrail-harpy-express`）固定在列表首位，不随筛选隐藏。目录卡片点击后显示详情，包含实际可用的 MC 版本、整合包版本、加载器、作者、分类和来源。缺失字段显示“未提供”，不把 MC 版本当成整合包发布版本。
+- SRE（`starrail-harpy-express`）与其他 MCL 预设一样参与筛选，不再固定置顶，卡片也不再标注“测试整合包”。目录卡片点击后显示详情，包含实际可用的 MC 版本、整合包版本、加载器、作者、分类、来源和浏览量。预设若带有 `downloadUrl`（例如 Gitee Release）或 `shareUrl`（夸克分享），详情里直接列出对应链接：Gitee 由系统浏览器打开，夸克仍先选跳转或进入下载页。缺失字段显示“未提供”，不把 MC 版本当成整合包发布版本。百科列表页没有浏览量，卡片在详情返回后显示；详情读取「总浏览」的精确 `title`，不把「13.23万」这类展示文案反推成数字。
 - 默认启用 MCL、CurseForge 与 MC百科。搜索、资源类型、来源和筛选集中在同一面板；上方「来源发现」从当前来源及筛选结果生成，优先最近启用的来源，不再固定为本地预设。取消百科后隐藏百科条目，恢复公开平台的对应条目。精确关联去重及 MR 下载衔接说明见 [explorers.md](explorers.md)。
-- MC 版本、加载器、分类通过百科站点筛选后分页加载；名称/描述搜索仅作用于当前已加载条目。SRE 始终置顶且不参与筛选。
+- MC 版本、加载器、分类通过百科站点筛选后分页加载；名称/描述搜索仅作用于当前已加载条目，MCL 预设同样受这些筛选约束。
 - 卡片、推荐与详情的 MC 版本以数值排序后的跨度简写（例如 `1.16.5–1.21.1`），不表示区间内所有版本均兼容。预览/其他版本单列摘要，详情可展开完整列表；筛选仍使用精确版本。平台推荐的主按钮只打开详情，不代替用户选定文件或触发本地预设安装。
 - 百科详情存在 CurseForge 项目时，“选择版本并下载”优先进入对应原生文件列表；仅关联 Modrinth 时也保留原生下载入口，由玩家选择实际版本。
 - 无可识别 CF / Modrinth 项目时，保留作者网盘/项目等外链和手动下载提示；整合包可导入，数据包按作者说明放入存档。百科原页面始终可打开。
@@ -20,7 +20,7 @@ MC百科现同时接入整合包和数据包；数据包使用独立 class 页�
 `PCL.Core/Minecraft/Launcher/McmodCatalog.cs` 使用 HtmlAgilityPack 读取：
 
 - 列表：`https://www.mcmod.cn/modpack.html?page=N`，从 `modlist-block` 提取 ID、名称、英文名、简介、封面，从 `common-pages` 读取页数。
-- 详情：`https://www.mcmod.cn/modpack/{id}.html`，从 `class-title`、`class-info-left`、`class-category`、`text-area` 等区块提取资料。
+- 详情：`https://www.mcmod.cn/modpack/{id}.html`，从 `class-title`、`class-info-left`、`class-category`、`text-area` 等区块提取资料，并从 `.infos .span` 中标签为「总浏览」的 `title` 读取浏览量。
 - 筛选：`mcver`、`api`、`category`；加载器参数依照网页实际映射（Forge=1、Fabric=2、Quilt=3、NeoForge=7）。
 - 作者相关链接中的 `link.mcmod.cn/target/{Base64}` 本地解码，仅接收不含凭据的 HTTP(S) 地址。CurseForge 自动下载入口仅认可准确主机名和 `/minecraft/modpacks/{slug}` 路径，且必须是后端解析结果。
 

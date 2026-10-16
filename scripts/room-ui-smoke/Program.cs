@@ -161,6 +161,50 @@ internal static class Program
             Check(edge[3] == 0 && center[3] == 255, "Avatar input must retain its aspect ratio and transparent padding");
         }
     }
+    private static async Task AssertGameLinkPanel(HybridRooms view, string scratch, string screenshots)
+    {
+        var panel = Control<Expander>(view, "GameLinkPanel");
+        Check(!panel.IsExpanded, "Game link controls must not crowd compact room layouts by default");
+        panel.IsExpanded = true;
+        view.UpdateLayout();
+        Invoke(view, "RefreshGameLink");
+        Check(!ButtonById(view, "Rooms.GameConnect").IsEnabled, "Switch server must be disabled without an Agent");
+        Check(!ButtonById(view, "Rooms.GameRoom").IsEnabled, "Unverified room route must not be joinable");
+        AssertInViewport(view, ButtonById(view, "Rooms.GameLaunch"), "Game launch control");
+        var jar = Path.Combine(scratch, "agent-fixture.jar"); File.WriteAllText(jar, "test");
+        using var game = new PCL.Core.Minecraft.Launcher.GameLinkSession("模拟客户端");
+        var info = new ProcessStartInfo("java") { UseShellExecute = false };
+        game.Configure(info, jar);
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, int.Parse(info.Environment["MOONCL_LINK_PORT"]!));
+        using var writer = new StreamWriter(client.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+        using var reader = new StreamReader(client.GetStream(), Encoding.UTF8, leaveOpen: true);
+        await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["MOONCL_LINK_TOKEN"]);
+        Check(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)) == "OK", "Mock Agent authentication failed");
+        await writer.WriteLineAsync("STATE\t\tready\t\t");
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (game.State.State != "ready" && DateTime.UtcNow < deadline) await Task.Delay(20);
+        Invoke(view, "RefreshGameLink");
+        Check(Control<ComboBox>(view, "GameLinkClients").SelectedValue as string == game.Id, "Only running game should be selected automatically");
+        view.UpdateLayout();
+        Check(!Descendants(Control<ComboBox>(view, "GameLinkClients")).OfType<TextBlock>().Any(t => t.Text.Contains("GameLinkChoice")), "Game selector must show its label, not a record dump");
+        Control<TextBox>(view, "GameLinkAddress").Text = "play.example.com:25565";
+        Click(view, "Rooms.GameConnect");
+        var command = (await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)))!.Split('\t');
+        Check(command.Length == 3 && command[0] == "CONNECT" && Encoding.UTF8.GetString(Convert.FromBase64String(command[2])) == "play.example.com:25565", "Server switch was not delivered to the selected game");
+        await writer.WriteLineAsync("STATE\t" + command[1] + "\tconnected\t" + Convert.ToBase64String(Encoding.UTF8.GetBytes("play.example.com:25565")) + "\t");
+        deadline = DateTime.UtcNow.AddSeconds(3);
+        while (game.State.State != "connected" && DateTime.UtcNow < deadline) await Task.Delay(20);
+        Invoke(view, "RefreshGameLink");
+        Check(Control<TextBlock>(view, "GameLinkStatus").Text.Contains("已进入服务器") && Control<TextBlock>(view, "GameLinkStatus").Text.Contains("play.example.com:25565"), "Actual connected state is not displayed");
+        Screenshot(view, Path.Combine(screenshots, "multiplayer-game-link.png"));
+        Click(view, "Rooms.GameDisconnect");
+        Check((await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)))!.StartsWith("DISCONNECT\t"), "Disconnect command missing");
+        game.Dispose();
+        Invoke(view, "RefreshGameLink");
+        Check(!ButtonById(view, "Rooms.GameConnect").IsEnabled, "Ended game must no longer be controllable");
+        panel.IsExpanded = false;
+    }
     private static void Run(string[] args)
     {
         Directory.CreateDirectory(args[1]); Directory.CreateDirectory(args[2]);
@@ -182,6 +226,12 @@ internal static class Program
                 Screenshot(host, Path.Combine(args[2], "multiplayer-hall-compact.png"));
                 await ResizeViewport(window, host, 1080, 860);
                 AssertPrivate(host);
+                await AssertGameLinkPanel(host, args[1], args[2]);
+                if (args.Contains("--game-link-only"))
+                {
+                    Console.WriteLine("GAME_LINK_UI_PASS · " + _checks + " checks (isolated mock Agent; no real Minecraft)");
+                    return;
+                }
                 foreach (var entry in new[] { "Rooms.OpenCreate", "Rooms.OpenJoin" })
                 {
                     var card = ButtonById(host, entry);
@@ -419,7 +469,7 @@ internal static class Program
             catch (Exception ex)
             {
                 try { Screenshot((HybridRooms)window.Content, Path.Combine(args[2], "multiplayer-failure.png")); } catch { }
-                Console.Error.WriteLine(RoomServiceDirectory.FriendlyError(ex, false)); Console.Error.WriteLine(ex.StackTrace); Environment.ExitCode = 1;
+                Console.Error.WriteLine(ex); Environment.ExitCode = 1;
             }
             finally { host.Dispose(); guest.Dispose(); window.Close(); app.Shutdown(); }
         };

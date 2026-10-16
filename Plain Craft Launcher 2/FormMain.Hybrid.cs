@@ -208,8 +208,8 @@ public partial class FormMain
             if (e.Route == "instanceSettings" && e.Instance is not null)
             {
                 if (PanMsgBackground.Visibility == Visibility.Visible) return;
+                LauncherLibrary.SelectInstance(e.Instance);
                 OpenVersionSettings(e.Instance);
-                UpdateHybridShell();
                 return;
             }
             await NavigateHybridAsync(e.Route);
@@ -257,7 +257,11 @@ public partial class FormMain
         _webUi.Hide();
         instance.Load();
         PageInstanceLeft.McInstance = instance;
-        if (!File.Exists(Path.Combine(instance.PathInstance, ".pclignore"))) PageChange(PageType.InstanceSetup);
+        if (File.Exists(Path.Combine(instance.PathInstance, ".pclignore"))) return;
+        var left = ModMain.frmInstanceLeft ??= new PageInstanceLeft();
+        left.pageID = PageSubType.Default;
+        PageChange(PageType.InstanceSetup, PageSubType.VersionSetup);
+        ModBase.RunInUi(() => ModMain.frmInstanceSetup?.Reload(), true);
     }
 
     internal JsonObject HybridStatus()

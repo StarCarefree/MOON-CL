@@ -21,7 +21,7 @@ try{
  assert.equal(await page.locator('#cards [data-pack-id="starrail-harpy-express"]').count(),0);
  await page.locator('#cards [data-pack-id="curseforge-123"]').click();req=await last('detail');assert.equal(req.resourceType,'plugin');
  await send({type:'platformDetail',source:'curseforge',resourceType:'plugin',id:'123',requestId:req.requestId,item});
- assert.match(await page.locator('#detail-guidance').textContent(),/plugins/);assert.match(await page.locator('#detail-guidance').textContent(),/PCL CE/);
+ assert.match(await page.locator('#detail-guidance').textContent(),/plugins/);assert.match(await page.locator('#detail-guidance').textContent(),/MOONCL/);
  assert.equal(await page.locator('#detail-import').isVisible(),false);assert.equal(await page.locator('#detail-download').isVisible(),true);
  await page.locator('#detail-download').click();req=await last('download');assert.equal(req.resourceType,'plugin');assert.equal(req.id,'123');assert.equal(req.source,'curseforge');
  await page.keyboard.press('Escape');await page.locator('#type-modpack').click();assert.equal(await page.locator('#type-modpack').getAttribute('aria-selected'),'true');

@@ -38,13 +38,6 @@
                     </Grid>
                 </Grid>
             </Border>
-            <Border x:Name="NativeHintCard" Background="#1A1C20" BorderBrush="#303237" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,0,0,22">
-                <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel VerticalAlignment="Center"><TextBlock Text="{DynamicResource Hybrid.NativeHintTitle}" Foreground="{StaticResource Hybrid.Text}" FontSize="14" FontWeight="SemiBold" /><TextBlock Text="{DynamicResource Hybrid.NativeHintDetail}" Foreground="{StaticResource Hybrid.Muted}" FontSize="12" LineHeight="20" TextWrapping="Wrap" Margin="0,6,22,0" MaxWidth="720" HorizontalAlignment="Left" /></StackPanel>
-                    <Button Grid.Column="1" Click="NativeBrowse_Click" Content="{DynamicResource Hybrid.Browse}" Style="{StaticResource Hybrid.QuietButton}" Foreground="{StaticResource Hybrid.Accent}" VerticalAlignment="Center" />
-                </Grid>
-            </Border>
             <StackPanel x:Name="PanCustom" Margin="0,0,0,6" />
             <local:MyCard Margin="0,0,0,16" Title="{DynamicResource Launch.Right.CommunityHint.Title}" x:Name="PanHint">
                 <local:MyIconButton SvgIcon="lucide/x" Height="20" Width="20" Margin="10" HorizontalAlignment="Right" VerticalAlignment="Top" x:Name="BtnHintClose" Click="BtnHintClose_Click" />

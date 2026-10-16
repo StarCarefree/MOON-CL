@@ -30,7 +30,7 @@ public sealed class McmodCatalogTest
         <li class="author"><span class="avatar"><a><img></a></span><span class="member"><span class="name"><a>Tonywww</a></span></span></li>
         <div class="common-link-frame"><ul>
         """ + links + """
-        </ul></div></div><li class="text-area common-text" data-id="1"><p>正文 &amp; 介绍</p><script>alert('bad')</script><p>第二段</p></li>
+        </ul></div></div><div class="infos"><div title="132329" class="span"><p class="n">13.23万</p><p class="t">总浏览</p></div><div title="9" class="span"><p class="n">9</p><p class="t">教程</p></div></div><li class="text-area common-text" data-id="1"><p>正文 &amp; 介绍</p><script>alert('bad')</script><p>第二段</p></li>
         """;
     private static string Link(string url, string name) => $"<li><a href='//link.mcmod.cn/target/{Convert.ToBase64String(Encoding.UTF8.GetBytes(url))}'></a><span class='name'>{name}</span></li>";
 
@@ -55,6 +55,7 @@ public sealed class McmodCatalogTest
         CollectionAssert.AreEqual(new[] { "Tonywww" }, pack.Authors);
         CollectionAssert.AreEqual(new[] { "科技", "冒险" }, pack.Categories);
         Assert.AreEqual("", pack.Version); Assert.IsFalse(pack.Description.Contains("alert"));
+        Assert.AreEqual(132329, pack.Views);
         Assert.AreEqual(2, pack.Links.Length);
     }
 

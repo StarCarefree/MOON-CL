@@ -1,10 +1,10 @@
 {
-  "name": "Plain Craft Launcher Community Edition",
+  "name": "MOONCL",
   "version": {
     "base": "2.15.1",
     "upstream": "2.12.1",
-    "suffix": "beta.5",
-    "code": 527
+    "suffix": "beta.6",
+    "code": 528
   },
   "licenses": [
     {

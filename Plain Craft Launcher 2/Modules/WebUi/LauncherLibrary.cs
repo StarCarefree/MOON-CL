@@ -8,6 +8,7 @@ using PCL.Core.Minecraft.Launcher;
 using PCL.Core.Minecraft.Profile;
 using PCL.Core.Minecraft.Profile.Models;
 
+using PCL.Core.Utils.Validate;
 namespace PCL;
 
 /// <summary>UI-thread owned coordinator; native launcher remains the installer/login/launch authority.</summary>
@@ -76,6 +77,7 @@ internal sealed class LauncherLibrary : IDisposable
     private string _selected = PackCatalog.StarRailId;
     private string _phase = "就绪";
     private string _error = "";
+    private JsonObject? _presetQuarkReply;
     private string _taskScope = "library";
     private bool _selectCreatedInstance;
     private double _progress;
@@ -124,6 +126,7 @@ internal sealed class LauncherLibrary : IDisposable
         foreach (var instance in Instances())
             instances.Add(new JsonObject { ["id"] = "instance:" + instance.Name, ["name"] = instance.Name,
                 ["version"] = instance.Desc, ["minecraft"] = instance.Info.VanillaName ?? "",
+                ["vanilla"] = IsVanilla(instance),
                 ["selected"] = _selected == "instance:" + instance.Name });
         var presets = new JsonArray();
         foreach (var pack in _packs)
@@ -136,7 +139,9 @@ internal sealed class LauncherLibrary : IDisposable
                 ["author"] = pack.Author, ["loader"] = pack.Loader,
                 ["updateVersion"] = _updates.TryGetValue(pack.Id, out var update) ? update.Version : "",
                 ["installedVersion"] = installed.Version ?? "", ["minecraft"] = pack.Minecraft,
-                ["icon"] = pack.Icon, ["background"] = pack.Background, ["installed"] = installed.Instance is not null,
+                ["icon"] = pack.Icon, ["background"] = pack.Background,
+                ["downloadUrl"] = pack.DownloadUrl, ["shareUrl"] = pack.ShareUrl,
+                ["installed"] = installed.Instance is not null,
                 ["updateAvailable"] = _updates.ContainsKey(pack.Id)
             });
         }
@@ -377,6 +382,7 @@ internal sealed class LauncherLibrary : IDisposable
         if (operation == "login") { form.ShowHybridAccount(); return; }
         if (operation == "directory") { form.PageChange(FormMain.PageType.InstanceSelect); return; }
         if (operation == "import") { ModModpack.ModpackInstall(); return; }
+        if (operation is "quarkList" or "quarkDownload") { await HandlePresetQuarkAsync(message, operation); return; }
         if (operation == "configure")
         {
             string[]? sources = null;
@@ -733,11 +739,13 @@ internal sealed class LauncherLibrary : IDisposable
         return "夸克 CDN 拒绝了匿名直链（HTTP 412）。该文件超过访客通道大小限制，不能直接下载。";
     }
 
-    private static string PackDownloadTemp()
+    internal const string DownloadCacheName = "PCL-PackDownloads";
+
+    internal static string PackDownloadRoot()
     {
         const long needed = 256L * 1024 * 1024;
         var system = Path.GetTempPath();
-        if (HasRoom(system, needed)) return system;
+        if (HasRoom(system, needed)) return Path.Combine(system, DownloadCacheName);
         foreach (var candidate in new[] { @"I:\tmp-pcl", @"D:\pcl-cy\tmp", @"G:\download" })
         {
             try
@@ -745,11 +753,44 @@ internal sealed class LauncherLibrary : IDisposable
                 var root = Path.GetPathRoot(candidate);
                 if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
                 Directory.CreateDirectory(candidate);
-                if (HasRoom(candidate, needed)) return candidate;
+                if (HasRoom(candidate, needed)) return Path.Combine(candidate, DownloadCacheName);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
         throw new IOException("临时盘空间不足，已停止下载，没有写入整合包。");
+    }
+
+
+    internal static string QuarkDriveFolder => "夸克网盘根目录 / MOONCL";
+
+    internal static bool TryClearDownloadCache(out string message)
+    {
+        if (PackWorkInProgress)
+        {
+            message = "正在下载或安装，不能清空缓存。";
+            return false;
+        }
+        var removed = 0;
+        var blocked = 0;
+        foreach (var root in new[] { Path.GetTempPath(), @"I:\tmp-pcl", @"D:\pcl-cy\tmp", @"G:\download" })
+        {
+            var cache = Path.Combine(root, DownloadCacheName);
+            if (!Directory.Exists(cache)) continue;
+            try
+            {
+                var count = Directory.EnumerateFileSystemEntries(cache).Count();
+                Directory.Delete(cache, true);
+                removed += count;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                blocked++;
+            }
+        }
+        message = blocked > 0
+            ? "部分下载缓存正在使用，已清空 " + removed + " 项。"
+            : removed == 0 ? "下载缓存已经是空的。" : "已清空 " + removed + " 项下载缓存。";
+        return blocked == 0;
     }
 
     private static bool HasRoom(string path, long bytes)
@@ -769,12 +810,12 @@ internal sealed class LauncherLibrary : IDisposable
     {
         var folder = ModFolder.mcFolderSelected;
         if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) throw new InvalidOperationException("请先在底部选择游戏目录。");
-        var instanceName = pack.Id + "-" + Guid.NewGuid().ToString("N")[..6];
-        var target = Path.Combine(folder, "versions", instanceName);
+        var versions = Path.Combine(folder, "versions");
         var archive = pack.LocalArchive;
         var version = pack.Version;
-        var temp = Path.Combine(PackDownloadTemp(), "PCL-PackDownloads", Guid.NewGuid().ToString("N"));
+        var temp = Path.Combine(PackDownloadRoot(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
+        string instanceName = "";
         try
         {
             if (quark || string.IsNullOrEmpty(archive) || !File.Exists(archive))
@@ -824,6 +865,11 @@ internal sealed class LauncherLibrary : IDisposable
             }
             token.ThrowIfCancellationRequested();
             if (ModFolder.mcFolderSelected != folder) throw new InvalidOperationException("游戏目录已改变，请重新安装。");
+            var suggested = PackCatalog.InstanceFolderName(string.IsNullOrWhiteSpace(archive) ? pack.FileName : Path.GetFileName(archive), versions);
+            instanceName = ModMain.MyMsgBoxInput("整合包实例名称", "默认使用下载的压缩包名称，可自行修改。", suggested,
+                [new FolderNameValidator(versions)]) ?? "";
+            if (string.IsNullOrWhiteSpace(instanceName)) throw new ModBase.CancelledException();
+            var target = Path.Combine(versions, instanceName);
             var metadata = await Task.Run(() => PackArchive.ReadMetadata(archive), token);
             if (!string.IsNullOrWhiteSpace(metadata?.Version)) version = metadata.Version;
             _phase = "调用启动器导入整合包";
@@ -843,6 +889,31 @@ internal sealed class LauncherLibrary : IDisposable
             SelectInstance(instance); _selected = _selectCreatedInstance ? "instance:" + instance.Name : pack.Id; _progress = 1; _phase = "安装完成";
         }
         finally { try { Directory.Delete(temp, true); } catch (IOException) { } }
+    }
+    internal JsonObject? TakePresetQuarkReply() { var reply = _presetQuarkReply; _presetQuarkReply = null; return reply; }
+    private async Task HandlePresetQuarkAsync(JsonObject message, string operation)
+    {
+        var id = message["id"]?.GetValue<string>() ?? "";
+        var shareId = message["shareId"]?.GetValue<string>() ?? "";
+        var path = message["path"]?.GetValue<string>() ?? "";
+        var requestId = message["requestId"]?.GetValue<string>() ?? "";
+        var pack = _packs.FirstOrDefault(item => item.Id == id);
+        var shareUrl = pack is not null ? QuarkClientLaunch.MatchShare([pack.ShareUrl], shareId) : null;
+        if (pack is null || shareUrl is null) throw new InvalidDataException("这个预设没有对应的夸克分享，没有读取网盘。");
+        if (path.Length > 4096) throw new InvalidDataException("夸克目录无效，没有读取网盘。");
+        if (operation == "quarkList")
+        {
+            var listing = await new QuarkPackClient(_http).ListAsync(shareUrl, path, CancellationToken.None);
+            _presetQuarkReply = new JsonObject
+            {
+                ["type"] = "quarkVersions", ["id"] = 1, ["shareId"] = shareId, ["requestId"] = requestId,
+                ["path"] = listing.Path, ["truncated"] = listing.Truncated,
+                ["entries"] = new JsonArray(listing.Entries.Select(entry => new JsonObject { ["name"] = entry.Name, ["path"] = entry.Path, ["directory"] = entry.Directory, ["size"] = entry.Size }).ToArray())
+            };
+            return;
+        }
+        var started = await InstallBrowseQuarkAsync(1, pack.Name, shareUrl, path);
+        _presetQuarkReply = new JsonObject { ["type"] = "quarkDownload", ["id"] = id, ["shareId"] = shareId, ["requestId"] = requestId, ["accepted"] = started };
     }
 
     internal async Task<bool> InstallBrowseQuarkAsync(int wikiId, string name, string shareUrl, string sharePath)

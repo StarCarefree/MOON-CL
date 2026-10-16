@@ -33,6 +33,7 @@ public sealed record McmodPack
     public string CurseForgeUrl { get; init; } = "";
     public string ModrinthUrl { get; init; } = "";
     public McmodLink[] Links { get; init; } = [];
+    public int Views { get; init; }
 }
 public sealed record McmodCategory(string Id, string Name);
 public sealed record McmodPage(int Page, int TotalPages, IReadOnlyList<McmodPack> Items)
@@ -252,6 +253,14 @@ public sealed class McmodCatalog(HttpClient http)
         var authors = ByClass(info, "author").SelectMany(n => ByClass(n, "member"))
             .SelectMany(n => ByClass(n, "name")).Select(Text);
         var desc = ByClass(root, "text-area").FirstOrDefault(n => n.GetAttributeValue("data-id", "") == "1");
+        var views = 0;
+        foreach (var span in ByClass(root, "infos").SelectMany(n => ByClass(n, "span")))
+        {
+            if (Text(ByClass(span, "t").FirstOrDefault()) != "总浏览") continue;
+            var raw = span.GetAttributeValue("title", "");
+            if (int.TryParse(raw, out var exact) && exact > 0) views = exact;
+            break;
+        }
         return new McmodPack
         {
             WikiId = id, ResourceType = resourceType, Name = string.Join(" ", new[] { Text(ByClass(title, "short-name").FirstOrDefault()), name }.Where(s => s.Length > 0)),
@@ -261,7 +270,8 @@ public sealed class McmodCatalog(HttpClient http)
             MinecraftVersions = Unique(versions), Loaders = resourceType == "datapack" ? ["数据包"] : Unique(loaders), Authors = Unique(authors),
             Categories = Unique(ByClass(root, "class-category").SelectMany(n => n.Descendants("a")).Select(Text)),
             CurseForgeUrl = links.Select(l => l.Url).FirstOrDefault(url => IsCurseForgeResource(url, resourceType)) ?? "",
-            ModrinthUrl = links.Select(l => l.Url).FirstOrDefault(url => IsModrinthResource(url, resourceType)) ?? "", Links = links.Take(32).ToArray()
+            ModrinthUrl = links.Select(l => l.Url).FirstOrDefault(url => IsModrinthResource(url, resourceType)) ?? "", Links = links.Take(32).ToArray(),
+            Views = views
         };
     }
 

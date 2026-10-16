@@ -1740,6 +1740,7 @@ public static partial class ModLaunch
             : currentLaunchOptions.ServerIp;
         if (string.IsNullOrWhiteSpace(worldName) && !string.IsNullOrWhiteSpace(server))
         {
+            PCL.Core.Minecraft.Launcher.GameLinkSession.ValidateAddress(server);
             if (LaunchingInstance.releaseTime > new DateTime(2023, 4, 4))
             {
                 // QuickPlay
@@ -1748,12 +1749,8 @@ public static partial class ModLaunch
             else
             {
                 // 老版本
-                if (server.Contains(":"))
-                    // 包含端口号
-                    finalArguments += " --server " + server.Split(":")[0] + " --port " + server.Split(":")[1];
-                else
-                    // 不包含端口号
-                    finalArguments += " --server " + server + " --port 25565";
+                var endpoint = new Uri("tcp://" + server);
+                finalArguments += $" --server \"{endpoint.DnsSafeHost}\" --port {(endpoint.Port < 0 ? 25565 : endpoint.Port)}";
                 if (LaunchingInstance.Info.HasOptiFine)
                     HintService.Hint(Lang.Text("Minecraft.Launch.Error.OptiFineAutoJoinWarning"), HintType.Error);
             }
@@ -2208,7 +2205,7 @@ public static partial class ModLaunch
         gameArguments.Add("${natives_directory}", ModBase.ShortenPath(GetNativesFolder()));
         gameArguments.Add("${library_directory}", ModBase.ShortenPath(ModFolder.mcFolderSelected + "libraries"));
         gameArguments.Add("${libraries_directory}", ModBase.ShortenPath(ModFolder.mcFolderSelected + "libraries"));
-        gameArguments.Add("${launcher_name}", "PCLCE");
+        gameArguments.Add("${launcher_name}", "MOONCL");
         gameArguments.Add("${launcher_version}", ModBase.versionCode.ToString());
         gameArguments.Add("${version_name}", instance.Name);
         var argumentInfo = Config.Instance.TypeInfo[LaunchingInstance?.PathInstance];
@@ -2837,10 +2834,22 @@ public static partial class ModLaunch
         startInfo.CreateNoWindow = noJavaw;
         startInfo.Arguments = mcLaunchArgument;
         _launchSession.Value?.Presentation?.PrepareProcess(startInfo, false);
+        var gameLink = GameLinkLaunch.Prepare(startInfo, LaunchingInstance);
         gameProcess.StartInfo = startInfo;
 
         // 开始进程
-        gameProcess.Start();
+        try
+        {
+            if (loader.IsAborted) { gameLink?.Dispose(); return; }
+            gameProcess.Start();
+        }
+        catch { gameLink?.Dispose(); throw; }
+        try { gameLink?.Attach(gameProcess); }
+        catch (Exception ex)
+        {
+            gameLink?.Dispose();
+            ModBase.Log("[GameLink] 进程已启动，但联机会话绑定失败：" + ex.Message);
+        }
         McLaunchLog("已启动游戏进程：" + startInfo.FileName);
         if (loader.IsAborted)
         {

@@ -278,4 +278,36 @@ public static class PackCatalog
         }
         return target;
     }
+
+    /// <summary>Default instance folder from a downloaded archive name. Illegal characters become fullwidth; collisions get " (2)".</summary>
+    public static string InstanceFolderName(string fileName, string? parentFolder = null)
+    {
+        var stem = Path.GetFileNameWithoutExtension(fileName ?? "");
+        var builder = new System.Text.StringBuilder(stem.Length);
+        foreach (var ch in stem)
+        {
+            if (ch < ' ' || Array.IndexOf(Path.GetInvalidFileNameChars(), ch) >= 0) builder.Append(Fullwidth(ch));
+            else builder.Append(ch);
+        }
+        var name = builder.ToString().Trim().TrimEnd('.');
+        if (name.Length == 0) name = "整合包";
+        if (name.Length > 80) name = name[..80].TrimEnd().TrimEnd('.');
+        if (name.Length == 0) name = "整合包";
+        if (string.IsNullOrEmpty(parentFolder) || !Directory.Exists(parentFolder)) return name;
+        var taken = new HashSet<string>(Directory.EnumerateDirectories(parentFolder).Select(Path.GetFileName)!, StringComparer.OrdinalIgnoreCase);
+        if (!taken.Contains(name)) return name;
+        for (var n = 2; n < 1000; n++)
+        {
+            var suffix = " (" + n + ")";
+            var candidate = (name.Length + suffix.Length <= 80 ? name : name[..(80 - suffix.Length)].TrimEnd().TrimEnd('.')) + suffix;
+            if (!taken.Contains(candidate)) return candidate;
+        }
+        throw new InvalidOperationException("已有过多同名实例，请手动填写名称。");
+    }
+
+    private static char Fullwidth(char ch) => ch switch
+    {
+        '\\' => '＼', '/' => '／', '|' => '｜', ':' => '：', '<' => '＜', '>' => '＞', '*' => '＊', '?' => '？', '"' => '＂',
+        _ => '＿'
+    };
 }

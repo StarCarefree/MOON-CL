@@ -12,7 +12,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 const errors = [];
 const url = new URL('./index.html', import.meta.url).href;
-const sre = { id: 'starrail-harpy-express', name: 'SRE DEMO fixture', minecraft: '1.21.1', version: 'DEMO-4', loader: 'NeoForge', author: 'DEMO author', description: 'DEMO built-in pack', installed: false };
+const sre = { id: 'starrail-harpy-express', name: 'SRE DEMO fixture', minecraft: '1.21.1', version: 'DEMO-4', loader: 'NeoForge', author: 'DEMO author', description: 'DEMO built-in pack', installed: false, downloadUrl: 'https://gitee.com/starrailexpress/starrailexpress/releases/download/modpack/DEMO.zip', shareUrl: 'https://pan.quark.cn/s/demodemo' };
 const native = { id: 'native-demo', name: 'Native DEMO fixture', minecraft: '1.19.2', loader: 'Fabric', author: 'Native DEMO author', version: 'DEMO-2' };
 const remote = (id, extra = {}) => ({ id: `mcmod-${id}`, wikiId: id, source: 'mcmod', name: `DEMO encyclopedia pack ${id}`, englishName: 'DEMO fixture', description: 'DEMO plain description', minecraftVersions: ['1.20.1'], loaders: ['Forge'], categories: ['科技'], website: `https://www.mcmod.cn/modpack/${id}.html`, ...extra });
 const snapshot = (extra = {}) => ({ type: 'browse', launcher: { presets: [native, sre], selected: sre.id, config: {}, task: {}, ...extra } });
@@ -64,16 +64,12 @@ async function checkLayout(page) {
 }
 try {
   const offline = await setup(false);
-  assert.equal(await card(offline, sre.id).count(), 1);
+  assert.equal(await card(offline, sre.id).count(), 0);
   assert.equal(await offline.locator('#primary').isDisabled(), true);
-  assert.equal(await offline.locator('#meta-ver').textContent(), '未提供');
-  await card(offline, sre.id).click();
-  assert.equal(await offline.locator('#pack-detail').evaluate(node => node.open), true);
-  assert.equal(await offline.locator('#detail-authors').textContent(), '未提供');
-  await offline.keyboard.press('Escape');
+  assert.equal(await offline.locator('#pack-name').textContent(), 'StarRailHarpyExpress');
   await checkLayout(offline);
   await offline.close();
-  console.log('PASS offline preview: unknown metadata, no fake install/download');
+  console.log('PASS offline preview: no injected test pack, no fake install/download');
 
   const page = await setup();
   assert.deepEqual(await messages(page), [{ type: 'bootstrap' }]);
@@ -85,15 +81,15 @@ try {
   await send(page, snapshot());
   assert.equal((await messages(page)).filter(m => m.type === 'mcmod').length, 1);
   await send(page, { type: 'mcmodList', page: 1, totalPages: 700, items: [remote(1426), remote(1427, { loaders: ['Fabric'], categories: ['冒险'], minecraftVersions: ['1.19.2'] })] });
-  assert.equal(await page.locator('#cards > button').first().getAttribute('data-pack-id'), sre.id);
+  assert.equal(await card(page, sre.id).count(), 1);
   assert.match(await page.locator('#page-label').textContent(), /500/);
-  console.log('PASS live-only bounded initial page; no duplicate polling requests; SRE pinned');
+  console.log('PASS live-only bounded initial page; no duplicate polling requests; SRE is a normal preset');
 
   assert.deepEqual(await page.locator('#filter-loader option').evaluateAll(nodes => nodes.slice(1).map(n => n.value)), ['Forge', 'Fabric', 'Quilt', 'NeoForge', 'LiteLoader', 'Rift', '数据包', '行为包']);
   assert.deepEqual(await page.locator('#filter-category option').evaluateAll(nodes => nodes.slice(1).map(n => [n.value, n.textContent])), ['科技','魔法','冒险','建筑','地图','任务','硬核','休闲','大型','轻量','剧情','水槽','空岛','PvP','国创'].map((name, i) => [String(i + 1), name]));
   for (const version of ['1.21.1', '1.20.1', '1.19.2', '1.18.2', '1.16.5', '1.12.2']) assert.equal(await page.locator(`#filter-mc option[value="${version}"]`).count(), 1);
   await page.locator('#filter-loader').selectOption('Forge');
-  assert.equal(await page.locator('#cards > button').count(), 1); // old filter results cleared
+  assert.equal(await page.locator('#cards > button').count(), 0); // old filter results cleared
   assert.deepEqual(listPayload((await messages(page)).at(-1)), { type: 'mcmod', operation: 'list', page: 1, loader: 'Forge' });
   await page.locator('#filter-mc').selectOption('1.20.1');
   await page.locator('#filter-category').selectOption('1');
@@ -102,7 +98,7 @@ try {
   await send(page, { type: 'mcmodList', page: 1, totalPages: 2, items: [remote(1426, { minecraftVersions: [], loaders: [], categories: [] })] });
   assert.equal(await card(page, 'mcmod-1426').count(), 1);
   await page.locator('#search').fill('no-demo-match');
-  assert.equal(await page.locator('#cards > button').count(), 1);
+  assert.equal(await page.locator('#cards > button').count(), 0);
   assert.equal(await page.locator('#empty').isVisible(), true);
   await page.locator('#search').evaluate(node => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true })));
   assert.equal(await page.locator('#search').inputValue(), 'no-demo-match');
@@ -125,6 +121,11 @@ try {
   assert.equal(await page.locator('#detail-version').textContent(), 'DEMO actual release');
   assert.equal(await page.locator('#detail-authors').textContent(), 'DEMO writer');
   assert.equal(await page.locator('#detail-mc').textContent(), '1.20.1');
+  assert.equal(await page.locator('#detail-stat-wrap').isHidden(), true);
+  await send(page, { type: 'mcmodDetail', item: remote(1426, { views: 132329 }) });
+  assert.equal(await page.locator('#detail-stat-label').textContent(), '浏览量');
+  assert.equal(await page.locator('#detail-stat').textContent(), '13.2万 浏览');
+  assert.equal(await card(page, 'mcmod-1426').locator('.card-stat').textContent(), '13.2万 浏览');
   assert.equal(await page.locator('#detail-loader').textContent(), 'Forge');
   await page.locator('#detail-download').click();
   assert.deepEqual((await messages(page)).at(-1), { type: 'mcmod', operation: 'download', id: 1426 });
@@ -212,6 +213,17 @@ try {
   assert.equal(await page.locator('#detail-authors').textContent(), native.author);
   assert.equal(await page.locator('#detail-loader').textContent(), native.loader);
   assert.deepEqual((await messages(page)).at(-1), { type: 'launcher', operation: 'select', id: native.id });
+  await page.locator('#close-detail').click();
+  await card(page, sre.id).click();
+  const links = page.locator('#detail-links button');
+  assert.equal(await links.count(), 2);
+  assert.equal(await links.nth(0).textContent(), 'Gitee 下载 ↗');
+  assert.equal(await links.nth(1).textContent(), '夸克网盘');
+  await links.nth(0).click();
+  assert.deepEqual((await messages(page)).at(-1), { type: 'openExternal', url: sre.downloadUrl });
+  await links.nth(1).click();
+  assert.equal(await page.locator('#quark-choice').evaluate(node => node.open), true);
+  await page.locator('#quark-choice-cancel').click();
   await page.locator('#close-detail').click();
   await send(page, snapshot());
   await page.locator('#open-services').click();

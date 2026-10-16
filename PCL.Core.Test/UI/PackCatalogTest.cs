@@ -84,4 +84,20 @@ public sealed class PackCatalogTest
         Assert.AreEqual(PackCatalog.FabulouslyOptimizedUrl, document.Servers[0].Packs[0].Modrinth);
         Assert.ThrowsExactly<InvalidDataException>(() => PackCatalog.ParseDocument("""{"servers":[{"id":"bad","name":"Bad","address":"javascript:alert(1)","minecraft":"1.21.1"}]}""", new Uri("https://example.com/index.json")));
     }
+
+    [TestMethod]
+    public void InstanceNameUsesArchiveStemAndAvoidsCollisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pcl-instance-name-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "【最新】Sword Strange Tales v2.1.11"));
+        try
+        {
+            Assert.AreEqual("【最新】Sword Strange Tales v2.1.11 (2)", PackCatalog.InstanceFolderName("【最新】Sword Strange Tales v2.1.11.zip", root));
+            Assert.AreEqual("公开版（不含地图）StarRailHarpyExpress V4.4.0-beta1",
+                PackCatalog.InstanceFolderName("SRE哈比列车/4.4.0/公开版（不含地图）StarRailHarpyExpress V4.4.0-beta1.mrpack", root));
+            Assert.AreEqual("pack：name", PackCatalog.InstanceFolderName("pack:name.zip", root));
+            Assert.AreEqual("整合包", PackCatalog.InstanceFolderName(".zip", root));
+        }
+        finally { Directory.Delete(root, true); }
+    }
 }

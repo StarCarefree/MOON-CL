@@ -36,7 +36,7 @@ const COPY = {
     connection: { offline: "静态预览 · 未连接本地启动器", connecting: "正在连接启动器", live: "已连接本地启动器", lost: "连接失效" },
     search: "搜索", placeholder: "名称、作者、版本或关键词", refresh: "刷新资源", services: "服务配置",
     recommend: "MCL 整合包", recommendNote: "远端 index.json 目录与内置测试包", catalog: "探索整合包",
-    test: "SRE · 测试整合包", catalogBadge: "目录整合包", offlineState: "离线 · 安装状态未知",
+    test: "SRE", catalogBadge: "目录整合包", offlineState: "离线 · 安装状态未知",
     notInstalled: "未安装", installed: "已安装", update: "可更新", missing: "无下载来源信息",
     download: "下载整合包", updateAction: "更新整合包", gotoGames: "返回我的游戏", busy: "任务进行中",
     cancel: "取消", more: "更多", versions: "查看版本",
@@ -95,7 +95,7 @@ const COPY = {
      connection: { offline: "Static preview · launcher not connected", connecting: "Connecting to launcher", live: "Launcher connected", lost: "Connection lost" },
      search: "Search", placeholder: "Name, version, or description", refresh: "Refresh", services: "Services",
     recommend: "MCL modpacks", recommendNote: "Remote index.json and the built-in test pack", catalog: "Discover packs",
-    test: "SRE · Test pack", catalogBadge: "Catalog pack", offlineState: "Offline · install state unknown",
+    test: "SRE", catalogBadge: "Catalog pack", offlineState: "Offline · install state unknown",
     notInstalled: "Not installed", installed: "Installed", update: "Update available", missing: "No source metadata",
     download: "Download pack", updateAction: "Update pack", gotoGames: "Back to my games", busy: "Task in progress",
     cancel: "Cancel", more: "More", versions: "Versions",
@@ -181,6 +181,34 @@ const PLATFORM_LOADERS = ["Forge", "Fabric", "Quilt", "NeoForge"];
 const PLATFORM_SORTS = ["relevance", "downloads", "updated", "newest"];
 const MCMOD_SORTS = ["default", "createtime", "lastedittime"];
 const SITE_CATEGORIES = ["科技", "魔法", "冒险", "建筑", "地图", "任务", "硬核", "休闲", "大型", "轻量", "剧情", "水槽", "空岛", "PvP", "国创"];
+const CATEGORY_LABELS = {
+  adventure: "冒险", challenging: "硬核", combat: "战斗", "combat-pvp": "战斗 / PvP", "combat/pvp": "战斗 / PvP",
+  cursed: "诅咒", decoration: "装饰", economy: "经济", equipment: "装备", exploration: "探索",
+  food: "食物", "game-mechanics": "游戏机制", "game mechanics": "游戏机制", library: "库", magic: "魔法",
+  management: "管理", minigame: "小游戏", "mini-game": "小游戏", mobs: "生物", multiplayer: "多人",
+  optimization: "优化", quests: "任务", social: "社交", storage: "存储", technology: "科技",
+  transportation: "交通", utility: "实用", worldgen: "世界生成", "world-gen": "世界生成", "world generation": "世界生成",
+  kitchen: "厨房", "kitchen-sink": "水槽包", "kitchen sink": "水槽包", lightweight: "轻量",
+  "small / light": "轻量", "small-light": "轻量", "extra-large": "超大型", extensive: "大型",
+  "no-added-progression": "无额外进度", "added-progression": "额外进度", "added progression": "额外进度",
+  vanilla: "原版向", "vanilla+": "原版增强", "vanilla-plus": "原版增强", modded: "模组向",
+  realistic: "写实", fantasy: "奇幻", "semi-realistic": "半写实", cartoon: "卡通",
+  atmosphere: "氛围", bloom: "泛光", cartoonish: "卡通", colored: "彩色", "colored-lighting": "彩色光照",
+  "path-tracing": "路径追踪", pbr: "PBR", "reflections": "反射", shadows: "阴影",
+  themed: "主题", modern: "现代", medieval: "中世纪", steampunk: "蒸汽朋克",
+  "photo-realistic": "照片级", photorealistic: "照片级", simplistic: "简约", traditional: "传统",
+  fonts: "字体", gui: "界面", locale: "语言", models: "模型", "mod-support": "模组支持",
+  "core-shaders": "核心着色器", tweaks: "微调", misc: "杂项",
+  survival: "生存", creative: "创造", adventuremap: "冒险地图", parkour: "跑酷", puzzle: "解谜",
+  pvp: "PvP", skyblock: "空岛", "modded-world": "模组世界",
+  datapack: "数据包", mod: "模组", modpack: "整合包", plugin: "插件", resourcepack: "材质包", shader: "光影"
+};
+function categoryLabel(value) {
+  const name = String(value ?? "").trim();
+  if (!name) return "";
+  const known = CATEGORY_LABELS[name.toLowerCase()];
+  return known && known !== name ? `${known} · ${name}` : name;
+}
 const REQUEST_TIMEOUT = 45000;
 const PLATFORM_TIMEOUT = 60000;
 const SEARCH_DEBOUNCE = 350;
@@ -194,7 +222,7 @@ const catalog = {
   details: new Map(), detailPending: new Map(), detailErrors: new Map(),
   downloads: new Map(), viewedId: "", detailId: "", returnFocus: null
 };
-const quark = { shareId: "", url: "", name: "", wikiId: 0, path: "", entries: [], pending: false, error: "", note: "", truncated: false, sequence: 0, requestId: "", downloadRequestId: "", openingDownload: false, returnFocus: null, xyeUrl: "", xyeVersions: [], xyeTruncated: false };
+const quark = { shareId: "", url: "", name: "", wikiId: 0, presetId: "", path: "", entries: [], pending: false, error: "", note: "", truncated: false, sequence: 0, requestId: "", downloadRequestId: "", openingDownload: false, returnFocus: null, xyeUrl: "", xyeVersions: [], xyeTruncated: false };
 const platform = {
   page: 1, totalPages: 0, query: "", sequence: 0, searchTimer: 0,
   pages: new Map(), retained: new Map(), listPending: new Map(), listErrors: new Map(),
@@ -314,12 +342,10 @@ function classifyUrl(value) {
 }
 function packs() {
   if (browse.resourceType !== "modpack" || !sourceEnabled("mcl")) return [];
-  if (state.link !== "live" || !state.launcher) return [{ ...OFFLINE_SRE, offline: true, source: "mcl", resourceType: "modpack" }];
-  const list = (Array.isArray(state.launcher.presets) ? state.launcher.presets : [])
+  if (state.link !== "live" || !state.launcher) return [];
+  return (Array.isArray(state.launcher.presets) ? state.launcher.presets : [])
     .filter(item => item && typeof item.id === "string" && item.id.length > 0)
     .map(item => ({ ...item, source: "mcl", resourceType: "modpack" }));
-  const sre = list.find(isSre) || { ...OFFLINE_SRE, offline: true, source: "mcl", resourceType: "modpack" };
-  return [sre, ...list.filter(item => !isSre(item))];
 }
 function queryText() { return ui.search.value.trim().toLocaleLowerCase(); }
 function values(value) {
@@ -342,6 +368,21 @@ function versionTitle(item) { return [...new Set(mcVersions(item))].join(" / ");
 function loaders(item) { return values(item?.loaders?.length ? item.loaders : item?.loader); }
 function authors(item) { return values(item?.authors?.length ? item.authors : item?.author); }
 function displayVersion(item) { return typeof item?.version === "string" && item.version ? item.version : ""; }
+function countOf(value) {
+  const count = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isSafeInteger(count) && count > 0 ? count : 0;
+}
+function compactCount(count) {
+  if (count >= 100000000) return `${(count / 100000000).toFixed(count >= 1000000000 ? 0 : 1)}亿`;
+  if (count >= 10000) return `${(count / 10000).toFixed(count >= 100000 ? 0 : 1)}万`;
+  return count.toLocaleString("zh-CN");
+}
+function statLabel(item) {
+  const views = countOf(item?.views);
+  if (isMcmod(item)) return views ? `${compactCount(views)} 浏览` : "";
+  const downloads = countOf(item?.downloadCount);
+  return downloads ? `${compactCount(downloads)} 下载` : "";
+}
 function matches(item, query) {
   return !query || [item.name, item.englishName, item.id, item.description, displayVersion(item), ...mcVersions(item), ...loaders(item), ...authors(item), ...values(item.categories), item.installedVersion, item.updateVersion]
     .some(part => String(part || "").toLocaleLowerCase().includes(query));
@@ -465,36 +506,44 @@ function syncButtons(parent, items, className, activate) {
       copy.className = className === "card" ? "card-body" : "rec-copy";
       const title = document.createElement("strong");
       const detail = document.createElement("small");
+      const stat = document.createElement("small");
+      stat.className = "card-stat";
       const pill = document.createElement("span");
       pill.className = "pill";
       const summary = document.createElement("span");
       summary.className = "card-summary";
-      if (className === "card") copy.append(title, detail, summary, pill);
+      if (className === "card") copy.append(title, detail, stat, summary, pill);
       else copy.append(title, detail, pill);
       open.append(art, copy);
       node.append(open);
-      node.parts = { open, image, title, detail, summary, pill };
+      node._parts = { open, image, title, detail, stat, summary, pill };
       open.addEventListener("click", () => activate(node.dataset.packId));
     }
+    const parts = node._parts;
     const featured = parent === ui["recommend-list"] && item.id === featuredPack()?.id;
     const selected = featured || item.id === (catalog.viewedId || selectedId());
     node.classList.toggle("selected", selected);
-    node.classList.toggle("pinned", isSre(item));
+    node.classList.toggle("pinned", false);
     node.setAttribute("aria-pressed", String(selected));
     node.setAttribute("aria-current", featured ? "true" : "false");
     node.tabIndex = 0;
-    node.parts.title.textContent = item.name || id;
+    parts.title.textContent = item.name || id;
     const version = [mcVersions(item).length ? `MC ${versionSummary(item)}` : "MC 版本未提供", loaders(item).join(" / "), displayVersion(item)].filter(Boolean).join(" · ");
-    node.parts.detail.textContent = version;
-    node.parts.detail.title = versionTitle(item);
-    node.parts.summary.textContent = translatedText(item) || item.description || "暂无简介，点击查看详情。";
-    node.parts.pill.textContent = isSre(item) ? text().test : isMcmod(item) ? "MC百科 · 查看详情" : isPlatform(item) ? `${sourceName(item.source)} · 查看详情` : `MCL · ${statusLabel(item)}`;
-    node.parts.pill.className = `pill${item.updateAvailable ? " update" : item.installed ? " installed" : item.offline ? " offline" : ""}`;
-    const label = `${item.name || id}，${isSre(item) ? text().test : statusLabel(item)}，查看详情`;
+    parts.detail.textContent = version;
+    parts.detail.title = versionTitle(item);
+    const stat = className === "card" ? statLabel(item) : "";
+    if (parts.stat) {
+      parts.stat.hidden = !stat;
+      parts.stat.textContent = stat;
+    }
+    parts.summary.textContent = translatedText(item) || item.description || "暂无简介，点击查看详情。";
+    parts.pill.textContent = isMcmod(item) ? "MC百科 · 查看详情" : isPlatform(item) ? `${sourceName(item.source)} · 查看详情` : `MCL · ${statusLabel(item)}`;
+    parts.pill.className = `pill${item.updateAvailable ? " update" : item.installed ? " installed" : item.offline ? " offline" : ""}`;
+    const label = `${item.name || id}，${statusLabel(item)}，查看详情`;
     node.setAttribute("aria-label", label);
     node.title = label;
     node.disabled = false;
-    setImage(node.parts.image, packArt(item, "icon"));
+    setImage(parts.image, packArt(item, "icon"));
     syncCardTranslate(node, item);
     if (parent.children[index] !== node) parent.insertBefore(node, parent.children[index] || null);
   });
@@ -645,8 +694,8 @@ function render() {
   const lost = state.link === "lost";
   const nativeOk = connected() && state.link !== "offline" && state.link !== "lost";
 
-  ui["pack-badge"].textContent = selected && !isSre(selected) ? `${sourceName(selected.source)} · ${resourceLabel(resourceTypeOf(selected))}` : t.test;
-  ui["pack-badge"].classList.toggle("catalog", !!(selected && !isSre(selected)));
+  ui["pack-badge"].textContent = selected ? `${sourceName(selected.source)} · ${resourceLabel(resourceTypeOf(selected))}` : t.catalogBadge;
+  ui["pack-badge"].classList.toggle("catalog", !!selected);
   setText("pack-state", selected ? statusLabel(selected) : t.offlineState);
   ui["pack-state"].className = `pill${selected?.updateAvailable ? " update" : selected?.installed ? " installed" : !live ? " offline" : ""}`;
   setText("pack-name", selected?.name || "StarRailHarpyExpress");
@@ -716,7 +765,7 @@ function render() {
   if (translation.page) translateVisible();
   setText("result-count", t.count(visible.length));
   const noPacks = live && list.length === 0;
-  const matching = visible.filter(item => !isSre(item));
+  const matching = visible;
   const filtersActive = !!(query || ui["filter-mc"].value || ui["filter-loader"].value || ui["filter-category"].value);
   ui.empty.hidden = matching.length > 0 || visible.length > 0 && !filtersActive;
   setText("empty-text", !browse.sources.size ? "尚未选择资源来源，请在上方勾选至少一个来源。" : state.link !== "live" ? "连接启动器后加载所选来源，或勾选 MCL 查看本地预设。" : filtersActive ? "当前页没有匹配的资源。可重置筛选或浏览下一页。" : "当前来源暂无可展示的资源。加载进度、来源限制或错误请查看上方状态。");
@@ -814,7 +863,7 @@ function receive(data) {
     else if (data.type === "browsePlugins") openPluginBrowser(data.minecraft);
     else if (data.type === "serverList") receiveServers(data);
     else if (data.type === "platformCategories" || data.type === "mcmodCategories" || data.operation === "categories" && ["platformError", "mcmodError"].includes(data.type)) receiveCategories(data);
-    else if (data.type === "xyeVersions" || data.type === "quarkVersions" || data.type === "quarkDownload" || (data.type === "mcmodError" && (data.operation === "quarkList" || data.operation === "quarkDownload" || data.operation === "xyeResolve"))) receiveQuark(data);
+    else if (data.type === "xyeVersions" || data.type === "quarkVersions" || data.type === "quarkDownload" || (data.type === "error" && (data.operation === "quarkList" || data.operation === "quarkDownload")) || (data.type === "mcmodError" && (data.operation === "quarkList" || data.operation === "quarkDownload" || data.operation === "xyeResolve"))) receiveQuark(data);
     else if (["mcmodList", "mcmodDetail", "mcmodLinks", "mcmodError"].includes(data.type)) receiveMcmod(data);
     else if (["platformList", "platformDetail", "platformError", "platformTranslation"].includes(data.type)) receivePlatform(data);
   } catch { showHostError(text().badSnapshot); }
@@ -1071,7 +1120,8 @@ function normalizePlatform(item, expectedSource) {
     loaders: Array.isArray(item.loaders) ? item.loaders.filter(value => typeof value === "string") : [],
     authors: Array.isArray(item.authors) ? item.authors.filter(value => typeof value === "string") : [],
     categories: Array.isArray(item.categories) ? item.categories.filter(value => typeof value === "string") : [],
-    version: typeof item.version === "string" ? item.version : ""
+    version: typeof item.version === "string" ? item.version : "",
+    downloadCount: countOf(item.downloadCount)
   };
 }
 function platformFilters(source = primaryPlatformSource()) {
@@ -1220,7 +1270,7 @@ function receivePlatform(data) {
     const totalPages = Math.max(1, Math.min(PLATFORM_PAGE_MAX, Math.floor(Number(data.totalPages) || 1)));
     const items = [...new Map(data.items.map(item => normalizePlatform(item, request.source)).filter(item => item && resourceTypeOf(item) === request.resourceType).map(item => [item.id, item])).values()];
     platform.pages.set(request.key, { items, totalPages });
-    platform.requests.delete(data.requestId);
+
     if (request.filters === platformFilterKey(request.source) && request.page === platformPosition(request.source).page && sourceEnabled(request.source)) {
       platform.retained.set(request.filters, { items, totalPages, page: request.page });
       platformPosition(request.source).totalPages = totalPages;
@@ -1407,6 +1457,104 @@ function openDetail(id) {
   if (isMcmod(item)) requestDetail(item);
   if (isPlatform(item)) requestPlatformDetail(item);
 }
+function renderIntroduction(value) {
+  const root = ui["detail-description"];
+  const text = String(value ?? "");
+  if (root.dataset.source === text) return;
+  root.dataset.source = text;
+  root.replaceChildren();
+  if (!text.includes("\n") && !/[*_`#>\[!]/.test(text)) { root.textContent = text; return; }
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  let index = 0;
+  while (index < lines.length) {
+    while (index < lines.length && !lines[index].trim()) index++;
+    if (index >= lines.length) break;
+    const start = index;
+    const list = /^\s*(?:[-*+]|\d+[.)])\s+/.test(lines[index]);
+    index++;
+    while (index < lines.length && (list ? (lines[index].trim() && /^\s*(?:[-*+]|\d+[.)])\s+/.test(lines[index])) || /^\s{2,}\S/.test(lines[index]) : lines[index].trim())) index++;
+    appendBlock(root, lines.slice(start, index).join("\n").trim());
+  }
+  if (!root.childNodes.length) root.textContent = text;
+}
+function appendBlock(root, block) {
+  if (!block) return;
+  const heading = /^(#{1,4})\s+(.+)$/.exec(block);
+  if (heading) { const node = document.createElement("h" + Math.min(heading[1].length, 4)); fillInline(node, heading[2]); root.append(node); return; }
+  if (/^(-{3,}|\*{3,}|_{3,})$/.test(block)) { root.append(document.createElement("hr")); return; }
+  if (block.startsWith(">")) { const quote = document.createElement("blockquote"); for (const part of block.replace(/^>\s?/gm, "").split(/\n{2,}/)) appendBlock(quote, part.trim()); root.append(quote); return; }
+  if (/^```/.test(block)) { const node = document.createElement("pre"); const code = document.createElement("code"); code.textContent = block.replace(/^```[^\n]*\n?|```$/g, ""); node.append(code); root.append(node); return; }
+  const lines = block.split("\n");
+  const parsed = [];
+  for (const line of lines) {
+    const item = /^(\s*)(?:[-*+]|\d+[.)])\s+(.*)$/.exec(line);
+    if (!item) { parsed.length = 0; break; }
+    const depth = item[1].replace(/\t/g, "  ").length >= 2 ? 1 : 0;
+    parsed.push({ depth, text: item[2] });
+  }
+  if (parsed.length) {
+    const ordered = /^\s*\d+[.)]\s+/.test(lines.find(line => line.trim()));
+    const list = document.createElement(ordered ? "ol" : "ul");
+    let parent = null;
+    for (const item of parsed) {
+      const node = document.createElement("li");
+      fillInline(node, item.text);
+      if (item.depth && parent) {
+        let nested = parent.querySelector(":scope > ul, :scope > ol");
+        if (!nested) { nested = document.createElement(ordered ? "ol" : "ul"); parent.append(nested); }
+        nested.append(node);
+      } else { list.append(node); parent = node; }
+    }
+    root.append(list); return;
+  }
+  const paragraph = document.createElement("p");
+  lines.forEach((line, index) => { if (index) paragraph.append(document.createElement("br")); fillInline(paragraph, line); });
+  root.append(paragraph);
+}
+function fillInline(node, value) {
+  const pattern = /\[!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)\]\((https?:\/\/[^\s)]+)\)|!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(\*\*|__)(.+?)\8|~~(.+?)~~|`([^`]+)`|\*([^*\n]+)\*|_([^_\n]+)_/g;
+  let cursor = 0; let match;
+  while ((match = pattern.exec(value))) {
+    if (match.index > cursor) node.append(value.slice(cursor, match.index));
+    if (match[3]) appendImageLink(node, match[1], match[2], match[3]);
+    else if (match[5]) appendImage(node, match[4], match[5]);
+    else if (match[7]) appendLink(node, match[6], match[7]);
+    else if (match[9]) { const strong = document.createElement("strong"); fillInline(strong, match[9]); node.append(strong); }
+    else if (match[10]) { const del = document.createElement("del"); fillInline(del, match[10]); node.append(del); }
+    else if (match[11]) { const code = document.createElement("code"); code.textContent = match[11]; node.append(code); }
+    else { const em = document.createElement("em"); fillInline(em, match[12] || match[13]); node.append(em); }
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < value.length) node.append(value.slice(cursor));
+}
+function appendImage(node, alt, raw) {
+  const image = document.createElement("img");
+  const source = imageUrl(raw);
+  image.alt = alt || ""; image.referrerPolicy = "no-referrer";
+  if (source) image.src = source; else image.alt = image.alt || raw;
+  image.addEventListener("error", () => { image.replaceWith(document.createTextNode(image.alt || "")); });
+  node.append(image);
+  return image;
+}
+function appendImageLink(node, alt, raw, href) {
+  const url = externalUrl(href);
+  if (!url) { appendImage(node, alt, raw); return; }
+  const link = document.createElement("a");
+  link.href = url; link.rel = "noreferrer noopener"; link.target = "_blank";
+  link.addEventListener("click", event => { event.preventDefault(); openExternal(url); });
+  appendImage(link, alt, raw);
+  node.append(link);
+}
+function appendLink(node, label, raw) {
+  const href = externalUrl(raw);
+  if (!href) { node.append(label); return; }
+  const link = document.createElement("a");
+  link.href = href; link.textContent = label; link.rel = "noreferrer noopener"; link.target = "_blank";
+  link.addEventListener("click", event => { event.preventDefault(); openExternal(href); });
+  node.append(link);
+}
+
+
 function externalUrl(value) {
   return typeof value === "string" && value && classifyUrl(value).ok ? value : "";
 }
@@ -1490,17 +1638,27 @@ function quarkMessage(operation, extra) {
   if (quark.xyeUrl) message.xyeUrl = quark.xyeUrl;
   return message;
 }
-function openQuarkChoice(link, item) {
+function presetLinks(item) {
+  if (isMcmod(item) || isPlatform(item) || resourceTypeOf(item) !== "modpack") return [];
+  const links = [];
+  const download = externalUrl(item?.downloadUrl);
+  if (download) links.push({ name: "Gitee 下载", url: download });
+  const share = externalUrl(item?.shareUrl);
+  if (share && quarkShareId(share)) links.push({ name: "夸克网盘", url: share });
+  return links;
+}
+function openQuarkChoice(link, item, presetId) {
   const shareId = quarkShareId(link?.url);
   const url = externalUrl(link?.url);
-  const wiki = wikiId(item);
+  const wiki = presetId ? 1 : wikiId(item);
   if (!shareId || !url || !wiki || state.link !== "live" || resourceTypeOf(item) !== "modpack") return;
   quark.shareId = shareId;
   quark.url = url;
   quark.xyeUrl = "";
   quark.xyeVersions = [];
   quark.name = link.name || "夸克网盘";
-  quark.wikiId = wiki;
+  quark.presetId = presetId || "";
+  quark.wikiId = presetId ? 0 : wiki;
   quark.returnFocus = document.activeElement;
   setText("quark-choice-eyebrow", "夸克网盘");
   setText("quark-choice-title", quark.name);
@@ -1509,6 +1667,7 @@ function openQuarkChoice(link, item) {
   ui["quark-direct"].focus();
 }
 function openXyeChoice(link, item) {
+  quark.presetId = "";
   const source = externalUrl(link?.url);
   const jump = xyeJump(source);
   const wiki = wikiId(item);
@@ -1573,9 +1732,13 @@ function openQuarkDownloadPage() {
   if (!ui["quark-download"].open) ui["quark-download"].showModal();
   requestQuarkList("");
 }
+function quarkPost(operation, extra) {
+  if (quark.presetId) return { type: "launcher", operation, id: quark.presetId, shareId: quark.shareId, ...extra };
+  return quarkMessage(operation, extra);
+}
 function requestQuarkList(path) {
   quark.downloadRequestId = "";
-  if (!quark.wikiId || !quark.shareId || state.link !== "live") return;
+  if ((!quark.wikiId && !quark.presetId) || !quark.shareId || state.link !== "live") return;
   const requestId = `quark-list-${++quark.sequence}`;
   quark.requestId = requestId;
   quark.path = path;
@@ -1584,7 +1747,7 @@ function requestQuarkList(path) {
   quark.error = "";
   quark.note = "";
   renderQuarkDownload();
-  if (!post(quarkMessage("quarkList", { path, requestId }))) {
+  if (!post(quarkPost("quarkList", { path, requestId }))) {
     quark.pending = false;
     quark.error = "无法连接启动器。";
     renderQuarkDownload();
@@ -1599,7 +1762,7 @@ function downloadQuarkVersion(entry) {
   quark.error = "";
   quark.note = "正在交给启动器处理这个版本…";
   renderQuarkDownload();
-  if (!post(quarkMessage("quarkDownload", { path: entry.path, requestId }))) {
+  if (!post(quarkPost("quarkDownload", { path: entry.path, requestId }))) {
     quark.pending = false;
     quark.error = "无法连接启动器。";
     renderQuarkDownload();
@@ -1737,11 +1900,16 @@ function renderDetail() {
   const error = remote ? catalog.detailErrors.get(id) : platformItem ? platform.detailErrors.get(key) : "";
   const live = state.link === "live";
   const needsFetch = remote || platformItem;
-  setText("detail-source", platformItem ? `${sourceName(item.source)} · ${resourceLabel(resourceTypeOf(item))}资料` : remote ? `MC百科 · ${resourceLabel(resourceTypeOf(item))}资料` : isSre(item) ? text().test : "启动器预设 · 整合包资料");
+  setText("detail-source", platformItem ? `${sourceName(item.source)} · ${resourceLabel(resourceTypeOf(item))}资料` : remote ? `MC百科 · ${resourceLabel(resourceTypeOf(item))}资料` : "启动器预设 · 整合包资料");
   setText("detail-name", item.name || item.id);
   setText("detail-english", item.englishName || "");
   const shownDescription = platformItem && translatedText(item) ? translatedText(item) : (item.description || "暂无简介。");
-  setText("detail-description", shownDescription);
+  const stat = statLabel(item);
+  ui["detail-stat-wrap"].hidden = !stat;
+  setText("detail-stat-label", isMcmod(item) ? "浏览量" : "下载量");
+  setText("detail-stat", stat);
+
+  renderIntroduction(shownDescription);
   ui["detail-translate"].hidden = !platformItem;
   ui["detail-translate"].disabled = platformItem && translation.pending.has(translationKey(item)) && !translatedText(item);
   ui["detail-translate"].setAttribute("aria-pressed", String(!!translatedText(item)));
@@ -1757,7 +1925,7 @@ function renderDetail() {
   ui["detail-introduction"].querySelector("summary").textContent = resourceLabel(resourceTypeOf(item)) + "介绍";
   setText("detail-loader", loaders(item).join(" / ") || "未提供");
   setText("detail-authors", authors(item).join("、") || "未提供");
-  setText("detail-categories", values(item.categories).join(" · ") || "未提供");
+  setText("detail-categories", values(item.categories).map(categoryLabel).join(" · ") || "未提供");
   ui["detail-status"].hidden = !needsFetch || (!!loaded && !pending && !error);
   ui["detail-status"].dataset.state = pending ? "loading" : error ? "error" : "offline";
   ui["detail-status"].setAttribute("aria-busy", String(!!pending));
@@ -1781,11 +1949,14 @@ function renderDetail() {
   ui["detail-website"].textContent = remote ? "在 MC百科查看 ↗" : "访问项目网站 ↗";
   ui["detail-import"].disabled = mutatingLocked();
   ui["detail-import"].hidden = resourceTypeOf(item) !== "modpack";
-  const links = remote && loaded && Array.isArray(item.links) ? item.links.filter(link => externalUrl(link?.url)) : [];
+  const preset = presetLinks(item);
+  const remoteLinks = remote && loaded && Array.isArray(item.links) ? item.links.filter(link => externalUrl(link?.url)) : [];
+  const links = preset.length ? preset : remoteLinks;
   const quarkSource = resourceTypeOf(item) === "modpack" && links.some(link => quarkShareId(link.url));
   const xyeSource = resourceTypeOf(item) === "modpack" && links.some(link => xyeIdentify(link.url));
-  setText("detail-guidance", platformItem ? (mr ? "在启动器中选择版本并下载，或跳转到 Modrinth。" : "在启动器中选择版本并下载，也可访问项目网站查看说明。") : !remote ? "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。" : !loaded ? "完整详情加载后显示实际下载来源。" : quarkSource && (cf || mr) ? `可进入 ${cf ? "CurseForge" : "Modrinth"} 文件列表${cf && mr ? "，或跳转到 Modrinth" : ""}，或从夸克网盘进入下载页自己选择版本。` : quarkSource ? "夸克网盘不会直接打开网页。点击后可选跳转，或进入下载页自己选择版本。直接下载只会转存选中的一个文件。" : cf && mr ? "在启动器的 CurseForge 文件列表中选择版本下载，或跳转到 Modrinth。" : cf || mr ? `在启动器的 ${cf ? "CurseForge" : "Modrinth"} 文件列表中选择实际版本下载。${mr && !cf ? "也可跳转到 Modrinth。" : ""}` : resourceTypeOf(item) === "datapack" ? "请从作者链接下载，按说明放入存档的 datapacks 目录。" : "暂无平台下载入口，请从作者链接手动下载后导入。");
-  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 PCL CE 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
+  const presetGuidance = quarkSource && preset.length > 1 ? "Gitee 下载会打开发布页。夸克网盘不会直接打开网页，点击后可选跳转，或进入下载页自己选择版本。" : quarkSource && preset.length ? "夸克网盘不会直接打开网页。点击后可选跳转，或进入下载页自己选择版本。直接下载只会转存选中的一个文件。" : preset.length ? "Gitee 下载会打开发布页。也可以导入已有归档。" : "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。";
+  setText("detail-guidance", platformItem ? (mr ? "在启动器中选择版本并下载，或跳转到 Modrinth。" : "在启动器中选择版本并下载，也可访问项目网站查看说明。") : !remote ? presetGuidance : !loaded ? "完整详情加载后显示实际下载来源。" : quarkSource && (cf || mr) ? `可进入 ${cf ? "CurseForge" : "Modrinth"} 文件列表${cf && mr ? "，或跳转到 Modrinth" : ""}，或从夸克网盘进入下载页自己选择版本。` : quarkSource ? "夸克网盘不会直接打开网页。点击后可选跳转，或进入下载页自己选择版本。直接下载只会转存选中的一个文件。" : cf && mr ? "在启动器的 CurseForge 文件列表中选择版本下载，或跳转到 Modrinth。" : cf || mr ? `在启动器的 ${cf ? "CurseForge" : "Modrinth"} 文件列表中选择实际版本下载。${mr && !cf ? "也可跳转到 Modrinth。" : ""}` : resourceTypeOf(item) === "datapack" ? "请从作者链接下载，按说明放入存档的 datapacks 目录。" : "暂无平台下载入口，请从作者链接手动下载后导入。");
+  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 MOONCL 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
   if (xyeSource && resourceTypeOf(item) !== "plugin") setText("detail-guidance", `${ui["detail-guidance"].textContent} XyeBBS 点击后可选跳转，或读取下载页中的夸克分享再选择文件。`);
   const linkKey = JSON.stringify([links, live, resourceTypeOf(item)]);
   if (ui["detail-links"].dataset.key !== linkKey) {
@@ -1798,7 +1969,7 @@ function renderDetail() {
       button.textContent = shareId || xye ? (link.name || (xye ? "XyeBBS" : "夸克网盘")) : `${link.name || "作者提供的地址"} ↗`;
       button.title = shareId || xye ? "选择跳转或直接下载" : link.url;
       button.disabled = !live;
-      button.addEventListener("click", () => xye ? openXyeChoice(link, item) : shareId ? openQuarkChoice(link, item) : openExternal(link.url));
+      button.addEventListener("click", () => xye ? openXyeChoice(link, item) : shareId ? openQuarkChoice(link, item, preset.length ? item.id : "") : openExternal(link.url));
       return button;
     }));
   }
@@ -2098,6 +2269,10 @@ ui["authorize-quark"]?.addEventListener("click", () => {
   render();
   postLauncher("authorizeQuark");
 });
+ui["sponsor-link"].addEventListener("click", event => {
+  event.preventDefault();
+  openExternal(ui["sponsor-link"].getAttribute("href"));
+});
  ui["import-pack"].addEventListener("click", () => { closeMenu(); if (!ui["import-pack"].disabled) postLauncher("import"); });
 ui["launch-installed"].addEventListener("click", () => { closeMenu(); enqueue("primary"); });
 for (const id of ["close-services", "dismiss-services"]) ui[id].addEventListener("click", () => ui.services.close());
@@ -2273,7 +2448,7 @@ function categoryOptions() {
       options.push(...SITE_CATEGORIES.map((name, i) => [String(i + 1), name])); continue;
     }
     const items = categoryState.items.get(`${source}:${browse.resourceType}`) || [];
-    options.push(...items.map(item => [`${source}:${item.id}`, `${sourceName(source)} · ${item.name}`]));
+    options.push(...items.map(item => [`${source}:${item.id}`, `${sourceName(source)} · ${categoryLabel(item.name)}`]));
   }
   return options;
 }
@@ -2440,24 +2615,26 @@ function instanceMatches(entry, minecraft) {
   if (!minecraft) return true;
   const exact = String(entry.minecraft || "").trim();
   if (exact) return exact.toLocaleLowerCase() === minecraft.toLocaleLowerCase();
-  return String(entry.version || "").toLocaleLowerCase().includes(minecraft.toLocaleLowerCase());
+  return false;
 }
 function openServerJoin(item) {
   servers.selected = item;
   setText("server-join-title", item.name);
-  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 原版可直接进入" : ""}`);
+  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 支持原版客户端" : ""}`);
   const box = ui["server-choices"];
   box.replaceChildren();
   const instances = Array.isArray(state.launcher?.instances) ? state.launcher.instances : [];
   const matching = instances.filter(entry => instanceMatches(entry, item.minecraft));
-  for (const instance of matching) {
-    box.append(choiceButton(`使用已安装：${instance.name}`, () => joinServer(item, { instance: instance.name })));
-  }
-  if (matching.length === 1) {
-    joinServer(item, { instance: matching[0].name });
-    return;
-  }
-  if (item.vanilla && item.minecraft) box.append(choiceButton(`下载并进入原版 ${item.minecraft}`, () => joinServer(item, { choice: "vanilla" })));
+  const packs = matching.filter(entry => entry.vanilla !== true);
+  const vanilla = matching.filter(entry => entry.vanilla === true);
+  appendJoinGroup(box, "已安装客户端整合包", packs.map(entry => ({
+    title: entry.name, detail: `MC ${entry.minecraft || item.minecraft}`, action: "进入",
+    run: () => joinServer(item, { instance: entry.name })
+  })));
+  appendJoinGroup(box, "原版客户端", [
+    ...vanilla.map(entry => ({ title: entry.name, detail: `MC ${entry.minecraft}`, action: "进入", run: () => joinServer(item, { instance: entry.name }) })),
+    ...(item.vanilla && item.minecraft ? [{ title: `原版 ${item.minecraft}`, detail: "没有原版实例时自动下载", action: "下载", run: () => joinServer(item, { choice: "vanilla" }) }] : [])
+  ]);
   const seen = new Set();
   const offers = [...(item.packs || []), { id: "fabulously-optimized", name: "Fabulously Optimized", minecraft: item.minecraft, loader: "Fabric" }]
     .filter(offer => {
@@ -2466,9 +2643,39 @@ function openServerJoin(item) {
       seen.add(key);
       return true;
     });
-  for (const offer of offers) box.append(choiceButton(`下载推荐整合包：${offer.name}${offer.minecraft ? " · " + offer.minecraft : ""}`, () => joinServer(item, { choice: `pack:${offer.id}`, packName: offer.name, loader: offer.loader || "" })));
+  appendJoinGroup(box, "推荐整合包", offers.map(offer => ({
+    title: offer.name, detail: [offer.loader, offer.minecraft].filter(Boolean).join(" · "), action: "下载",
+    run: () => joinServer(item, { choice: `pack:${offer.id}`, packName: offer.name, loader: offer.loader || "" })
+  })));
   if (!box.childElementCount) box.append(choiceButton("没有可直接进入的版本，打开来源", () => post({ type: "openExternal", url: item.website || MCLISTS })));
+  box.append(choiceButton("返回到服务器列表", () => ui["server-join"].close()));
   if (!ui["server-join"].open) ui["server-join"].showModal();
+  ui["server-join"].scrollTop = 0;
+}
+function appendJoinGroup(box, title, rows) {
+  if (!rows.length) return;
+  const group = document.createElement("section");
+  group.className = "join-group";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  group.append(heading, ...rows.map(row => joinRow(row)));
+  box.append(group);
+}
+function joinRow(row) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "join-row";
+  const copy = document.createElement("span");
+  const name = document.createElement("strong");
+  name.textContent = row.title;
+  const detail = document.createElement("small");
+  detail.textContent = row.detail || "";
+  copy.append(name, detail);
+  const action = document.createElement("em");
+  action.textContent = row.action;
+  button.append(copy, action);
+  button.addEventListener("click", () => { ui["server-join"].close(); row.run(); });
+  return button;
 }
 function choiceButton(label, action) {
   const button = document.createElement("button");

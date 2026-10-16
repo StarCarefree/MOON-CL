@@ -74,6 +74,10 @@ internal static class RoomPresentation
         if (watcher is null) return "";
         try
         {
+            var link = PCL.Core.Minecraft.Launcher.GameLinkSession.Snapshot()
+                .FirstOrDefault(s => s.ProcessId == watcher.gameProcess?.Id);
+            if (link is not null)
+                return link.State == "connected" ? link.Address : "";
             var path = Path.Combine(watcher.version.PathIndie, "logs", "latest.log");
             return RoomSetupAutomation.FindJoinedServer(path) ?? "";
         }

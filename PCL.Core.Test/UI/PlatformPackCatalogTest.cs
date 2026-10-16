@@ -11,8 +11,8 @@ namespace PCL.Core.Test.UI;
 [TestClass]
 public sealed class PlatformPackCatalogTest
 {
-    private const string CfPack = """{"id":123,"classId":4471,"name":"CF pack","summary":"Summary","authors":[{"name":"Writer"}],"links":{"websiteUrl":"https://www.curseforge.com/minecraft/modpacks/pack"},"logo":{"url":"https://example.com/a.png"},"latestFiles":[{"id":1,"fileDate":"2024-01-01T00:00:00Z","displayName":"Old","gameVersions":["1.20.1","Forge"]},{"id":2,"fileDate":"2025-01-01T00:00:00Z","displayName":"Actual 2.0","gameVersions":["1.21.1","NeoForge"]}],"categories":[{"name":"Adventure"}]}""";
-    private const string MrPack = """{"project_id":"abcd1234","project_type":"modpack","title":"MR pack","slug":"sample","author":"Creator","description":"Desc","versions":["1.20.1","1.21.1"],"latest_version":"vers1234","categories":["fabric","adventure"]}""";
+    private const string CfPack = """{"id":123,"classId":4471,"name":"CF pack","summary":"Summary","downloadCount":18694984,"authors":[{"name":"Writer"}],"links":{"websiteUrl":"https://www.curseforge.com/minecraft/modpacks/pack"},"logo":{"url":"https://example.com/a.png"},"latestFiles":[{"id":1,"fileDate":"2024-01-01T00:00:00Z","displayName":"Old","gameVersions":["1.20.1","Forge"]},{"id":2,"fileDate":"2025-01-01T00:00:00Z","displayName":"Actual 2.0","gameVersions":["1.21.1","NeoForge"]}],"categories":[{"name":"Adventure"}]}""";
+    private const string MrPack = """{"project_id":"abcd1234","project_type":"modpack","title":"MR pack","slug":"sample","author":"Creator","description":"Desc","downloads":42,"versions":["1.20.1","1.21.1"],"latest_version":"vers1234","categories":["fabric","adventure"]}""";
     private const string MrDetail = """{"id":"abcd1234","project_type":"modpack","title":"MR pack","slug":"sample","body":"<p>Hello</p><script>alert(1)</script>","team":"team1234","game_versions":["1.20.1"],"loaders":["fabric"],"categories":["adventure"],"versions":["oldr1234","vers1234"]}""";
     private static string CfList(string packs = CfPack, int count = 49) => "{\"data\":[" + packs + "],\"pagination\":{\"totalCount\":" + count + "}}";
     private static string MrList(string packs = MrPack, int count = 25) => "{\"hits\":[" + packs + "],\"total_hits\":" + count + "}";
@@ -55,6 +55,7 @@ public sealed class PlatformPackCatalogTest
         var page = PlatformPackCatalog.ParsePage("curseforge", CfList(), 1);
         Assert.AreEqual(3, page.TotalPages); Assert.AreEqual("curseforge-123", page.Items[0].Id);
         var pack = page.Items[0]; Assert.AreEqual("Actual 2.0", pack.Version);
+        Assert.AreEqual(18694984, pack.DownloadCount);
         CollectionAssert.AreEqual(new[] { "Writer" }, pack.Authors);
         CollectionAssert.AreEquivalent(new[] { "1.20.1", "1.21.1" }, pack.MinecraftVersions);
         CollectionAssert.AreEquivalent(new[] { "Forge", "NeoForge" }, pack.Loaders);
@@ -69,6 +70,7 @@ public sealed class PlatformPackCatalogTest
         Assert.AreEqual("sample", pack.Slug);
         CollectionAssert.AreEqual(new[] { "Creator" }, pack.Authors);
         CollectionAssert.AreEqual(new[] { "Fabric" }, pack.Loaders);
+        Assert.AreEqual(42, pack.DownloadCount);
         CollectionAssert.AreEqual(new[] { "adventure" }, pack.Categories);
     }
     [TestMethod]
@@ -76,6 +78,9 @@ public sealed class PlatformPackCatalogTest
     {
         var pack = PlatformPackCatalog.ParseDetail("modrinth", MrDetail, "abcd1234");
         Assert.AreEqual("Hello", pack.Description); Assert.AreEqual("Fabric", pack.Loaders.Single());
+        Assert.AreEqual("Hello **bold**", PlatformPackCatalog.ParseDetail("modrinth", MrDetail.Replace("<p>Hello</p><script>alert(1)</script>", "Hello **bold**"), "abcd1234").Description);
+        var markdown = "# Title\n![banner](https://cdn.modrinth.com/a.png)";
+        Assert.AreEqual(markdown, PlatformPackCatalog.ParseDetail("modrinth", MrDetail.Replace("<p>Hello</p><script>alert(1)</script>", markdown.Replace("\n", "\\n")), "abcd1234").Description);
         Assert.ThrowsExactly<InvalidDataException>(() => PlatformPackCatalog.ParseDetail("modrinth", MrDetail, "zzzz1234"));
         Assert.ThrowsExactly<InvalidDataException>(() => PlatformPackCatalog.ParsePage("curseforge", CfList(CfPack.Replace("4471", "6")), 1));
         Assert.ThrowsExactly<InvalidDataException>(() => PlatformPackCatalog.ParsePage("modrinth", MrList(MrPack.Replace("\"modpack\"", "\"mod\"")), 1));

@@ -7,7 +7,7 @@ using PCL.Network.Loaders;
 
 namespace PCL;
 
-/// <summary>Native server picker plus the original PCL CE DownloadFile/LoaderDownload/Taskbar pipeline.</summary>
+/// <summary>Native server picker plus the original MOONCL DownloadFile/LoaderDownload/Taskbar pipeline.</summary>
 internal static class ServerPluginDownloads
 {
     internal static string? PreferredServerId { get; set; }

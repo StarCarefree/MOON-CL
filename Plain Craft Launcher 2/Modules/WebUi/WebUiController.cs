@@ -237,9 +237,11 @@ internal sealed partial class WebUiController : IDisposable
     private async void OnMessage(CoreWebView2 core, string json, FormMain form)
     {
         if (_disposed || json.Length > 131072) return;
+        JsonObject? message = null;
         try
         {
-            if (JsonNode.Parse(json) is not JsonObject message) return;
+            if (JsonNode.Parse(json) is not JsonObject parsed) return;
+            message = parsed;
             var type = ReadString(message, "type");
             if (type == "status") { core.PostWebMessageAsJson(form.HybridStatus().ToJsonString()); return; }
 #if DEBUG
@@ -257,6 +259,7 @@ internal sealed partial class WebUiController : IDisposable
                 case "platform": await HandlePlatformAsync(core, message, form); break;
                 case "launcher" when _library is not null:
                     await _library.HandleAsync(message, form);
+                    if (ReadString(message, "operation") is "quarkList" or "quarkDownload") PostLibraryReply(core, message);
                     Refresh(force: true);
                     break;
                 case "native": await form.NavigateHybridAsync(ReadString(message, "page")); break;
@@ -266,6 +269,8 @@ internal sealed partial class WebUiController : IDisposable
         }
         catch (Exception ex)
         {
+            if (message is not null && ReadString(message, "operation") is "quarkList" or "quarkDownload" && _library is not null)
+                PostJson(core, new JsonObject { ["type"] = "error", ["operation"] = ReadString(message, "operation"), ["id"] = ReadString(message, "id") ?? "", ["requestId"] = ReadString(message, "requestId") ?? "", ["message"] = ex.Message });
             ModBase.Log(ex, "浏览补充页消息处理失败", ModBase.LogLevel.Debug);
             var text = ex.Message;
             PostUi(() =>
@@ -275,6 +280,15 @@ internal sealed partial class WebUiController : IDisposable
             });
         }
     }
+
+    private void PostLibraryReply(CoreWebView2 core, JsonObject message)
+    {
+        var reply = _library?.TakePresetQuarkReply();
+        if (reply is null) return;
+        reply["operation"] = ReadString(message, "operation");
+        PostJson(core, reply);
+    }
+    private static void PostJson(CoreWebView2 core, JsonObject reply) => core.PostWebMessageAsJson(reply.ToJsonString());
 
     private void SendBootstrap(CoreWebView2 core) => core.PostWebMessageAsJson(new JsonObject
     {

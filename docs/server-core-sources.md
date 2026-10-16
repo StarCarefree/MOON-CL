@@ -44,7 +44,7 @@
 
 1. 原生“服务端管理 → 安装服务端”中选择原版 / Paper / Purpur，选择 MC 版本与构建，沿用下载源优先级设置。
 2. 安装后在控制面板检查 Java 路径、内存与启动设置；首次启动必须阅读并手动接受 EULA。
-3. 资源目录首项为整合包，“服务器插件”栏目从 CurseForge Bukkit / Modrinth 插件索引浏览，点击下载进入 PCL CE 原生文件版本列表。
+3. 资源目录首项为整合包，“服务器插件”栏目从 CurseForge Bukkit / Modrinth 插件索引浏览，点击下载进入 MOONCL 原生文件版本列表。
 4. 也可从 Paper / Purpur 控制面板点击“下载插件”，携带当前服务器及 MC 版本；最终仍在原生对话框中确认目标。
 5. 插件下载沿用 CompFile.ToNetFile、LoaderDownload、任务栏与原有镜像地址逻辑，目标固定为所选受管理服务器的 `plugins` 文件夹，不接受网页任意路径。
 6. 服务器必须完成安装并停止；版本不匹配、覆盖同名 JAR 都要求确认。混合项目中的 Fabric / 数据包文件不会当作插件，Folia-only 文件不能装到 Paper / Purpur，Purpur-only 文件不能装到 Paper。
