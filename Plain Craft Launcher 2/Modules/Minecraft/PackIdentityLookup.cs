@@ -13,6 +13,31 @@ namespace PCL;
 
 internal static class PackIdentityLookup
 {
+    public static PackIdentity ResolveInstalled(McInstance instance)
+    {
+        var path = instance.PathInstance;
+        var existing = PackIdentityStore.TryRead(path);
+        var source = States.Instance.ModpackSource[path] ?? existing?.Source ?? "";
+        var id = States.Instance.ModpackId[path] ?? "";
+        var clues = new PackClues
+        {
+            Name = !string.IsNullOrWhiteSpace(existing?.Name) ? existing.Name : instance.Name,
+            FileName = instance.Name,
+            Version = existing?.Version ?? States.Instance.ModpackVersion[path] ?? "",
+            MinecraftVersion = existing?.MinecraftVersion ?? "",
+            CurseForgeId = existing?.CurseForgeId ?? "",
+            ModrinthId = existing?.ModrinthId ?? "",
+            McmodId = existing?.McmodId ?? ""
+        };
+        if (clues.CurseForgeId.Length == 0 && source.Contains("curse", StringComparison.OrdinalIgnoreCase))
+            clues = clues with { CurseForgeId = id };
+        if (clues.ModrinthId.Length == 0 && source.Contains("modrinth", StringComparison.OrdinalIgnoreCase))
+            clues = clues with { ModrinthId = id };
+        if (clues.McmodId.Length == 0 && (source == "mcmod" || source == "MC百科"))
+            clues = clues with { McmodId = id };
+        return Resolve(clues);
+    }
+
     public static PackIdentity Resolve(PackClues clues)
     {
          if (clues.Query.Length < 2 && clues.CurseForgeId.Length == 0 && clues.ModrinthId.Length == 0 && clues.McmodId.Length == 0)

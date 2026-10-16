@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
  using PCL.Core.App;
  using PCL.Core.Minecraft.Launcher;
  using PCL.Core.UI;
@@ -9,13 +10,14 @@ namespace PCL;
 
 internal static class InstanceClientUpdate
 {
-    public static void Start(McInstance old, bool deleteOld, bool keepOldSelected)
+    public static async Task StartAsync(McInstance old, bool deleteOld, bool keepOldSelected)
     {
         if (ModLaunch.IsInstanceLaunching(old))
         {
             HintService.Hint("这个版本正在启动，请稍后再更新。", HintType.Error);
             return;
         }
+        var shared = ModFolder.mcFolderSelected;
         var file = SystemDialogs.SelectFile("整合包 (*.zip;*.mrpack)|*.zip;*.mrpack", "选择新的客户端整合包");
         if (string.IsNullOrEmpty(file)) return;
         if (!(file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)))
@@ -24,11 +26,20 @@ internal static class InstanceClientUpdate
             return;
         }
         string newName;
+        PackIdentity installed;
+        PackIdentity downloaded;
         try
         {
-            var clues = PackCluesReader.Read(file);
-            newName = InstanceNames.Next(old.Name, clues.Name, clues.Version, name =>
-                Directory.Exists(Path.Combine(ModFolder.mcFolderSelected, "versions", name)));
+            HintService.Hint("正在读取整合包并核对对应项目……");
+            var result = await Task.Run(() =>
+            {
+                var clues = PackCluesReader.Read(file);
+                return (Clues: clues, Installed: PackIdentityLookup.ResolveInstalled(old), Downloaded: PackIdentityLookup.Resolve(clues));
+            });
+            installed = result.Installed;
+            downloaded = result.Downloaded;
+            newName = InstanceNames.Next(old.Name, result.Clues.Name, result.Clues.Version, name =>
+                Directory.Exists(Path.Combine(shared, "versions", name)));
         }
         catch (Exception ex)
         {
@@ -36,20 +47,44 @@ internal static class InstanceClientUpdate
             HintService.Hint("这个压缩包无法读取，旧版本没有改动。", HintType.Error);
             return;
         }
+        if (!string.Equals(shared, ModFolder.mcFolderSelected, StringComparison.OrdinalIgnoreCase))
+        {
+            HintService.Hint("游戏目录已切换，请回到原目录重新选择更新包。", HintType.Error);
+            return;
+        }
+        if (ModLaunch.IsInstanceLaunching(old))
+        {
+            HintService.Hint("这个版本正在启动，请稍后再更新。", HintType.Error);
+            return;
+        }
+        var match = PackUpdateProject.Compare(installed, downloaded);
+        if (match == PackProjectMatch.DifferentProject)
+        {
+            ModMain.MyMsgBox($"所选文件对应的项目与当前整合包不一致，已停止更新。\n当前项目：{installed.Name}\n文件项目：{downloaded.Name}\n文件：{Path.GetFileName(file)}\n旧版本没有改动。", "整合包项目不匹配");
+            return;
+        }
         var keepOld = keepOldSelected && !deleteOld;
          var message = $"将安装新版本“{newName}”，成功后移植旧版本的设置、存档、Xaero 地图和 FTB 任务进度。\n新版本会使用自己的游戏目录，这样移植的内容才会被读到。\n新版本没有安装并核对完成前，不会删除旧版本。";
+         var projectCheck = match switch
+         {
+             PackProjectMatch.SameProject => "项目 ID 核对一致。",
+             PackProjectMatch.NameMatch => "仅名称匹配，未能通过共同项目 ID 核实。请确认文件来自同一项目。",
+             _ => "无法确认文件属于当前项目（可能离线或缺少元数据）。继续前请自行核实，选错包可能导致存档无法使用。"
+         };
+         message = $"当前项目：{installed.Name} {installed.Version}\n文件项目：{downloaded.Name} {downloaded.Version}\n文件：{Path.GetFileName(file)}\n{projectCheck}\n\n" + message;
          message += deleteOld ? "\n你选择了完成后删除旧版本。只有移植核对成功，且旧版本没有在运行，才会删除。" : "\n旧版本会保留。";
          if (keepOld) message += "\n完成后仍选中旧版本。";
         if (ModMain.MyMsgBox(message, "客户端更新", "开始更新", "取消") != 1) return;
         var oldFolder = old.PathInstance;
         var oldIndie = old.PathIndie;
         var oldName = old.Name;
-        var shared = ModFolder.mcFolderSelected;
         ModBase.RunInThread(() =>
         {
             try
             {
-                var loader = ModModpack.ModpackInstall(file, newName);
+                if (!string.Equals(shared, ModFolder.mcFolderSelected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("游戏目录已切换。");
+                var loader = ModModpack.ModpackInstall(file, newName, resolvedIdentity: downloaded);
                 if (loader is null) throw new InvalidOperationException("没有开始安装。");
                 var started = 0;
                 loader.OnStateChanged = _ =>

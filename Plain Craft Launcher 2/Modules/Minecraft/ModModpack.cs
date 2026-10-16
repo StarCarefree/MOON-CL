@@ -53,7 +53,7 @@ public static class ModModpack
     /// </summary>
     /// <exception cref="ModBase.CancelledException" />
      public static LoaderCombo<string> ModpackInstall(string file, string instanceName = null, string logo = null,
-         string resourceId = null, bool isOnlineInstall = false, string mcmodId = null)
+         string resourceId = null, bool isOnlineInstall = false, string mcmodId = null, PackIdentity? resolvedIdentity = null)
     {
         ModBase.Log("[ModPack] 整合包安装请求：" + (file ?? "null"));
         ZipArchive archive = null;
@@ -201,13 +201,16 @@ public static class ModModpack
             } while (false);
 
             // 介绍查找失败不阻止安装。
-            PackIdentity? identity = null;
+            PackIdentity? identity = resolvedIdentity;
             try
             {
-                 var source = packType switch { 0 => "curseforge", 4 => "modrinth", _ => "" };
-                 var clues = PackCluesReader.Read(archive, Path.GetFileName(file), resourceId, source);
-                 if (int.TryParse(mcmodId, out var wikiId) && wikiId > 0) clues = clues with { McmodId = wikiId.ToString() };
-                 identity = PackIdentityLookup.Resolve(clues);
+                if (identity is null)
+                {
+                    var source = packType switch { 0 => "curseforge", 4 => "modrinth", _ => "" };
+                    var clues = PackCluesReader.Read(archive, Path.GetFileName(file), resourceId, source);
+                    if (int.TryParse(mcmodId, out var wikiId) && wikiId > 0) clues = clues with { McmodId = wikiId.ToString() };
+                    identity = PackIdentityLookup.Resolve(clues);
+                }
             }
             catch (Exception ex)
             {

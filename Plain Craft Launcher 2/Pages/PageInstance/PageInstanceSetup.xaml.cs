@@ -1122,26 +1122,13 @@ public partial class PageInstanceSetup
         {
             try
             {
-                var existing = PackIdentityStore.TryRead(path);
-                var source = existing?.Source ?? "";
-                if (source == "MC百科") source = "mcmod";
-                var clues = new PackClues
-                {
-                    Name = existing?.Name.Length > 0 ? existing.Name : instance.Name,
-                    FileName = instance.Name,
-                    Version = existing?.Version ?? "",
-                    MinecraftVersion = existing?.MinecraftVersion ?? "",
-                    CurseForgeId = existing?.CurseForgeId ?? "",
-                    ModrinthId = existing?.ModrinthId ?? "",
-                    McmodId = existing?.McmodId ?? ""
-                };
-                if (clues.CurseForgeId.Length == 0 && source.Contains("Curse", StringComparison.OrdinalIgnoreCase))
-                    clues = clues with { CurseForgeId = States.Instance.ModpackId[path] };
-                if (clues.ModrinthId.Length == 0 && source.Contains("Modrinth", StringComparison.OrdinalIgnoreCase))
-                    clues = clues with { ModrinthId = States.Instance.ModpackId[path] };
-                var identity = PackIdentityLookup.Resolve(clues);
+                var identity = PackIdentityLookup.ResolveInstalled(instance);
                 PackIdentityStore.Save(path, identity);
-                ModBase.RunInUi(() => { ShowPackIdentity(); BtnPackRefresh.IsEnabled = true; });
+                ModBase.RunInUi(() =>
+                {
+                    if (PageInstanceLeft.McInstance?.PathInstance == path) ShowPackIdentity();
+                    BtnPackRefresh.IsEnabled = true;
+                });
             }
             catch (Exception ex)
             {
@@ -1160,6 +1147,45 @@ public partial class PageInstanceSetup
              CheckUpdateDeleteOld.Checked = false;
      }
  
-     private void ClientUpdate_Click(object sender, MouseButtonEventArgs e) =>
-         InstanceClientUpdate.Start(PageInstanceLeft.McInstance, CheckUpdateDeleteOld.Checked == true, CheckUpdateKeepOld.Checked == true);
+    private async void PackProject_Click(object sender, MouseButtonEventArgs e)
+    {
+        var instance = PageInstanceLeft.McInstance;
+        BtnPackProject.IsEnabled = false;
+        try
+        {
+            HintService.Hint("正在查找整合包项目……");
+            var identity = await System.Threading.Tasks.Task.Run(() => PackIdentityLookup.ResolveInstalled(instance));
+            PackIdentityStore.Save(instance.PathInstance, identity);
+            if (PageInstanceLeft.McInstance?.PathInstance == instance.PathInstance) ShowPackIdentity();
+            var url = PackUpdateProject.DownloadPage(identity);
+            if (url.Length == 0)
+            {
+                ModMain.MyMsgBox("未找到匹配的项目。你仍可以从作者处下载客户端 zip 或 mrpack，再选择已下载整合包更新。", "查找整合包项目");
+                return;
+            }
+            if (ModMain.MyMsgBox($"找到项目：{identity.Name}\n{url}\n\n请下载需要的客户端整合包，然后返回此处选择文件更新。", "整合包项目", "打开项目页面", "取消") == 1)
+                ModBase.OpenWebsite(url);
+        }
+        catch (Exception ex)
+        {
+            ModBase.Log(ex, "查找更新项目失败", ModBase.LogLevel.Debug);
+            HintService.Hint("查找失败，请稍后重试，或直接选择已下载的整合包。");
+        }
+        finally { BtnPackProject.IsEnabled = true; }
+    }
+
+    private async void ClientUpdate_Click(object sender, MouseButtonEventArgs e)
+    {
+        var instance = PageInstanceLeft.McInstance;
+        var deleteOld = CheckUpdateDeleteOld.Checked == true;
+        var keepOld = CheckUpdateKeepOld.Checked == true;
+        BtnClientUpdate.IsEnabled = false;
+        try { await InstanceClientUpdate.StartAsync(instance, deleteOld, keepOld); }
+        catch (Exception ex)
+        {
+            ModBase.Log(ex, "准备整合包更新失败", ModBase.LogLevel.Debug);
+            HintService.Hint("更新没有开始，旧版本没有改动。");
+        }
+        finally { BtnClientUpdate.IsEnabled = true; }
+    }
 }
