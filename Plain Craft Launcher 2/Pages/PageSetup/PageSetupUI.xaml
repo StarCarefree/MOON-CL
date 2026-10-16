@@ -73,7 +73,7 @@
                                            Change="CheckBoxChange" />
                         <local:MyCheckBox Text="启用游戏启动动画（MOONCL）" Margin="-1,0,0,7" Height="22"
                                           x:Name="CheckShowLaunchAnimation" Tag="UiShowLaunchAnimation" Change="CheckBoxChange"
-                                          ToolTip="点击启动游戏时显示月轨加载页；关闭后使用原有进度面板，下次启动游戏时生效。" />
+                                          ToolTip="启动游戏时显示独立窗口，覆盖启动器准备与 mod-loading-screen 游戏加载进度；关闭后使用原有进度面板，下次启动生效。" />
                         <StackPanel x:Name="PanelBlur" Margin="0,0,0,10">
                             <local:MyCheckBox Text="{DynamicResource Setup.Ui.Basic.AdvancedMaterial}" Height="22" x:Name="CheckBlur" Tag="UiBlur"
                                               ToolTip="{DynamicResource Setup.Ui.Basic.AdvancedMaterial.ToolTip}"

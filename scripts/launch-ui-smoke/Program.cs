@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using PCL;
+using PCL.Core.Minecraft.Launcher;
 
 internal static partial class Program
 {
@@ -20,79 +21,81 @@ internal static partial class Program
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
             foreach (var child in Tree(VisualTreeHelper.GetChild(root, i))) yield return child;
     }
-    private static void Capture(HybridLaunchScreen view, string file)
+    private static Button Action(HybridLaunchScreen view, string id) => Tree(view).OfType<Button>().Single(b => AutomationProperties.GetAutomationId(b) == id);
+    private static void Capture(FrameworkElement view, string file)
     {
         view.UpdateLayout();
         var image = new RenderTargetBitmap((int)view.ActualWidth, (int)view.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-        image.Render(view);
-        var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
+        image.Render(view); var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
         using var stream = File.Create(file); png.Save(stream);
+    }
+    private static void AssertLayout(HybridLaunchScreen view)
+    {
+        view.UpdateLayout();
+        Check(!Tree(view).OfType<ScrollViewer>().Any(), "Loading window must not need scrolling");
+        foreach (var name in new[] { "LauncherStep", "GameStep", "StatusPanel", "CancelButton", "VersionName" })
+        {
+            var element = Control<FrameworkElement>(view, name);
+            var bounds = element.TransformToAncestor(view).TransformBounds(new Rect(element.RenderSize));
+            Check(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= view.ActualWidth + 1 && bounds.Bottom <= view.ActualHeight + 1, name + " clipped");
+        }
     }
     [STAThread]
     public static void Main(string[] args)
     {
         var output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
-        var app = new System.Windows.Application();
-        var view = new HybridLaunchScreen();
-        var window = new Window { Content = view, Width = 730, Height = 720, Left = -10000, Top = -10000, ShowInTaskbar = false };
+        var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var window = new HybridLaunchWindow { Left = -10000, Top = -10000 };
         window.Loaded += async (_, _) =>
         {
             try
             {
                 await CheckPreferences(args[1]);
-                Check(view.Visibility == Visibility.Collapsed, "Must start hidden");
-                Check(!Clock(view).IsEnabled, "No timer before launch");
-                view.BeginLaunch("MOONCL · 星月之旅 1.21.1 / NeoForge");
-                view.UpdateLaunch("正在启动游戏", "补全游戏文件", .42, "12 MiB/s");
+                if (args.Length > 2) CheckBridgeRecording(args[2]);
+                var view = (HybridLaunchScreen)window.FindName("Screen");
+                Check(window.Owner is null && window.ShowInTaskbar && !window.Topmost, "Must be an ownerless non-topmost independent window");
+                Check(window.IsVisible && Clock(view).IsEnabled, "Independent window must start its clock");
+                window.ApplyProgress(new(LaunchProgressPhase.Launcher, "补全游戏文件", "下载资源  ·  12 MiB/s", .42));
                 await Task.Delay(350); view.UpdateLayout();
-                Check(view.IsVisible && Clock(view).IsEnabled, "Launch must enable the visible clock");
-                Check(Control<TextBlock>(view, "Percentage").Text.Contains("42"), "Must show real progress");
-                Check(Control<TextBlock>(view, "DownloadSpeed").Text.Contains("12 MiB/s"), "Download speed missing");
-                Capture(view, Path.Combine(output, "launch-screen.png"));
-                var home = 0; var cancel = 0;
-                view.HomeRequested += (_, _) => home++;
-                view.CancelRequested += (_, _) => cancel++;
-                foreach (var button in Tree(view).OfType<Button>())
-                {
-                    var id = AutomationProperties.GetAutomationId(button);
-                    if (!id.StartsWith("LaunchScreen.")) continue;
-                    Check(button.IsVisible && button.IsEnabled, id + " inaccessible");
-                    button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                }
-                Check(home == 1 && cancel == 1, "Actions must dispatch exactly once");
-                view.Visibility = Visibility.Hidden;
-                Check(!Clock(view).IsEnabled, "Hidden page must stop timer");
-                view.Visibility = Visibility.Visible;
-                Check(Clock(view).IsEnabled, "Visible active page must resume timer");
-                view.EndLaunch();
-                Check(view.Visibility == Visibility.Collapsed && !Clock(view).IsEnabled, "Ending must clear visibility/timer");
-                view.UpdateLaunch("stale", "stale", .9, null);
-                Check(Control<TextBlock>(view, "StageName").Text != "stale", "Late update revived ended page");
-                view.BeginLaunch(new string('长', 120));
-                Check(Control<TextBlock>(view, "Percentage").Text == "0%", "New launch must reset progress");
-                view.UpdateLaunch("等待游戏窗口", "等待游戏窗口", double.NaN, null);
-                Check(Control<TextBlock>(view, "Percentage").Text.Contains('0'), "NaN must be safe");
-                view.UpdateLaunch("等待游戏窗口", "等待游戏窗口", 2, null);
-                Check(Control<TextBlock>(view, "Percentage").Text.Contains("100"), "Progress must be bounded");
-                window.Width = 430; window.Height = 660;
-                await Task.Delay(250); view.UpdateLayout();
-                Capture(view, Path.Combine(output, "launch-screen-compact.png"));
-                var scroll = Tree(view).OfType<ScrollViewer>().First();
-                Check(scroll.ScrollableWidth == 0, "Compact page must not overflow horizontally");
-                scroll.ScrollToBottom(); view.UpdateLayout();
-                foreach (var button in Tree(view).OfType<Button>().Where(b => AutomationProperties.GetAutomationId(b).StartsWith("LaunchScreen.")))
-                {
-                    var bounds = button.TransformToAncestor(view).TransformBounds(new Rect(button.RenderSize));
-                    Check(bounds.Right <= view.ActualWidth + 1 && bounds.Bottom <= view.ActualHeight + 1, "Compact action clipped");
-                }
-                window.Content = null;
-                await Task.Delay(30);
-                Check(!Clock(view).IsEnabled, "Unload must stop timer");
-                Console.WriteLine($"PASS: {_checks} launch UI checks; screenshots: {output}");
+                Check(Control<TextBlock>(view, "Percentage").Text == "42%", "Launcher progress missing");
+                Check(Control<TextBlock>(view, "LauncherState").Text == "进行中", "Launcher step missing");
+                AssertLayout(view); Capture((FrameworkElement)window.Content, Path.Combine(output, "launch-window-launcher.png"));
+                window.ApplyProgress(new(LaunchProgressPhase.Game, "等待模组进度", "正在等待 mod-loading-screen", null));
+                Check(Control<TextBlock>(view, "Percentage").Text == "--", "Unknown game progress must not inherit launcher percentage");
+                window.ApplyProgress(new(LaunchProgressPhase.Game, "初始化 client", "Example Mod  ·  example", .25, true));
+                await Task.Delay(300);
+                Check(Control<TextBlock>(view, "Percentage").Text == "25%", "Game percentage missing");
+                Check(Control<TextBlock>(view, "LauncherState").Text == "已完成" && Control<TextBlock>(view, "GameState").Text == "进行中", "Two phase hierarchy wrong");
+                Capture((FrameworkElement)window.Content, Path.Combine(output, "launch-screen.png"));
+                var cancel = 0; window.CancelRequested += (_, _) => cancel++;
+                var button = Action(view, "LaunchScreen.Cancel"); button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(cancel == 1, "Cancel must dispatch only once");
+                window.WindowState = WindowState.Minimized; await Task.Delay(30);
+                Check(!Clock(view).IsEnabled, "Minimizing must suspend animations/clock");
+                window.WindowState = WindowState.Normal; await Task.Delay(30);
+                Check(Clock(view).IsEnabled, "Restoring active window must resume clock");
+                view.EndLaunch(); view.BeginLaunch(new string('长', 120));
+                Check(Control<TextBlock>(view, "Percentage").Text == "--", "New launch must reset unknown progress");
+                window.ApplyProgress(new(LaunchProgressPhase.Game, "阶段很长的模组初始化名称", "游戏正在加载资源", double.NaN));
+                Check(Control<TextBlock>(view, "Percentage").Text == "--", "NaN must not become fake progress");
+                window.ApplyProgress(new(LaunchProgressPhase.Game, "初始化 client", "中文模组  ·  example", .76, true));
+                window.Width = window.MinWidth; window.Height = window.MinHeight;
+                await Task.Delay(300); AssertLayout(view);
+                Capture((FrameworkElement)window.Content, Path.Combine(output, "launch-screen-compact.png"));
+                window.ApplyProgress(new(LaunchProgressPhase.Ready, "游戏就绪", "已收到模组完成事件，游戏窗口已打开", 1, true));
+                Check(!Clock(view).IsEnabled && !Action(view, "LaunchScreen.Cancel").IsEnabled, "Terminal state must stop motion/cancel");
+                Capture((FrameworkElement)window.Content, Path.Combine(output, "launch-window-ready.png"));
+                view.EndLaunch(); view.BeginLaunch("测试关闭行为");
+                Action(view, "LaunchScreen.Home").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(!window.IsVisible && cancel == 1 && !Clock(view).IsEnabled, "Closing must not cancel and must stop rendering");
+                await CheckPresentations();
+                Console.WriteLine($"PASS: {_checks} independent launch window/config checks; screenshots: {output}");
                 app.Shutdown(0);
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); app.Shutdown(1); }
         };
-        app.Run(window);
+        window.BeginLaunch("MOONCL · 星月之旅 1.21.1 / Fabric");
+        app.Run();
     }
 }

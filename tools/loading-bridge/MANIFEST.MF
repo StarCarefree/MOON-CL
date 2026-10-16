@@ -1,0 +1,3 @@
+Manifest-Version: 1.0
+Premain-Class: io.mooncl.loading.BridgeAgent
+Main-Class: io.mooncl.loading.ProgressRelay

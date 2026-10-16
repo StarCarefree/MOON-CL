@@ -25,7 +25,7 @@ using PCL.Core.Logging;
 
 namespace PCL;
 
-public static class ModLaunch
+public static partial class ModLaunch
 {
     public const string mesaLoaderWindowsVersion = "26.0.4";
 
@@ -312,17 +312,20 @@ public static class ModLaunch
         public JavaEntry Java { get; set; }
         public string Argument { get; set; }
         public string AbortHint { get; set; }
+        public LaunchProgressPresentation Presentation { get; set; }
 
         private void RunSession(ModLoader.LoaderTask<McLaunchOptions, object> loader)
         {
             var previous = _launchSession.Value;
             _launchSession.Value = this;
             try { ModLaunch.McLaunchStart(loader); }
+            catch { Presentation?.State.Fail("启动失败，请查看启动器日志"); throw; }
             finally
             {
                 _loginFallback = Login;
                 Active = false;
                 lock (_launchSessionsLock) _launchSessions.Remove(this);
+                Presentation?.Dispose();
                 _launchSession.Value = previous;
                 ModBase.RunInUi(() => ModMain.frmMain?.RefreshHybridVersions());
             }
@@ -386,6 +389,8 @@ public static class ModLaunch
     {
         session.Active = false;
         lock (_launchSessionsLock) _launchSessions.Remove(session);
+        session.Presentation?.State.Fail("已取消此次启动");
+        session.Presentation?.Dispose();
         try
         {
             session.Real?.Abort();
@@ -485,6 +490,11 @@ public static class ModLaunch
 
         var session = new LaunchSession(instance, options);
         lock (_launchSessionsLock) _launchSessions.Add(session);
+        if (Config.Preference.ShowLaunchAnimation && options.SaveBatch is null)
+        {
+            try { session.Presentation = new LaunchProgressPresentation(instance.Name, () => AbortSession(session)); }
+            catch (Exception ex) { ModBase.Log(ex, "无法显示独立启动窗口，继续原有启动流程", ModBase.LogLevel.Debug); }
+        }
         ModMain.frmMain.AprilGiveup();
         session.Loader.Start(options, true);
         ModMain.frmMain.RefreshHybridVersions();
@@ -598,10 +608,12 @@ public static class ModLaunch
             while (launchLoader.State == ModBase.LoadState.Loading)
             {
                 ModMain.frmLaunchLeft.Dispatcher.Invoke(ModMain.frmLaunchLeft.LaunchingRefresh);
+                RefreshSessionProgress();
                 Thread.Sleep(100);
             }
 
             ModMain.frmLaunchLeft.Dispatcher.Invoke(ModMain.frmLaunchLeft.LaunchingRefresh);
+            RefreshSessionProgress();
             // 成功与失败处理
             switch (launchLoader.State)
             {
@@ -2759,6 +2771,7 @@ public static class ModLaunch
         startInfo.RedirectStandardError = true;
         startInfo.CreateNoWindow = noJavaw;
         startInfo.Arguments = mcLaunchArgument;
+        _launchSession.Value?.Presentation?.PrepareProcess(startInfo, LaunchingInstance.Info.HasFabric || LaunchingInstance.Info.HasQuilt);
         gameProcess.StartInfo = startInfo;
 
         // 开始进程
@@ -2773,6 +2786,7 @@ public static class ModLaunch
 
         loader.output = gameProcess;
         mcLaunchProcess = gameProcess;
+        _launchSession.Value?.Presentation?.GameStarted();
         // 进程优先级处理
         try
         {
@@ -2876,10 +2890,21 @@ public static class ModLaunch
             McLaunchLog("已显示游戏实时日志");
         }
 
-        // 等待
-        while (watcher.State == ModWatcher.Watcher.MinecraftState.Loading)
+        // MLS completion and an appeared game window are separate signals.
+        var presentation = _launchSession.Value?.Presentation;
+        while (!loader.IsAborted)
+        {
+            presentation?.Poll();
+            if (watcher.State is ModWatcher.Watcher.MinecraftState.Crashed or ModWatcher.Watcher.MinecraftState.Ended or ModWatcher.Watcher.MinecraftState.Canceled)
+                throw new Exception("$$");
+            if (watcher.State == ModWatcher.Watcher.MinecraftState.Running)
+            {
+                if (presentation?.WaitForTelemetryHandshake == true) { Thread.Sleep(100); continue; }
+                presentation?.WindowAppeared();
+                if (presentation is null || presentation.State.IsTerminal) break;
+            }
             Thread.Sleep(100);
-        if (watcher.State == ModWatcher.Watcher.MinecraftState.Crashed) throw new Exception("$$");
+        }
     }
 
     private static void McLaunchEnd()

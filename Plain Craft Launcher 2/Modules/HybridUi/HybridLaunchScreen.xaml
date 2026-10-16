@@ -1,58 +1,137 @@
 <UserControl x:Class="PCL.HybridLaunchScreen"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="#111315" Visibility="Collapsed" IsVisibleChanged="VisibilityChanged" Unloaded="ViewUnloaded">
+             MinWidth="500" MinHeight="340" FontFamily="Segoe UI, Microsoft YaHei UI"
+             Background="#111315" Visibility="Collapsed" UseLayoutRounding="True"
+             Loaded="ViewLoaded" IsVisibleChanged="VisibilityChanged" Unloaded="ViewUnloaded">
     <UserControl.Resources>
-        <ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="HybridTheme.xaml" /></ResourceDictionary.MergedDictionaries></ResourceDictionary>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="HybridTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="Launch.Error" Color="#F08C83" />
+            <Style x:Key="Launch.Action" TargetType="Button" BasedOn="{StaticResource Hybrid.QuietButton}">
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Height" Value="36" />
+                <Setter Property="BorderBrush" Value="#35383C" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Plate" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Plate" Property="Background" Value="#30302B" />
+                                    <Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Plate" Property="Background" Value="#453821" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Plate" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45" />
+                                    <Setter Property="Cursor" Value="Arrow" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="28,20">
-        <Grid MaxWidth="760" MinWidth="240" HorizontalAlignment="Stretch">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <Grid Margin="0,0,0,16">
-                <StackPanel><TextBlock Text="MOONCL / LAUNCH SEQUENCE" Foreground="{StaticResource Hybrid.Accent}" FontSize="10" FontWeight="SemiBold" /><TextBlock Text="下一站，你的世界" Foreground="{StaticResource Hybrid.Text}" FontSize="24" FontWeight="SemiBold" Margin="0,8,0,0" /></StackPanel>
-            </Grid>
-            <Border Grid.Row="1" CornerRadius="10" BorderBrush="#3E372A" BorderThickness="1" ClipToBounds="True">
-                <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#23282B" /><GradientStop Color="#171B1E" Offset="0.6" /><GradientStop Color="#30291E" Offset="1" /></LinearGradientBrush></Border.Background>
+    <!-- Fixed tracks preserve the two-stage hierarchy even at 500 × 340. No scrolling. -->
+    <Grid Margin="24,12,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" MinHeight="92" />
+            <RowDefinition Height="60" />
+            <RowDefinition Height="112" />
+            <RowDefinition Height="44" />
+        </Grid.RowDefinitions>
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="152" /></Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center" Margin="0,0,16,8">
+                <TextBlock Text="MOONCL  /  LAUNCH" Foreground="{StaticResource Hybrid.Accent}" FontSize="10" FontWeight="SemiBold" />
+                <TextBlock x:Name="LaunchTitle" Text="正在准备启动" Foreground="{StaticResource Hybrid.Text}"
+                           FontSize="24" FontWeight="SemiBold" Margin="0,8,0,8" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="VersionName" Text="等待选择游戏版本" Foreground="{StaticResource Hybrid.Muted}"
+                           FontSize="12" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Viewbox Grid.Column="1" MaxHeight="136" Margin="0,0,0,8" Stretch="Uniform" IsHitTestVisible="False">
+                <Grid Width="152" Height="136">
+                    <Ellipse Width="126" Height="126" Stroke="#383329" StrokeThickness="1" />
+                    <Ellipse Width="100" Height="100" Stroke="#292D30" StrokeThickness="1" />
+                    <Ellipse Width="76" Height="76">
+                        <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#3A2F1D" /><GradientStop Color="#111315" Offset="1" /></RadialGradientBrush></Ellipse.Fill>
+                    </Ellipse>
+                    <Grid x:Name="Orbit" Width="126" Height="126" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><RotateTransform x:Name="OrbitRotation" Angle="32" /></Grid.RenderTransform>
+                        <Ellipse Width="6" Height="6" Fill="{StaticResource Hybrid.Accent}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-2,0,0" />
+                    </Grid>
+                    <Path x:Name="Moon" Data="M 88,39 A 31,31 0 1 0 88,97 A 29,29 0 0 1 88,39 Z" Fill="#EFCF94" />
+                    <Path Data="M 123,26 L 123,32 M 120,29 L 126,29" Stroke="#8B7855" StrokeThickness="1" />
+                    <Ellipse Width="2" Height="2" Fill="#878C91" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14,0,0,24" />
+                </Grid>
+            </Viewbox>
+        </Grid>
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="24" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Border x:Name="LauncherStep" Background="#242117" BorderBrush="#80602C" BorderThickness="1" CornerRadius="8" Padding="12,0">
                 <Grid>
-                    <Viewbox Height="182" Stretch="Uniform" ClipToBounds="True" IsHitTestVisible="False">
-                        <Canvas Width="640" Height="182">
-                            <Ellipse Width="2" Height="2" Fill="#ACA894" Canvas.Left="92" Canvas.Top="34" /><Ellipse Width="3" Height="3" Fill="#D6B372" Canvas.Left="482" Canvas.Top="46" /><Ellipse Width="2" Height="2" Fill="#898C87" Canvas.Left="540" Canvas.Top="98" /><Ellipse Width="2" Height="2" Fill="#898C87" Canvas.Left="168" Canvas.Top="100" />
-                            <Ellipse Width="156" Height="156" Stroke="#4C4433" StrokeThickness="1" Canvas.Left="242" Canvas.Top="6" />
-                            <Ellipse Width="118" Height="118" Stroke="#353C3B" StrokeThickness="1" Canvas.Left="261" Canvas.Top="25" />
-                            <Grid x:Name="Orbit" Width="156" Height="156" Canvas.Left="242" Canvas.Top="6" RenderTransformOrigin="0.5,0.5"><Grid.RenderTransform><RotateTransform x:Name="OrbitRotation" /></Grid.RenderTransform><Ellipse Width="7" Height="7" Fill="#FFB942" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-3,0,0" /></Grid>
-                            <Path Data="M 339,56 A 35,35 0 1 0 339,112 A 30,30 0 0 1 339,56 Z" Fill="#E6C58B" />
-                            <Path Data="M0,157 L70,118 132,152 226,111 290,158 397,115 480,151 560,117 640,157 640,182 0,182 Z" Fill="#2C3C38" />
-                            <Path Data="M0,173 L90,153 178,173 264,140 355,177 453,143 543,170 640,146 640,182 0,182 Z" Fill="#151D20" />
-                        </Canvas>
-                    </Viewbox>
-                    <TextBlock Text="PREPARING YOUR NEXT ADVENTURE" FontSize="9" Foreground="#7F898A" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="16,0,16,12" />
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="28" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LauncherNumber" Text="01" FontSize="11" FontFamily="Consolas" Foreground="{StaticResource Hybrid.Accent}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="LauncherLabel" Grid.Column="1" Text="启动器准备" FontSize="12" Foreground="{StaticResource Hybrid.Text}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="LauncherState" Grid.Column="2" Text="进行中" FontSize="10" Foreground="{StaticResource Hybrid.Accent}" VerticalAlignment="Center" Margin="8,0,0,0" />
                 </Grid>
             </Border>
-            <StackPanel Grid.Row="2" Margin="0,20,0,0">
-                <TextBlock x:Name="VersionName" Foreground="{StaticResource Hybrid.Text}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="LaunchTitle" Text="正在启动游戏" Foreground="{StaticResource Hybrid.Muted}" FontSize="12" Margin="0,6,0,18" TextWrapping="Wrap" />
-                <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="StageName" Text="初始化" Foreground="{StaticResource Hybrid.Text}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,16,0" />
-                    <TextBlock x:Name="Percentage" Grid.Column="1" Text="0%" Foreground="{StaticResource Hybrid.Accent}" FontSize="26" FontFamily="Consolas" />
+            <Border Grid.Column="1" Height="1" Background="#35383C" Margin="6,0" />
+            <Border x:Name="GameStep" Grid.Column="2" Background="#181B1E" BorderBrush="#2A2D32" BorderThickness="1" CornerRadius="8" Padding="12,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="28" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="GameNumber" Text="02" FontSize="11" FontFamily="Consolas" Foreground="{StaticResource Hybrid.Muted}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="GameLabel" Grid.Column="1" Text="游戏加载" FontSize="12" Foreground="{StaticResource Hybrid.Muted}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="GameState" Grid.Column="2" Text="待开始" FontSize="10" Foreground="{StaticResource Hybrid.Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
                 </Grid>
-                <Border Height="4" Background="#303237" CornerRadius="2" ClipToBounds="True" SizeChanged="ProgressSizeChanged">
-                    <Border x:Name="ProgressFill" Width="0" HorizontalAlignment="Left" Background="{StaticResource Hybrid.Accent}" CornerRadius="2" />
-                </Border>
-                <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="DownloadSpeed" Text="正在准备启动环境" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
-                    <TextBlock x:Name="Elapsed" Grid.Column="1" Text="00:00" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" FontFamily="Consolas" />
-                </Grid>
-            </StackPanel>
-            <StackPanel Grid.Row="3" Margin="0,22,0,0">
-                <Border Background="#1B1D21" BorderBrush="#2A2D32" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,14">
-                    <TextBlock Text="启动进度来自实际任务；游戏窗口出现后，启动器将按你的设置自动处理。" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" TextWrapping="Wrap" LineHeight="18" />
-                </Border>
-                <WrapPanel HorizontalAlignment="Right">
-                    <Button Content="返回主页" Click="HomeClick" AutomationProperties.AutomationId="LaunchScreen.Home" Style="{StaticResource Hybrid.QuietButton}" ToolTip="仅收起动画，启动任务继续运行" Margin="0,0,8,0" />
-                    <Button Content="取消启动" Click="CancelClick" AutomationProperties.AutomationId="LaunchScreen.Cancel" Style="{StaticResource Hybrid.QuietButton}" Foreground="{StaticResource Hybrid.Accent}" Background="#302719" />
-                </WrapPanel>
-            </StackPanel>
+            </Border>
         </Grid>
-    </ScrollViewer>
+        <Grid x:Name="StatusPanel" Grid.Row="2" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite">
+            <Grid.RenderTransform><TranslateTransform x:Name="StatusTranslation" /></Grid.RenderTransform>
+            <Grid.RowDefinitions><RowDefinition Height="28" /><RowDefinition Height="14" /><RowDefinition Height="22" /><RowDefinition Height="24" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="72" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="StageName" Text="准备启动环境" Foreground="{StaticResource Hybrid.Text}" FontSize="14"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                <TextBlock x:Name="Percentage" Grid.Column="1" Text="--" Foreground="{StaticResource Hybrid.Accent}" FontSize="22"
+                           FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <Border x:Name="ProgressTrack" Grid.Row="1" Height="4" Background="#2A2D32" CornerRadius="2" SizeChanged="ProgressSizeChanged">
+                <Grid>
+                    <Border x:Name="ProgressFill" Width="0" HorizontalAlignment="Left" Background="{StaticResource Hybrid.Accent}" CornerRadius="2" />
+                    <Border x:Name="UnknownFill" Width="80" HorizontalAlignment="Left" Background="{StaticResource Hybrid.Accent}" CornerRadius="2" Opacity="0.7">
+                        <Border.RenderTransform><TranslateTransform x:Name="UnknownTranslation" /></Border.RenderTransform>
+                    </Border>
+                </Grid>
+            </Border>
+            <TextBlock x:Name="DetailText" Grid.Row="2" Text="正在检查运行环境与启动所需文件" Foreground="{StaticResource Hybrid.Muted}"
+                       FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="NoticeText" Grid.Row="3" Text="游戏进度将在启动后由加载模组提供" Foreground="{StaticResource Hybrid.Muted}"
+                       FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <Grid Grid.Row="3" VerticalAlignment="Bottom">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                <TextBlock x:Name="PhaseCaption" Text="启动器准备" FontSize="10" Foreground="{StaticResource Hybrid.Muted}" />
+                <TextBlock x:Name="Elapsed" Text="已用时 00:00" FontSize="10" FontFamily="Consolas" Foreground="{StaticResource Hybrid.Muted}" Margin="0,3,0,0" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="收起窗口" Click="HomeClick" AutomationProperties.AutomationId="LaunchScreen.Home"
+                    Style="{StaticResource Launch.Action}" ToolTip="仅关闭此窗口，启动任务继续运行" Margin="0,0,8,0" />
+            <Button x:Name="CancelButton" Grid.Column="2" Content="取消启动" Click="CancelClick" AutomationProperties.AutomationId="LaunchScreen.Cancel"
+                    Style="{StaticResource Launch.Action}" Foreground="{StaticResource Hybrid.Accent}" Background="#302719" BorderBrush="#65502C" />
+        </Grid>
+    </Grid>
 </UserControl>
