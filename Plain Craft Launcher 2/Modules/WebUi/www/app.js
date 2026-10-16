@@ -53,6 +53,7 @@ const COPY = {
     ignored: "启动器没有开始该任务。若原生对话框正打开，请先关闭后再试。",
     selectMiss: "启动器未切换到所选条目，已取消后续操作。",
     noSnapshot: "启动器没有提供浏览数据。",
+    connectTimeout: "浏览页没有连上启动器。请关闭后重新打开浏览。",
     badSnapshot: "浏览数据无法显示。",
     gameRunning: "游戏运行中。下载、更新和夸克安装已禁用，请先在原生界面关闭游戏。",
     locked: "任务进行中，条目选择已暂时锁定。",
@@ -111,6 +112,7 @@ const COPY = {
     ignored: "The launcher did not start the task. Close any native dialog and try again.",
     selectMiss: "The launcher did not select that entry. The follow-up action was cancelled.",
     noSnapshot: "The launcher did not provide browse data.",
+    connectTimeout: "Browse did not connect to the launcher. Close it and open Browse again.",
     badSnapshot: "Browse data could not be shown.",
     gameRunning: "The game is running. Download, update, and Quark install are disabled.",
     locked: "A task is running, so selection is locked.",
@@ -167,6 +169,7 @@ const state = {
   pending: null,
   localNote: "",
   hostError: "",
+  connectDeadline: 0,
   configSent: null,
   configNote: "",
   lastSelectionKey: ""
@@ -178,12 +181,14 @@ const COMMON_MC = ["1.21.1", "1.20.1", "1.19.2", "1.18.2", "1.16.5", "1.12.2"];
 const SITE_LOADERS = ["Forge", "Fabric", "Quilt", "NeoForge", "LiteLoader", "Rift", "数据包", "行为包"];
 const PLATFORM_LOADERS = ["Forge", "Fabric", "Quilt", "NeoForge"];
 const PLATFORM_SORTS = ["relevance", "downloads", "updated", "newest"];
+const MCMOD_SORTS = ["default", "createtime", "lastedittime"];
 const SITE_CATEGORIES = ["科技", "魔法", "冒险", "建筑", "地图", "任务", "硬核", "休闲", "大型", "轻量", "剧情", "水槽", "空岛", "PvP", "国创"];
 const REQUEST_TIMEOUT = 45000;
 const PLATFORM_TIMEOUT = 60000;
 const SEARCH_DEBOUNCE = 350;
 const PLATFORM_PAGE_MAX = 400;
-const browse = { source: "mcmod", sources: new Set(["mcl", "curseforge", "mcmod"]), resourceType: "modpack" };
+const DISCOVERY_AUTO_MS = 6000;
+const browse = { source: "mcmod", sources: new Set(["mcl", "curseforge", "mcmod"]), resourceType: "modpack", feature: 0, featureKey: "" };
 const catalog = {
   include: true, page: 1, totalPages: 0, sequence: 0, retained: new Map(),
   pages: new Map(), listPending: new Map(), listErrors: new Map(),
@@ -211,12 +216,15 @@ Object.defineProperties(platform, {
   page: { get: () => platformPosition().page, set: value => { platformPosition().page = value; } },
   totalPages: { get: () => platformPosition().totalPages, set: value => { platformPosition().totalPages = value; } }
 });
-const categoryState = { items: new Map(), pending: new Map(), errors: new Map(), requests: new Map(), sequence: 0 };
-const RESOURCE_TYPES = { modpack: "整合包", datapack: "数据包", world: "地图", shader: "光影包", resourcepack: "材质包", plugin: "服务器插件" };
+ const categoryState = { items: new Map(), pending: new Map(), errors: new Map(), requests: new Map(), sequence: 0 };
+ const translation = { page: false, text: new Map(), pending: new Map(), missing: new Set(), requests: new Map(), sequence: 0, autoDetail: "" };
+const RESOURCE_TYPES = { modpack: "整合包", datapack: "数据包", world: "地图", shader: "光影包", resourcepack: "材质包", plugin: "服务器插件", server: "服务器" };
+const MCLISTS = "https://www.mclists.cn/";
+const servers = { items: [], error: "", loading: false, selected: null };
 function resourceTypeOf(item) { return item?.resourceType || (/^mcmod-datapack-/.test(item?.id || "") ? "datapack" : "modpack"); }
 function resourcePayload(type = browse.resourceType) { return type === "modpack" ? {} : { resourceType: type }; }
 function resourceLabel(type = browse.resourceType) { return RESOURCE_TYPES[type] || "资源"; }
-function supportsResource(source, type = browse.resourceType) { return !!RESOURCE_TYPES[type] && (source === "curseforge" || source === "modrinth" && type !== "world" || source === "mcmod" && ["modpack", "datapack"].includes(type)); }
+function supportsResource(source, type = browse.resourceType) { return type !== "server" && !!RESOURCE_TYPES[type] && (source === "curseforge" && type !== "plugin" || source === "modrinth" && type !== "world" || source === "mcmod" && ["modpack", "datapack"].includes(type)); }
 function mcKey(item, type = resourceTypeOf(item)) { const id = typeof item === "number" ? item : wikiId(item); return type === "modpack" ? id : `${type}:${id}`; }
 function selectResourceType(type) {
   if (!RESOURCE_TYPES[type] || browse.resourceType === type) return;
@@ -227,19 +235,28 @@ function selectResourceType(type) {
   resetPlatformPages();
   ui["filter-loader"].value = ""; ui["filter-category"].value = "";
   if (!state.composing) platform.query = ui.search.value.trim();
-  render(); ensureBrowse();
+  render(); ensureBrowse(); renderServers();
 }
 function renderResourceTypes() {
+  for (const source of ["curseforge", "modrinth", "mcmod"]) {
+    const input = ui[source === "mcmod" ? "include-mcmod" : `source-${source}`];
+    const label = input.closest("label");
+    label.hidden = !supportsResource(source);
+  }
   for (const type of Object.keys(RESOURCE_TYPES)) ui[`type-${type}`].setAttribute("aria-selected", String(type === browse.resourceType));
+  const serverPage = browse.resourceType === "server";
+  document.querySelector("section.catalog").hidden = serverPage;
+  ui.servers.hidden = !serverPage;
+  if (serverPage) document.querySelector(".stage").hidden = true;
+  ui.filters.hidden = serverPage;
   ui["filter-loader"].disabled = browse.resourceType !== "modpack";
   ui["filter-category"].disabled = categoryOptions().length === 0;
   setText("catalog-title", resourceLabel() + "列表");
-  if (browse.resourceType !== "modpack") setText("catalog-caption-main", `${resourceLabel()} · 搜索、游戏版本与排序按当前来源处理`);
   if (catalog.include && !supportsResource("mcmod")) {
     ui["mcmod-status"].hidden = false; ui["mcmod-status"].dataset.state = "unsupported";
     ui["mcmod-status"].setAttribute("aria-busy", "false");
     setText("mcmod-message", "MC百科没有此类资源的独立索引，请切换到 CurseForge 或 Modrinth。");
-    ui["mcmod-retry"].hidden = true; ui.pagination.hidden = true;
+    ui["mcmod-retry"].hidden = true;
   }
 }
 const ui = Object.fromEntries([...document.querySelectorAll("[id]")].map(node => [node.id, node]));
@@ -348,11 +365,20 @@ function selectedPack(list = packs()) {
   const id = selectedId();
   return list.find(item => item.id === id) || list[0] || null;
 }
+const DISCOVERY_LIMIT = 8;
+function discoveryPool(items = catalogItems().filter(matchesFilters)) {
+  const preferred = items.filter(item => item.source === browse.source && (isMcmod(item) || isPlatform(item)));
+  const remote = preferred.length ? preferred : items.filter(item => isMcmod(item) || isPlatform(item));
+  const pool = browse.source !== "mcl" && remote.length ? remote : items.filter(item => matchesFilters(item));
+  return pool.slice(0, DISCOVERY_LIMIT);
+}
 function featuredPack(items = catalogItems().filter(matchesFilters)) {
-  const remote = items.filter(item => isMcmod(item) || isPlatform(item));
-  if (browse.source !== "mcl" && remote.length) return remote.find(item => item.source === browse.source) || remote[0];
-  const local = items.filter(item => item.source === "mcl" && matchesFilters(item));
-  return selectedPack(local) || remote[0] || null;
+  const pool = discoveryPool(items);
+  if (!pool.length) return null;
+  const key = pool.map(item => item.id).join("\n");
+  if (browse.featureKey !== key) { browse.featureKey = key; browse.feature = 0; }
+  browse.feature = Math.min(Math.max(0, browse.feature), pool.length - 1);
+  return pool[browse.feature];
 }
 function isSre(item) { return item?.id === SRE_ID; }
 function packArt(item, field) {
@@ -369,6 +395,7 @@ function statusLabel(item) {
   return t.notInstalled;
 }
 function taskOf() { return state.launcher?.task || {}; }
+function taskForScope(scope) { const task = taskOf(); return (task.scope || "library") === scope ? task : {}; }
 function busy() { return state.link === "live" && !!taskOf().busy; }
 function gameRunning() { return state.link === "live" && !!taskOf().gameRunning; }
 function mutatingLocked() { return state.link !== "live" || busy() || !!state.pending || gameRunning(); }
@@ -422,11 +449,13 @@ function syncButtons(parent, items, className, activate) {
     keep.add(id);
     let node = previous.get(id);
     if (!node) {
-      node = document.createElement("button");
-      node.type = "button";
+      node = document.createElement("div");
       node.className = className;
       node.dataset.packId = id;
       node.classList.add("enter");
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = className === "card" ? "card-open" : "rec-open";
       const art = document.createElement("span");
       art.className = className === "card" ? "card-art" : "thumb";
       art.setAttribute("aria-hidden", "true");
@@ -444,20 +473,23 @@ function syncButtons(parent, items, className, activate) {
       summary.className = "card-summary";
       if (className === "card") copy.append(title, detail, summary, pill);
       else copy.append(title, detail, pill);
-      node.append(art, copy);
-      node.parts = { image, title, detail, summary, pill };
-      node.addEventListener("click", () => activate(node.dataset.packId));
+      open.append(art, copy);
+      node.append(open);
+      node.parts = { open, image, title, detail, summary, pill };
+      open.addEventListener("click", () => activate(node.dataset.packId));
     }
-    const selected = item.id === (catalog.viewedId || selectedId());
+    const featured = parent === ui["recommend-list"] && item.id === featuredPack()?.id;
+    const selected = featured || item.id === (catalog.viewedId || selectedId());
     node.classList.toggle("selected", selected);
     node.classList.toggle("pinned", isSre(item));
     node.setAttribute("aria-pressed", String(selected));
+    node.setAttribute("aria-current", featured ? "true" : "false");
     node.tabIndex = 0;
     node.parts.title.textContent = item.name || id;
     const version = [mcVersions(item).length ? `MC ${versionSummary(item)}` : "MC 版本未提供", loaders(item).join(" / "), displayVersion(item)].filter(Boolean).join(" · ");
     node.parts.detail.textContent = version;
     node.parts.detail.title = versionTitle(item);
-    node.parts.summary.textContent = item.description || "暂无简介，点击查看详情。";
+    node.parts.summary.textContent = translatedText(item) || item.description || "暂无简介，点击查看详情。";
     node.parts.pill.textContent = isSre(item) ? text().test : isMcmod(item) ? "MC百科 · 查看详情" : isPlatform(item) ? `${sourceName(item.source)} · 查看详情` : `MCL · ${statusLabel(item)}`;
     node.parts.pill.className = `pill${item.updateAvailable ? " update" : item.installed ? " installed" : item.offline ? " offline" : ""}`;
     const label = `${item.name || id}，${isSre(item) ? text().test : statusLabel(item)}，查看详情`;
@@ -465,10 +497,11 @@ function syncButtons(parent, items, className, activate) {
     node.title = label;
     node.disabled = false;
     setImage(node.parts.image, packArt(item, "icon"));
+    syncCardTranslate(node, item);
     if (parent.children[index] !== node) parent.insertBefore(node, parent.children[index] || null);
   });
   for (const [id, node] of previous) if (!keep.has(id)) node.remove();
-   const buttons = [...parent.querySelectorAll("button")];
+   const buttons = [...parent.querySelectorAll("[data-pack-id]")];
    const activeInside = buttons.includes(document.activeElement);
    const preferred = (activeInside ? document.activeElement : buttons.find(node => node.dataset.packId === (catalog.viewedId || selectedId()))) || buttons[0];
    buttons.forEach(node => { node.tabIndex = node === preferred ? 0 : -1; });
@@ -590,16 +623,24 @@ function render() {
   const query = queryText();
   const all = catalogItems();
   syncFilterOptions(all);
-  const visible = all.filter(item => isSre(item) || matchesFilters(item));
+  const visible = all.filter(matchesFilters);
   const selected = featuredPack(visible);
+  const pool = discoveryPool(visible);
   const detailFeatured = !!selected && (isMcmod(selected) || isPlatform(selected) || selected.id !== selectedPack(list)?.id);
-  const others = visible.filter(item => item.id !== selected?.id && matchesFilters(item)).slice(0, 3);
+  const others = pool;
   document.querySelector(".stage").hidden = !selected;
   document.querySelector(".discovery-title").hidden = !selected;
   setText("discovery-note", selected ? `${sourceName(selected.source)} · 当前来源与筛选中的条目` : "");
+  setText("discovery-index", pool.length ? `${browse.feature + 1} / ${pool.length}` : "");
+  ui["discovery-previous"].disabled = !pool.length || browse.feature <= 0;
+  ui["discovery-next"].disabled = !pool.length || browse.feature >= pool.length - 1;
+  ui["discovery-previous"].hidden = pool.length < 2;
+  ui["discovery-next"].hidden = pool.length < 2;
+  ui["discovery-index"].hidden = pool.length < 2;
+  scheduleDiscovery();
   setText("recommend-title", "继续发现");
-  setText("recommend-note", "来自当前所选来源 · 非广告排名");
-  const task = taskOf();
+  setText("recommend-note", "来自当前所选来源 · 非广告排名 · 可滑动");
+  const task = { ...taskOf(), error: taskForScope("library").error, phase: taskForScope("library").phase };
   const isBusy = busy();
   const running = gameRunning();
   const live = state.link === "live";
@@ -673,6 +714,8 @@ function render() {
   ui["recommend-empty"].hidden = others.length > 0;
   syncButtons(ui["recommend-list"], others, "rec", openDetail);
   syncButtons(ui.cards, visible, "card", openDetail);
+  syncPageTranslate();
+  if (translation.page) translateVisible();
   setText("result-count", t.count(visible.length));
   const noPacks = live && list.length === 0;
   const matching = visible.filter(item => !isSre(item));
@@ -703,6 +746,7 @@ function applyBoot(data) {
   if (data.runtimeVersion) state.runtimeVersion = String(data.runtimeVersion);
   if (typeof data.bundledRuntime === "boolean") state.bundledRuntime = data.bundledRuntime;
   if (state.link === "offline") state.link = "connecting";
+  if (state.link === "connecting" && !state.connectDeadline) state.connectDeadline = Date.now() + 8000;
   render();
 }
 function applySnapshot(data) {
@@ -714,6 +758,7 @@ function applySnapshot(data) {
     return;
   }
   state.link = "live";
+  state.connectDeadline = 0;
   state.launcher = launcher;
   if (data.runtimeVersion) state.runtimeVersion = String(data.runtimeVersion);
   if (typeof data.bundledRuntime === "boolean") state.bundledRuntime = data.bundledRuntime;
@@ -769,14 +814,15 @@ function receive(data) {
     else if (data.type === "error") showHostError(data.message);
     else if (data.type === "presentation") applyPresentation(data.visible);
     else if (data.type === "browsePlugins") openPluginBrowser(data.minecraft);
+    else if (data.type === "serverList") receiveServers(data);
     else if (data.type === "platformCategories" || data.type === "mcmodCategories" || data.operation === "categories" && ["platformError", "mcmodError"].includes(data.type)) receiveCategories(data);
     else if (data.type === "xyeVersions" || data.type === "quarkVersions" || data.type === "quarkDownload" || (data.type === "mcmodError" && (data.operation === "quarkList" || data.operation === "quarkDownload" || data.operation === "xyeResolve"))) receiveQuark(data);
     else if (["mcmodList", "mcmodDetail", "mcmodLinks", "mcmodError"].includes(data.type)) receiveMcmod(data);
-    else if (["platformList", "platformDetail", "platformError"].includes(data.type)) receivePlatform(data);
+    else if (["platformList", "platformDetail", "platformError", "platformTranslation"].includes(data.type)) receivePlatform(data);
   } catch { showHostError(text().badSnapshot); }
 }
 function moveFocus(parent, event, columns) {
-  const buttons = [...parent.querySelectorAll("button")];
+  const buttons = [...parent.querySelectorAll("[data-pack-id]")];
   const index = buttons.indexOf(document.activeElement);
   if (index < 0) return;
   let next = index;
@@ -807,7 +853,8 @@ function siteFilters() {
   const minecraft = ui["filter-mc"].value;
   const loader = browse.resourceType === "modpack" ? ui["filter-loader"].value : "";
   const category = Number(categoryFor("mcmod")) || 0;
-  return { ...resourcePayload(), ...(minecraft ? { minecraft } : {}), ...(loader ? { loader } : {}), ...(category ? { category } : {}) };
+  const sort = MCMOD_SORTS.includes(ui["filter-mcmod-sort"]?.value) ? ui["filter-mcmod-sort"].value : "default";
+  return { ...resourcePayload(), ...(minecraft ? { minecraft } : {}), ...(loader ? { loader } : {}), ...(category ? { category } : {}), ...(sort !== "default" ? { sort } : {}) };
 }
 function filterKey() { return JSON.stringify(siteFilters()); }
 function pageKey(page = catalog.page, filters = filterKey()) { return JSON.stringify([filters, page]); }
@@ -974,9 +1021,8 @@ function renderCatalogStatus() {
   ui["include-mcmod"].checked = catalog.include;
   ui["filter-category"].disabled = categoryOptions().length === 0;
   ui["filter-sort-label"].hidden = !remote;
+  ui["filter-mcmod-sort-label"].hidden = !catalog.include || !supportsResource("mcmod");
   const names = [...browse.sources].map(sourceName).join(" + ");
-  setText("catalog-caption-main", names ? `${names} · 可多选探索器，各来源独立分页` : "请选择一个或多个探索器");
-  setText("catalog-caption-note", catalog.include && remote ? "百科已确认关联的项目优先显示；MCL 目录始终排在前面" : "MCL 使用远端 index.json；百科按已加载页搜索，平台按提交的关键词搜索");
   const key = pageKey();
   const pending = catalog.listPending.has(key);
   const error = catalog.listErrors.get(key);
@@ -984,15 +1030,7 @@ function renderCatalogStatus() {
   const previous = catalog.retained.get(filterKey());
   const retained = previous && (error || !page) ? ` 仍显示相同筛选的第 ${previous.page} 页结果。` : "";
   ui["mcmod-status"].hidden = !catalog.include;
-  ui.pagination.hidden = !catalog.include;
-  ui["mcmod-status"].dataset.state = !live ? "offline" : pending ? "loading" : error ? "error" : "ready";
-  ui["mcmod-status"].setAttribute("aria-busy", String(live && pending));
-  setText("mcmod-message", !live ? "连接启动器后加载 MC百科。" : pending ? `正在加载 MC百科第 ${catalog.page} 页…${retained}` : error ? `${error}${retained}` : page ? (page.items.length ? `MC百科 · 当前页 ${page.items.length} 个${resourceLabel()}` : `MC百科 · 当前页暂无${resourceLabel()}`) : "等待加载 MC百科…");
-  ui["mcmod-retry"].hidden = !error || pending;
-  ui["mcmod-retry"].disabled = !live;
-  setText("page-label", `MC百科 · 第 ${catalog.page} 页${catalog.totalPages ? ` / ${catalog.totalPages}` : ""}`);
-  ui["previous-page"].disabled = !live || catalog.page <= 1;
-  ui["next-page"].disabled = !live || !catalog.totalPages || catalog.page >= catalog.totalPages || catalog.page >= 500;
+  renderPagination();
   renderPlatformStatus();
   renderResourceTypes();
   renderMclExplorer(); renderAssociationStatus(); queueAssociationLookup(); renderSourceSummary(); renderCategoryHelp();
@@ -1204,7 +1242,8 @@ function receivePlatform(data) {
     render();
     return;
   }
-  if (data.type !== "platformError" || !request || data.source !== request.source || data.operation !== request.kind) return;
+  if (data.type === "platformTranslation") { receiveTranslation(data); return; }
+  if (data.type !== "platformError" || !request || data.source !== request.source || (data.operation !== request.kind && !(data.operation === "translate" && request.kind === "translate"))) return;
   const message = String(data.message || "平台请求失败，请重试。");
   if (request.kind === "list") {
     if (platform.latest.get(request.key) !== data.requestId || (data.page != null && Number(data.page) !== request.page)) return;
@@ -1214,6 +1253,11 @@ function receivePlatform(data) {
     if (platform.detailLatest.get(request.key) !== data.requestId || (data.id != null && String(data.id) !== request.projectId)) return;
     clearRequest(platform.detailPending, request.key);
     platform.detailErrors.set(request.key, message);
+  } else if (request.kind === "translate") {
+    receiveTranslation({ requestId: data.requestId, text: "" });
+    platform.requests.delete(data.requestId);
+    render();
+    return;
   } else if (request.kind === "download") {
     if (platform.downloadLatest.get(request.key) !== data.requestId || (data.id != null && String(data.id) !== request.projectId)) return;
     platform.downloads.set(request.key, { error: true, message, requestId: data.requestId });
@@ -1222,19 +1266,108 @@ function receivePlatform(data) {
   platform.requests.delete(data.requestId);
   render();
 }
+
+function translationKey(item) { const identity = projectIdOf(item); return identity ? `${identity.source}:${identity.projectId}` : ""; }
+function translatedText(item) { return translation.text.get(translationKey(item)) || ""; }
+function requestTranslation(item) {
+  const identity = projectIdOf(item);
+  const key = translationKey(item);
+  if (!identity || !key || state.link !== "live" || translation.pending.has(key) || translation.text.has(key)) return;
+  translation.missing.delete(key);
+  const requestId = `translate-${++translation.sequence}`;
+  translation.requests.set(requestId, key);
+  platform.requests.set(requestId, { kind: "translate", source: identity.source, projectId: identity.projectId, resourceType: resourceTypeOf(item), key });
+  translation.pending.set(key, requestId);
+  if (!post({ type: "platform", operation: "translate", source: identity.source, id: identity.projectId, ...resourcePayload(resourceTypeOf(item)), requestId })) {
+    translation.pending.delete(key); translation.requests.delete(requestId); platform.requests.delete(requestId); translation.missing.add(key);
+  }
+}
+function translateVisible(force = false) {
+  for (const item of catalogItems()) {
+    if (!isPlatform(item)) continue;
+    if (!force && translation.missing.has(translationKey(item))) continue;
+    requestTranslation(item);
+  }
+}
+function syncCardTranslate(node, item) {
+  const key = translationKey(item);
+  let button = node.querySelector(".card-translate");
+  if (!key) { button?.remove(); return; }
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button"; button.className = "icon-button card-translate"; button.textContent = "译";
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      const current = catalogItems().find(pack => pack.id === node.dataset.packId);
+      if (!current) return;
+      const currentKey = translationKey(current);
+      if (translation.text.has(currentKey)) { translation.text.delete(currentKey); render(); return; }
+      requestTranslation(current); render();
+    });
+    node.append(button);
+  }
+  const done = translation.text.has(key), busy = translation.pending.has(key);
+  button.setAttribute("aria-pressed", String(done));
+  button.setAttribute("aria-busy", String(busy));
+  button.disabled = busy;
+  button.title = done ? "恢复原文" : busy ? "正在翻译" : "翻译这条简介";
+}
+function syncPageTranslate() {
+  const button = ui["translate-page"];
+  button.hidden = !catalogItems().some(isPlatform);
+  button.setAttribute("aria-pressed", String(translation.page));
+  button.title = translation.page ? "本页翻译已启用，再点关闭" : "翻译本页 CurseForge 与 Modrinth 简介";
+}
+function receiveTranslation(data) {
+  const key = translation.requests.get(data.requestId);
+  if (!key) return;
+  translation.requests.delete(data.requestId);
+  translation.pending.delete(key);
+  const textValue = typeof data.text === "string" ? data.text.trim() : "";
+  if (textValue) translation.text.set(key, textValue); else translation.missing.add(key);
+  render();
+}
+function pageableSources() {
+  const sources = [];
+  for (const source of ["curseforge", "modrinth"]) {
+    if (sourceEnabled(source) && supportsResource(source)) sources.push(source);
+  }
+  if (catalog.include && supportsResource("mcmod")) sources.push("mcmod");
+  return sources;
+}
+function sourcePageState(source) {
+  if (source === "mcmod") return { page: catalog.page, totalPages: catalog.totalPages, max: 500 };
+  const position = platformPosition(source);
+  return { page: position.page, totalPages: position.totalPages, max: PLATFORM_PAGE_MAX };
+}
+function renderPagination() {
+  const live = state.link === "live";
+  const sources = pageableSources();
+  ui.pagination.hidden = sources.length === 0;
+  const parts = sources.map(source => {
+    const pageState = sourcePageState(source);
+    return `${sourceName(source)} · 第 ${pageState.page} 页${pageState.totalPages ? ` / ${pageState.totalPages}` : ""}`;
+  });
+  setText("page-label", parts.join("  ·  ") || "尚未加载");
+  ui["previous-page"].disabled = !live || !sources.some(source => sourcePageState(source).page > 1);
+  ui["next-page"].disabled = !live || !sources.some(source => {
+    const pageState = sourcePageState(source);
+    return pageState.totalPages > 0 && pageState.page < pageState.totalPages && pageState.page < pageState.max;
+  });
+}
 function renderPlatformStatus() {
   const live = state.link === "live";
   for (const source of ["curseforge", "modrinth"]) {
     const prefix = source === "curseforge" ? "platform" : "modrinth";
     const enabled = sourceEnabled(source), position = platformPosition(source), name = sourceName(source);
     ui[`${prefix}-status`].hidden = !enabled;
-    ui[`${prefix}-pagination`].hidden = !enabled;
     if (!enabled) continue;
     if (!supportsResource(source)) {
       ui[`${prefix}-status`].dataset.state = "unsupported";
       ui[`${prefix}-status`].setAttribute("aria-busy", "false");
       setText(`${prefix}-message`, `${name} 当前没有此类型目录，请切换其他探索器。`);
-      ui[`${prefix}-retry`].hidden = true; ui[`${prefix}-pagination`].hidden = true; continue;
+      ui[`${prefix}-retry`].hidden = true;
+      continue;
     }
     const key = platformPageKey(position.page, source), pending = platform.listPending.has(key);
     const error = platform.listErrors.get(key), page = platform.pages.get(key);
@@ -1243,10 +1376,8 @@ function renderPlatformStatus() {
     ui[`${prefix}-status`].dataset.state = !live ? "offline" : pending ? "loading" : error ? "error" : "ready";
     ui[`${prefix}-status`].setAttribute("aria-busy", String(live && pending));
     setText(`${prefix}-message`, !live ? `连接启动器后加载 ${name}。` : pending ? `正在加载 ${name} 第 ${position.page} 页…${retained}` : error ? `${error}${retained}` : page ? `${name} · 当前页 ${page.items.length} 个${resourceLabel()}` : `等待加载 ${name}…`);
-    ui[`${prefix}-retry`].hidden = !error || pending; ui[`${prefix}-retry`].disabled = !live;
-    setText(`${prefix}-page-label`, `${name} · 第 ${position.page} 页${position.totalPages ? ` / ${position.totalPages}` : ""}`);
-    ui[`${prefix}-previous-page`].disabled = !live || position.page <= 1;
-    ui[`${prefix}-next-page`].disabled = !live || !position.totalPages || position.page >= position.totalPages || position.page >= PLATFORM_PAGE_MAX;
+    ui[`${prefix}-retry`].hidden = !error || pending;
+    ui[`${prefix}-retry`].disabled = !live;
   }
 }
 function findDetailItem() {
@@ -1274,6 +1405,7 @@ function openDetail(id) {
   if (!isMcmod(item) && !isPlatform(item)) choose(id);
   render();
   if (!ui["pack-detail"].open) ui["pack-detail"].showModal();
+  if (isPlatform(item) && translation.page && translation.autoDetail !== id) { translation.autoDetail = id; requestTranslation(item); }
   if (isMcmod(item)) requestDetail(item);
   if (isPlatform(item)) requestPlatformDetail(item);
 }
@@ -1406,6 +1538,7 @@ function resolveXye() {
   quark.entries = [];
   quark.xyeVersions = [];
   quark.error = "";
+  quark.downloadRequestId = "";
   quark.note = "";
   quark.truncated = false;
   quark.xyeTruncated = false;
@@ -1436,12 +1569,14 @@ function openQuarkDownloadPage() {
   quark.path = "";
   quark.entries = [];
   quark.error = "";
+  quark.downloadRequestId = "";
   quark.note = "";
   quark.truncated = false;
   if (!ui["quark-download"].open) ui["quark-download"].showModal();
   requestQuarkList("");
 }
 function requestQuarkList(path) {
+  quark.downloadRequestId = "";
   if (!quark.wikiId || !quark.shareId || state.link !== "live") return;
   const requestId = `quark-list-${++quark.sequence}`;
   quark.requestId = requestId;
@@ -1479,6 +1614,7 @@ function quarkParent(path) {
 }
 function receiveQuark(data) {
   if (data.type === "mcmodError") {
+    if (data.id && Number(data.id) !== quark.wikiId) return;
     if (data.requestId && data.requestId !== quark.requestId && data.requestId !== quark.downloadRequestId) return;
     quark.pending = false;
     quark.error = String(data.message || "夸克目录读取失败");
@@ -1528,11 +1664,11 @@ function renderQuarkDownload() {
   setText("quark-download-title", choosing ? "选择 XyeBBS 版本" : "选择版本");
   setText("quark-download-note", choosing ? "先选择 XyeBBS 上的一个版本。随后进入夸克下载页，只会转存你点中的一个整合包。" : "在这个下载页选择要安装的版本。只会转存你点中的一个整合包，不会转存整个分享。");
   setText("quark-download-path", choosing ? "XyeBBS 下载页" : (quark.path || "分享根目录"));
-  const task = state.launcher?.task || {};
+  const task = quark.pending && quark.downloadRequestId ? taskForScope("browseQuark") : {};
   const phase = typeof task.phase === "string" && task.phase && task.phase !== "就绪" ? task.phase : "";
   const pendingText = choosing ? "正在读取 XyeBBS 下载页…" : "正在读取分享目录…";
   const idle = choosing ? (quark.xyeTruncated ? "版本较多，只列出前若干个。其余请改为跳转。" : "选择一个 XyeBBS 版本，随后进入夸克下载页。") : (quark.truncated ? "目录较长，只显示前 200 项。进入子文件夹，或改为跳转。" : "选择一个版本。文件夹只用于进入，不会整夹转存。");
-  const status = quark.error || quark.note || (quark.pending ? pendingText : phase) || idle;
+  const status = quark.error || phase || quark.note || (quark.pending ? pendingText : "") || idle;
   setText("quark-download-message", !choosing && quark.truncated && !quark.error && !quark.pending ? `${status} 只显示前 200 项。` : status);
   ui["quark-download-status"].dataset.state = quark.error ? "error" : quark.pending ? "loading" : "ready";
   ui["quark-up"].hidden = choosing || !quark.path;
@@ -1606,7 +1742,13 @@ function renderDetail() {
   setText("detail-source", platformItem ? `${sourceName(item.source)} · ${resourceLabel(resourceTypeOf(item))}资料` : remote ? `MC百科 · ${resourceLabel(resourceTypeOf(item))}资料` : isSre(item) ? text().test : "启动器预设 · 整合包资料");
   setText("detail-name", item.name || item.id);
   setText("detail-english", item.englishName || "");
-  setText("detail-description", item.description || "暂无简介。");
+  const shownDescription = platformItem && translatedText(item) ? translatedText(item) : (item.description || "暂无简介。");
+  setText("detail-description", shownDescription);
+  ui["detail-translate"].hidden = !platformItem;
+  ui["detail-translate"].disabled = platformItem && translation.pending.has(translationKey(item)) && !translatedText(item);
+  ui["detail-translate"].setAttribute("aria-pressed", String(!!translatedText(item)));
+  ui["detail-translate"].setAttribute("aria-busy", String(platformItem && translation.pending.has(translationKey(item))));
+  ui["detail-translate"].title = translatedText(item) ? "恢复原文" : "翻译简介";
   setImage(ui["detail-icon"], packArt(item, "icon"));
   setText("detail-mc", versionSummary(item) || "未提供");
   ui["detail-mc"].title = versionTitle(item);
@@ -1689,7 +1831,7 @@ function downloadCurrent() {
 }
 
 ui.filters.addEventListener("submit", event => event.preventDefault());
-for (const id of ["filter-mc", "filter-loader", "filter-category"]) ui[id].addEventListener("change", changeSiteFilters);
+for (const id of ["filter-mc", "filter-loader", "filter-category", "filter-mcmod-sort"]) ui[id].addEventListener("change", changeSiteFilters);
 ui["filter-sort"].addEventListener("change", () => {
   if (!isRemoteBrowse()) return;
   resetPlatformPages();
@@ -1698,23 +1840,49 @@ ui["filter-sort"].addEventListener("change", () => {
 });
 for (const source of ["mcl", "curseforge", "modrinth"]) ui[`source-${source}`].addEventListener("change", () => selectBrowseSource(source, ui[`source-${source}`].checked));
 for (const type of Object.keys(RESOURCE_TYPES)) ui[`type-${type}`].addEventListener("click", () => selectResourceType(type));
+ui["translate-page"].addEventListener("click", () => {
+  translation.page = !translation.page;
+  translation.autoDetail = "";
+  if (translation.page) translateVisible(true);
+  render();
+});
+ui["detail-translate"].addEventListener("click", () => {
+  const item = findDetailItem();
+  if (!isPlatform(item)) return;
+  const key = translationKey(item);
+  if (translation.text.has(key)) { translation.text.delete(key); render(); return; }
+  requestTranslation(item); render();
+});
 ui["reset-filters"].addEventListener("click", () => {
   ui.search.value = "";
   clearTimeout(platform.searchTimer);
   platform.searchTimer = 0;
   platform.query = "";
   ui["filter-sort"].value = "relevance";
+  ui["filter-mcmod-sort"].value = "default";
   for (const id of ["filter-mc", "filter-loader", "filter-category"]) ui[id].value = "";
   changeSiteFilters();
 });
 ui["include-mcmod"].addEventListener("change", () => selectBrowseSource("mcmod", ui["include-mcmod"].checked));
-ui["previous-page"].addEventListener("click", () => { if (!ui["previous-page"].disabled) requestPage(catalog.page - 1); });
-ui["next-page"].addEventListener("click", () => { if (!ui["next-page"].disabled) requestPage(catalog.page + 1); });
+function stepBrowsePages(delta) {
+  if (catalog.include && supportsResource("mcmod")) {
+    const next = catalog.page + delta;
+    if (next >= 1 && next <= 500 && (delta < 0 || (catalog.totalPages > 0 && catalog.page < catalog.totalPages))) requestPage(next);
+  }
+  for (const source of ["curseforge", "modrinth"]) {
+    if (!sourceEnabled(source) || !supportsResource(source)) continue;
+    const position = platformPosition(source);
+    const next = position.page + delta;
+    if (next < 1 || next > PLATFORM_PAGE_MAX) continue;
+    if (delta > 0 && (!position.totalPages || position.page >= position.totalPages)) continue;
+    requestPlatformPage(next, false, source);
+  }
+}
+ui["previous-page"].addEventListener("click", () => { if (!ui["previous-page"].disabled) stepBrowsePages(-1); });
+ui["next-page"].addEventListener("click", () => { if (!ui["next-page"].disabled) stepBrowsePages(1); });
 ui["mcmod-retry"].addEventListener("click", () => requestPage(catalog.page, true));
 for (const source of ["curseforge", "modrinth"]) {
   const prefix = source === "curseforge" ? "platform" : "modrinth";
-  ui[`${prefix}-previous-page`].addEventListener("click", () => { if (!ui[`${prefix}-previous-page`].disabled) requestPlatformPage(platformPosition(source).page - 1, false, source); });
-  ui[`${prefix}-next-page`].addEventListener("click", () => { if (!ui[`${prefix}-next-page`].disabled) requestPlatformPage(platformPosition(source).page + 1, false, source); });
   ui[`${prefix}-retry`].addEventListener("click", () => requestPlatformPage(platformPosition(source).page, true, source));
 }
 ui["mcl-config"].addEventListener("click", openServices);
@@ -1845,6 +2013,49 @@ ui.primary.addEventListener("click", () => {
   if (pack.updateAvailable || !pack.installed) enqueue("primary");
   else postNative("games");
 });
+let discoveryTimer = 0;
+let discoveryHold = 0;
+function scheduleDiscovery() {
+  clearTimeout(discoveryTimer);
+  discoveryTimer = 0;
+  if (!state.presented || document.hidden || discoveryPool().length < 2 || Date.now() < discoveryHold) return;
+  discoveryTimer = setTimeout(() => {
+    discoveryTimer = 0;
+    const pool = discoveryPool();
+    if (!state.presented || document.hidden || pool.length < 2 || ui["pack-detail"].open || Date.now() < discoveryHold) return;
+    browse.feature = (browse.feature + 1) % pool.length;
+    render();
+  }, DISCOVERY_AUTO_MS);
+}
+function stepDiscovery(delta) {
+  const pool = discoveryPool();
+  const next = browse.feature + delta;
+  if (!pool.length || next < 0 || next >= pool.length) return;
+  browse.feature = next;
+  discoveryHold = Date.now() + DISCOVERY_AUTO_MS;
+  render();
+}
+ui["discovery-previous"].addEventListener("click", () => stepDiscovery(-1));
+ui["discovery-next"].addEventListener("click", () => stepDiscovery(1));
+ui.banner.addEventListener("pointerenter", () => { discoveryHold = Date.now() + DISCOVERY_AUTO_MS; scheduleDiscovery(); });
+ui.banner.addEventListener("pointerleave", () => { discoveryHold = 0; scheduleDiscovery(); });
+document.addEventListener("visibilitychange", scheduleDiscovery);
+ui["recommend-list"].addEventListener("pointerover", event => {
+  const row = event.target.closest(".rec");
+  if (!row || row.contains(event.relatedTarget)) return;
+  const pool = discoveryPool();
+  const index = pool.findIndex(item => item.id === row.dataset.packId);
+  if (index < 0 || index === browse.feature) return;
+  browse.feature = index;
+  discoveryHold = Date.now() + DISCOVERY_AUTO_MS;
+  render();
+});
+ui["recommend-list"].addEventListener("wheel", event => {
+  const list = ui["recommend-list"];
+  if (list.scrollHeight <= list.clientHeight + 1 || !event.deltaY || event.deltaX) return;
+  list.scrollTop += event.deltaY;
+  event.preventDefault();
+}, { passive: false });
 ui.cancel.addEventListener("click", () => {
   if (ui.cancel.disabled) return;
   state.pending = null;
@@ -1920,6 +2131,7 @@ ui["services-form"].addEventListener("submit", event => {
 });
 
 state.link = connected() ? "connecting" : "offline";
+if (state.link === "connecting") state.connectDeadline = Date.now() + 8000;
 render();
 if (connected()) {
   window.chrome.webview.addEventListener("message", event => receive(event.data));
@@ -1927,7 +2139,7 @@ if (connected()) {
 }
 
 function ensureMcl() {
-  if (!sourceEnabled("mcl") || browse.resourceType !== "modpack" || state.link !== "live" || busy() || taskOf().error) return;
+  if (!sourceEnabled("mcl") || browse.resourceType !== "modpack" || state.link !== "live" || busy() || taskForScope("catalog").error) return;
   const urls = effectiveCatalogUrls(), key = JSON.stringify(urls);
   if (!urls.length || urls.includes(state.launcher?.config?.catalogSource) || mcl.requestedKey === key) return;
   mcl.requestedKey = key;
@@ -1988,6 +2200,19 @@ function finishAssociation(data, error = "") {
   render();
 }
 
+const browseSwitchSections = [".toolbar", "#notice", "#error", ".discover-controls", ".discovery-title", ".stage", ".catalog", ".foot"];
+function playBrowseSwitch() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const nodes = browseSwitchSections
+    .map(selector => document.querySelector(selector))
+    .filter(node => node && !node.hidden && node.getClientRects().length > 0);
+  nodes.forEach((node, index) => {
+    node.classList.remove("page-enter");
+    node.style.setProperty("--enter-delay", `${index * 25}ms`);
+  });
+  void document.body.offsetWidth;
+  for (const node of nodes) node.classList.add("page-enter");
+}
 function applyPresentation(visible) {
   if (typeof visible !== "boolean") return;
   state.presented = visible;
@@ -1995,10 +2220,24 @@ function applyPresentation(visible) {
     closeVersionWait();
     clearTimeout(association.timer); association.timer = 0;
     if (association.active) { clearTimeout(association.active.timeout); association.active = null; }
+  } else if (state.link === "connecting") {
+    state.connectDeadline = Date.now() + 8000;
+    state.hostError = "";
+    post({ type: "bootstrap" });
   }
   render();
-  if (visible) ensureBrowse();
+  if (visible) {
+    playBrowseSwitch();
+    ensureBrowse();
+  }
 }
+setInterval(() => {
+  if (state.link !== "connecting" || !state.connectDeadline || Date.now() < state.connectDeadline) return;
+  state.link = "lost";
+  state.connectDeadline = 0;
+  state.hostError = text().connectTimeout;
+  render();
+}, 1000);
 
 function openVersionWait(name) {
   const label = typeof name === "string" && name ? name : "";
@@ -2096,8 +2335,8 @@ function renderSourceSummary() {
     if (source === "mcl") {
       segments.push(`MCL ${packs().length}`);
       if (!effectiveCatalogUrls().length) segments.push("MCL 目录未配置");
-      if (sourceEnabled("mcl") && taskOf().busy) loading.push("MCL");
-      if (taskOf().error) errors.push(`MCL：${taskOf().error}`);
+      if (taskForScope("catalog").busy) loading.push("MCL");
+      if (taskForScope("catalog").error) errors.push(`MCL：${taskForScope("catalog").error}`);
       continue;
     }
     const key = source === "mcmod" ? pageKey() : platformPageKey(platformPosition(source).page, source);
@@ -2109,7 +2348,7 @@ function renderSourceSummary() {
     if (page) segments.push(`${name} ${page.items.length}`);
     else if (!pending && !error) segments.push(`${name}：等待加载`);
   }
-  const count = catalogItems().filter(item => isSre(item) || matchesFilters(item)).length;
+  const count = catalogItems().filter(matchesFilters).length;
   let message = `当前页 ${count} 个${resourceLabel()}（合并去重后）`;
   if (segments.length) message += ` · ${segments.join(" / ")}`;
   if (loading.length) message += ` · 加载中：${loading.join("、")}`;
@@ -2143,4 +2382,90 @@ function openPluginBrowser(minecraft) {
     select.value = minecraft; changeSiteFilters();
   }
   ui["type-plugin"].focus();
+  ui["type-plugin"].focus();
 }
+
+function hostServers() {
+  const list = Array.isArray(state.launcher?.servers) ? state.launcher.servers : [];
+  return list.filter(item => item && typeof item.address === "string" && typeof item.name === "string")
+    .map(item => ({ ...item, source: item.source || "mcl", packs: Array.isArray(item.packs) ? item.packs : [] }));
+}
+function visibleServers() {
+  const query = queryText();
+  const merged = new Map();
+  for (const item of [...hostServers(), ...servers.items]) {
+    if (!item.address || query && ![item.name, item.address, item.minecraft, item.description].some(part => String(part || "").toLocaleLowerCase().includes(query))) continue;
+    merged.set(`${item.source}:${item.address}`, item);
+  }
+  return [...merged.values()];
+}
+function loadServers() {
+  servers.loading = true; servers.error = "";
+  renderServers();
+  if (!postLauncher("servers", {})) { servers.loading = false; servers.error = "连接启动器后加载 MCLists。"; renderServers(); }
+}
+function receiveServers(data) {
+  servers.loading = false;
+  servers.items = Array.isArray(data.items) ? data.items.filter(item => item && typeof item.name === "string").map(item => ({ ...item, source: "mclists", packs: item.packs || [] })) : [];
+  servers.error = data.message || (servers.items.length ? "" : "MCLists 没有返回可展示的服务器。");
+  renderServers();
+}
+function renderServers() {
+  if (!ui.servers) return;
+  const items = visibleServers();
+  setText("servers-count", `${items.length} 个服务器`);
+  setText("servers-message", servers.loading ? "正在读取 MCLists…" : servers.error || "来源：MCLists 与 MCL index.json");
+  ui["servers-empty"].hidden = items.length > 0;
+  ui["server-cards"].replaceChildren(...items.map(serverCard));
+}
+function serverCard(item) {
+  const card = document.createElement("article");
+  card.className = "card";
+  const body = document.createElement("div");
+  body.className = "card-body";
+  const title = document.createElement("strong");
+  title.textContent = item.name;
+  const summary = document.createElement("p");
+  summary.className = "card-summary";
+  summary.textContent = item.description || item.address || "未提供简介";
+  const meta = document.createElement("small");
+  meta.textContent = [item.source === "mclists" ? "MCLists" : "MCL", item.minecraft, item.vanilla ? "原版" : "", item.address].filter(Boolean).join(" · ");
+  const join = document.createElement("button");
+  join.type = "button";
+  join.textContent = item.address ? "一键进入" : "查看来源";
+  join.addEventListener("click", () => item.address ? openServerJoin(item) : post({ type: "openExternal", url: item.website || MCLISTS }));
+  body.append(title, summary, meta, join);
+  card.append(body);
+  return card;
+}
+function openServerJoin(item) {
+  servers.selected = item;
+  setText("server-join-title", item.name);
+  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 原版可直接进入" : ""}`);
+  const box = ui["server-choices"];
+  box.replaceChildren();
+  const instances = Array.isArray(state.launcher?.instances) ? state.launcher.instances : [];
+  for (const instance of instances.filter(entry => !item.minecraft || String(entry.version || "").includes(item.minecraft))) {
+    box.append(choiceButton(`使用已安装：${instance.name}`, () => joinServer(item, { instance: instance.name })));
+  }
+  if (item.vanilla && item.minecraft) box.append(choiceButton(`下载并进入原版 ${item.minecraft}`, () => joinServer(item, { choice: "vanilla" })));
+  const offers = [{ id: "fabulously-optimized", name: "Fabulously Optimized", minecraft: item.minecraft, loader: "Fabric" }, ...(item.packs || [])]
+    .filter(offer => !item.minecraft || !offer.minecraft || offer.minecraft === item.minecraft);
+  for (const offer of offers) box.append(choiceButton(`下载推荐整合包：${offer.name}${offer.minecraft ? " · " + offer.minecraft : ""}`, () => joinServer(item, { choice: `pack:${offer.id}` })));
+  if (!box.childElementCount) box.append(choiceButton("没有可直接进入的版本，打开来源", () => post({ type: "openExternal", url: item.website || MCLISTS })));
+  if (!ui["server-join"].open) ui["server-join"].showModal();
+}
+function choiceButton(label, action) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", () => { ui["server-join"].close(); action(); });
+  return button;
+}
+function joinServer(item, extra) {
+  postLauncher("joinServer", { id: item.id || "", address: item.address, minecraft: item.minecraft || "", vanilla: !!item.vanilla, ...extra });
+}
+ui["servers-refresh"]?.addEventListener("click", loadServers);
+ui["close-server-join"]?.addEventListener("click", () => ui["server-join"].close());
+ui["server-join-cancel"]?.addEventListener("click", () => ui["server-join"].close());
+loadServers();

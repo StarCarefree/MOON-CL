@@ -50,29 +50,33 @@ public sealed class McmodCatalog(HttpClient http)
     private DateTimeOffset _nextRequestAt;
     private DateTimeOffset _cooldownUntil;
 
-    public async Task<McmodPage> GetPageAsync(int page, CancellationToken token = default, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack")
+    public async Task<McmodPage> GetPageAsync(int page, CancellationToken token = default, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack", string sort = "")
     {
         if (page is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(page));
-        var path = ListPath(page, minecraft, loader, category, resourceType);
+        var path = ListPath(page, minecraft, loader, category, resourceType, sort);
         return (McmodPage)await CachedAsync("page:" + resourceType + ":" + path, path,
             html => ParsePage(html, page, resourceType), token).ConfigureAwait(false);
     }
 
-    public static string ListPath(int page, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack")
+    public static string ListPath(int page, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack", string sort = "")
     {
         if (page is < 1 or > 500 || category < 0 || category > (resourceType == "datapack" ? 1000 : 15)) throw new ArgumentOutOfRangeException(nameof(page));
         BrowseResourceTypes.RequireSupported("mcmod", resourceType);
         if (minecraft.Length > 0 && !Regex.IsMatch(minecraft, @"^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$"))
             throw new ArgumentException("无效的 Minecraft 版本筛选。");
+        // Official list only offers default, 收录时间 and 最后编辑. Views exist on detail pages, not as a list sort.
+        var order = sort switch { "" or "default" => "", "createtime" or "newest" => "createtime", "lastedittime" or "updated" => "lastedittime", _ => null };
+        if (order is null) throw new ArgumentException("百科不支持该排序。");
+        var sortQuery = order.Length > 0 ? "&sort=" + order : "";
         if (resourceType == "datapack")
         {
             if (loader.Length > 0 && loader != "数据包") throw new ArgumentException("数据包不使用模组加载器筛选。");
-            return $"modlist.html?api=5&page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "") + (category > 0 ? "&category=" + category : "");
+            return $"modlist.html?api=5&page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "") + (category > 0 ? "&category=" + category : "") + sortQuery;
         }
         var api = loader.ToLowerInvariant() switch { "" => 0, "forge" => 1, "fabric" => 2, "quilt" => 3, "neoforge" => 7, "liteloader" => 5, "rift" => 6, "数据包" => 4, "行为包" => 8, _ => -1 };
         if (api < 0) throw new ArgumentException("无效的加载器筛选。");
         return $"modpack.html?page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "") +
-            (api > 0 ? "&api=" + api : "") + (category > 0 ? "&category=" + category : "");
+            (api > 0 ? "&api=" + api : "") + (category > 0 ? "&category=" + category : "") + sortQuery;
     }
 
     public async Task<IReadOnlyList<McmodCategory>> GetCategoriesAsync(string resourceType = "modpack", CancellationToken token = default)

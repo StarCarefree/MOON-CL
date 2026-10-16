@@ -122,6 +122,9 @@ public sealed class McmodCatalogTest
     public void FiltersAreEncodedAndUseRealMcmodLoaderIds()
     {
         Assert.AreEqual("modpack.html?page=2&mcver=1.21.1&api=7&category=3", McmodCatalog.ListPath(2, "1.21.1", "NeoForge", 3));
+        Assert.AreEqual("modpack.html?page=1&sort=createtime", McmodCatalog.ListPath(1, sort: "createtime"));
+        Assert.AreEqual("modlist.html?api=5&page=3&sort=lastedittime", McmodCatalog.ListPath(3, sort: "updated", resourceType: "datapack"));
+        Assert.ThrowsExactly<ArgumentException>(() => McmodCatalog.ListPath(1, sort: "views"));
         Assert.ThrowsExactly<ArgumentException>(() => McmodCatalog.ListPath(1, "1.20.1&other=evil"));
         Assert.ThrowsExactly<ArgumentException>(() => McmodCatalog.ListPath(1, "", "unexpected"));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => McmodCatalog.ListPath(1, "", "", 16));

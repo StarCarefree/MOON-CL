@@ -65,6 +65,21 @@ An omitted/null avatar defaults to `""`; an omitted/null game defaults to
 `""`; missing/null state becomes `stopped`. States are case-sensitive and exactly
 `stopped`, `launching`, `running`, `failed` (not `starting`).
 
+Optional `game.pack` is a public download descriptor, not a file upload:
+`{id,name,version,minecraft,fileName,downloadUrl,sha256,shareUrl,sharePath}`.
+`id` matches `[a-z0-9][a-z0-9_-]{0,63}`; name and version are 1–80 characters;
+minecraft is 0–40; fileName is a single `.zip` or `.mrpack` name; sha256 is empty
+or 64 hex characters; sharePath is 0–512 characters without controls, `..`, or
+backslashes. downloadUrl and shareUrl are credential-free HTTP(S) URLs of at most
+2048 characters; at least one must be present. Omitted or null pack means no share.
+A supplied game object replaces the previous pack, so sending game without pack
+clears it. Invalid pack data rejects the whole presence update.
+
+Optional `game.server` is the remote Minecraft address the member is currently
+playing, `host` or `host:port`. It is at most 253 characters, without spaces or
+controls. Empty or omitted means not connected to a remote server. A supplied
+game object replaces it. Invalid server text rejects the whole presence update.
+
 Avatar is raw standard base64 PNG bytes, **not a URL or data URI**. Empty string
 clears it. Maximum 8,192 encoded characters and 6,144 decoded bytes. Validation
 checks base64, PNG signature, first IHDR chunk (13-byte payload), legal header

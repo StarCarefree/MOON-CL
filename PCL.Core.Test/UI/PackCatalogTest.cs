@@ -63,4 +63,25 @@ public sealed class PackCatalogTest
     [DataRow("starrail-harpy-express", "starrail-harpy-express")]
     public void MissingInstanceSelectionFallsBackAfterDirectoryChange(string selected, string expected) =>
         Assert.AreEqual(expected, PackCatalog.ResolveSelection(selected, [PackCatalog.StarRailId], ["instance:present"]));
+
+    [TestMethod]
+    public void TestPackLeavesNamedLocalVersionsUntouched()
+    {
+        Assert.IsTrue(ExternalPackCheckOnce.IsExcludedLocalVersion("SRE4.3", @"D:\versions\SRE4.3"));
+        Assert.IsTrue(ExternalPackCheckOnce.IsExcludedLocalVersion("se录制", @"D:\versions\se录制"));
+        Assert.IsFalse(ExternalPackCheckOnce.IsExcludedLocalVersion("StarRailHarpyExpress", @"D:\versions\StarRailHarpyExpress"));
+    }
+
+    [TestMethod]
+    public void ServerCatalogKeepsVersionAndRecommendedPack()
+    {
+        var document = PackCatalog.ParseDocument("""
+        {"packs":[],"servers":[{"id":"play","name":"Play","address":"play.example.com:25565","minecraft":"1.21.1","vanilla":true,
+        "packs":[{"id":"fabulously-optimized","name":"Fabulously Optimized","minecraft":"1.21.1","loader":"Fabric","modrinth":"https://modrinth.com/modpack/fabulously-optimized"}]}]}
+        """, new Uri("https://example.com/index.json"));
+        Assert.AreEqual("1.21.1", document.Servers[0].Minecraft);
+        Assert.IsTrue(document.Servers[0].Vanilla);
+        Assert.AreEqual(PackCatalog.FabulouslyOptimizedUrl, document.Servers[0].Packs[0].Modrinth);
+        Assert.ThrowsExactly<InvalidDataException>(() => PackCatalog.ParseDocument("""{"servers":[{"id":"bad","name":"Bad","address":"javascript:alert(1)","minecraft":"1.21.1"}]}""", new Uri("https://example.com/index.json")));
+    }
 }

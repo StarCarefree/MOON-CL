@@ -61,7 +61,23 @@ try {
   assert.deepEqual(summaries.slice(0, 4), ['1.9–1.10', '1.21.1', '', '1.20.1 · 24w14a / 1.21-pre1']);
   assert.match(summaries[4], /4 个预览/);
   assert.equal(await page.locator('#filter-mc option[value="1.18.2"]').count(), 1);
-  console.log('PASS default MCmod, unified controls, source-driven hero, safe detail action and compact version spans/full disclosure');
+  const extras = Array.from({length: 8}, (_, i) => ({...wiki, id: `mcmod-${1500 + i}`, wikiId: 1500 + i, name: `发现条目 ${i + 1} · DEMO`}));
+  await send({type: 'mcmodList', requestId: mcRequest.requestId, page: 1, totalPages: 2, items: [wiki, ...extras]});
+  assert.equal(await page.locator('#recommend-list .rec').count(), 8);
+  assert.equal(await page.locator('#discovery-index').textContent(), '1 / 8');
+  assert.equal(await page.locator('#discovery-previous').isDisabled(), true);
+  await page.locator('#discovery-next').click();
+  assert.equal(await page.locator('#pack-name').textContent(), extras[0].name);
+  assert.equal(await page.locator('#discovery-index').textContent(), '2 / 8');
+  await page.clock.fastForward(5999);
+  assert.equal(await page.locator('#discovery-index').textContent(), '2 / 8');
+  await page.clock.fastForward(1);
+  assert.equal(await page.locator('#pack-name').textContent(), extras[1].name);
+  assert.equal(await page.locator('#discovery-index').textContent(), '3 / 8');
+  assert.equal(await page.locator('#recommend-list .rec').count(), 8);
+  const scrollable = await page.locator('#recommend-list').evaluate(node => node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1);
+  assert.equal(scrollable, true);
+  console.log('PASS discovery hero auto-pages 8 entries and the side list scrolls 8 more');
 
   for (const width of [360, 560, 840, 1000, 1280, 1600]) {
     await page.setViewportSize({width, height: 960});

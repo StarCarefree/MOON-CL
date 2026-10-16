@@ -43,7 +43,7 @@
             </Style>
         </ResourceDictionary>
     </Window.Resources>
-    <Border BorderBrush="#35383C" BorderThickness="1">
+    <Border x:Name="Shell" BorderBrush="#35383C" BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="36" /><RowDefinition Height="1" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <!-- WindowChrome provides native dragging, double-click maximize and edge resizing. -->

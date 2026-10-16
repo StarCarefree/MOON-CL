@@ -200,6 +200,41 @@ namespace PCL
             }
         }
 
+        /// <summary>
+        ///     同一次扫描内批量读取较大的对象目录，避免为每个已有资源单独查询文件系统。
+        ///     不跨启动缓存；旧版逻辑路径、小目录与读取失败的条目仍逐文件检查。
+        /// </summary>
+        private static Dictionary<string, long> McAssetsFileSizes(List<McAssetsToken> assets)
+        {
+            var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            var objectsRoot = Path.Combine(ModFolder.mcFolderSelected, "assets", "objects");
+            foreach (var group in assets.GroupBy(token => Path.GetDirectoryName(token.localPath), StringComparer.OrdinalIgnoreCase))
+            {
+                if (group.Count() < 32 ||
+                    !string.Equals(Path.GetDirectoryName(group.Key), objectsRoot, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var remaining = group.Select(token => Path.GetFileName(token.localPath)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var enumerationLimit = remaining.Count * 4L;
+                try
+                {
+                    foreach (var file in new DirectoryInfo(group.Key).EnumerateFiles())
+                    {
+                        // 多版本共用目录时限制枚举量；未收集的条目照常逐文件检查。
+                        if (enumerationLimit-- <= 0) break;
+                        if (!remaining.Contains(file.Name)) continue;
+                        // 链接的枚举大小不一定代表目标文件，保留原来的 FileInfo 检查语义。
+                        if ((file.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                        sizes[file.FullName] = file.Length;
+                        remaining.Remove(file.Name);
+                        if (remaining.Count == 0) break;
+                    }
+                }
+                catch (IOException) { } // 缺失目录、枚举期间删除等情况回退到逐文件检查。
+                catch (UnauthorizedAccessException) { }
+            }
+            return sizes;
+        }
+
         // 获取缺失列表
         /// <summary>
         ///     获取实例缺失的资源文件所对应的 NetTaskFile。
@@ -227,16 +262,25 @@ namespace PCL
                 McAssetsToken token;
                 if (progressFeed is not null)
                     progressFeed.Progress = 0.04d;
+                var fileSizes = McAssetsFileSizes(assetsList);
+                var progressInterval = Math.Max(1, (assetsList.Count + 99) / 100);
                 for (int i = 0, loopTo = assetsList.Count - 1; i <= loopTo; i++)
                 {
                     // 初始化
                     token = assetsList[i];
-                    if (progressFeed is not null)
+                    // 最多约 100 次通知，避免数万个 ProgressChanged 事件挤占启动线程。
+                    if (progressFeed is not null && i % progressInterval == 0)
                         progressFeed.Progress = 0.05d + 0.94d * i / assetsList.Count;
                     // 检查文件是否存在
-                    var file = new FileInfo(token.localPath);
-                    if (file.Exists && (token.size == 0L || token.size == file.Length))
-                        continue;
+                    if (fileSizes.TryGetValue(token.localPath, out var size))
+                    {
+                        if (token.size == 0L || token.size == size) continue;
+                    }
+                    else
+                    {
+                        var file = new FileInfo(token.localPath);
+                        if (file.Exists && (token.size == 0L || token.size == file.Length)) continue;
+                    }
                     // 文件不存在，添加下载
                     var hash = token.hash;
                     result.Add(new DownloadFile(

@@ -603,13 +603,15 @@ public static partial class ModLaunch
             ModLoader.LoaderTaskbarAdd(launchLoader);
             while (launchLoader.State == ModBase.LoadState.Loading)
             {
-                ModMain.frmLaunchLeft.Dispatcher.Invoke(ModMain.frmLaunchLeft.LaunchingRefresh);
                 RefreshSessionProgress();
+                if (ModMain.frmLaunchLeft is { } page)
+                    page.Dispatcher.BeginInvoke(page.LaunchingRefresh);
                 Thread.Sleep(100);
             }
 
-            ModMain.frmLaunchLeft.Dispatcher.Invoke(ModMain.frmLaunchLeft.LaunchingRefresh);
             RefreshSessionProgress();
+            if (ModMain.frmLaunchLeft is { } finishedPage)
+                finishedPage.Dispatcher.BeginInvoke(finishedPage.LaunchingRefresh);
             // 成功与失败处理
             switch (launchLoader.State)
             {
@@ -1437,7 +1439,9 @@ public static partial class ModLaunch
         ModLaunch.McLaunchLog($"当前剩余内存：{availableGb.ToString("N1", CultureInfo.InvariantCulture)}G");
         double totalRamMb = PageInstanceSetup.GetRam(LaunchingInstance) * 1024d;
         var maxHeapArg = Math.Floor(totalRamMb).ToString(CultureInfo.InvariantCulture);
-        dataList.Add("-Xmn" + Math.Floor(totalRamMb * 0.15).ToString(CultureInfo.InvariantCulture) + "m");
+        if (PCL.Core.Minecraft.Launcher.JvmLaunchTuning.ShouldAddLegacyYoungGeneration(
+                mcLaunchJavaSelected.Installation.MajorVersion, mcLaunchJavaSelected.Installation.Is64Bit, dataList))
+            dataList.Add("-Xmn" + Math.Floor(totalRamMb * 0.15).ToString(CultureInfo.InvariantCulture) + "m");
         dataList.Add("-Xmx" + maxHeapArg + "m");
         // 若 dataList 中已存在 -Xms（例如用户自定义参数已设）则跳过，避免重复/冲突。
         if (!dataList.Any(d => d.Contains("-Xms", StringComparison.OrdinalIgnoreCase)))
@@ -1776,9 +1780,11 @@ public static partial class ModLaunch
             argumentJvm += " -Dlog4j2.formatMsgNoLookups=true";
         argumentJvm = argumentJvm.Replace(" -XX:MaxDirectMemorySize=256M", ""); // #3511 的清理
         dataList.Insert(0, argumentJvm); // 可变 JVM 参数
-        dataList.Add("-Xmn" +
-                     Math.Floor(PageInstanceSetup.GetRam(LaunchingInstance,
-                         !mcLaunchJavaSelected.Installation.Is64Bit) * 1024d * 0.15d) + "m");
+        if (PCL.Core.Minecraft.Launcher.JvmLaunchTuning.ShouldAddLegacyYoungGeneration(
+                mcLaunchJavaSelected.Installation.MajorVersion, mcLaunchJavaSelected.Installation.Is64Bit, dataList))
+            dataList.Add("-Xmn" +
+                         Math.Floor(PageInstanceSetup.GetRam(LaunchingInstance,
+                             !mcLaunchJavaSelected.Installation.Is64Bit) * 1024d * 0.15d) + "m");
         var maxHeapArg = Math.Floor(PageInstanceSetup.GetRam(LaunchingInstance,
             !mcLaunchJavaSelected.Installation.Is64Bit) * 1024d);
         dataList.Add("-Xmx" + maxHeapArg + "m");
@@ -2830,7 +2836,7 @@ public static partial class ModLaunch
         startInfo.RedirectStandardError = true;
         startInfo.CreateNoWindow = noJavaw;
         startInfo.Arguments = mcLaunchArgument;
-        _launchSession.Value?.Presentation?.PrepareProcess(startInfo, LaunchingInstance.Info.HasFabric || LaunchingInstance.Info.HasQuilt);
+        _launchSession.Value?.Presentation?.PrepareProcess(startInfo, false);
         gameProcess.StartInfo = startInfo;
 
         // 开始进程
@@ -2930,7 +2936,7 @@ public static partial class ModLaunch
 
         // 初始化等待
         var watcher = new ModWatcher.Watcher(loader, LaunchingInstance, windowTitle,
-            File.Exists(jStackPath) ? jStackPath : "", currentLaunchOptions.IsTest);
+            File.Exists(jStackPath) ? jStackPath : "", true);
         mcLaunchWatcher = watcher;
 
         // 显示实时日志

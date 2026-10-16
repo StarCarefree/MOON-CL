@@ -101,7 +101,7 @@
         </Grid>
         <Grid x:Name="StatusPanel" Grid.Row="2" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite">
             <Grid.RenderTransform><TranslateTransform x:Name="StatusTranslation" /></Grid.RenderTransform>
-            <Grid.RowDefinitions><RowDefinition Height="28" /><RowDefinition Height="14" /><RowDefinition Height="22" /><RowDefinition Height="24" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="28" /><RowDefinition Height="14" /><RowDefinition Height="8" /><RowDefinition Height="22" /><RowDefinition Height="24" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="72" /></Grid.ColumnDefinitions>
                 <TextBlock x:Name="StageName" Text="准备启动环境" Foreground="{StaticResource Hybrid.Text}" FontSize="14"
@@ -109,7 +109,9 @@
                 <TextBlock x:Name="Percentage" Grid.Column="1" Text="--" Foreground="{StaticResource Hybrid.Accent}" FontSize="22"
                            FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
-            <Border x:Name="ProgressTrack" Grid.Row="1" Height="4" Background="#2A2D32" CornerRadius="2" SizeChanged="ProgressSizeChanged">
+            <TextBlock x:Name="CountText" Grid.Row="1" Text="" Foreground="{StaticResource Hybrid.Muted}" FontSize="10"
+                       FontFamily="Consolas" HorizontalAlignment="Right" Margin="0,-2,0,0" />
+            <Border x:Name="ProgressTrack" Grid.Row="2" Height="4" Background="#2A2D32" CornerRadius="2" SizeChanged="ProgressSizeChanged">
                 <Grid>
                     <Border x:Name="ProgressFill" Width="0" HorizontalAlignment="Left" Background="{StaticResource Hybrid.Accent}" CornerRadius="2" />
                     <Border x:Name="UnknownFill" Width="80" HorizontalAlignment="Left" Background="{StaticResource Hybrid.Accent}" CornerRadius="2" Opacity="0.7">
@@ -117,9 +119,9 @@
                     </Border>
                 </Grid>
             </Border>
-            <TextBlock x:Name="DetailText" Grid.Row="2" Text="正在检查运行环境与启动所需文件" Foreground="{StaticResource Hybrid.Muted}"
+            <TextBlock x:Name="DetailText" Grid.Row="3" Text="正在检查运行环境与启动所需文件" Foreground="{StaticResource Hybrid.Muted}"
                        FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="NoticeText" Grid.Row="3" Text="游戏进度将在启动后由加载模组提供" Foreground="{StaticResource Hybrid.Muted}"
+            <TextBlock x:Name="NoticeText" Grid.Row="4" Text="游戏进度将在启动后由加载模组提供" Foreground="{StaticResource Hybrid.Muted}"
                        FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
         </Grid>
         <Grid Grid.Row="3" VerticalAlignment="Bottom">

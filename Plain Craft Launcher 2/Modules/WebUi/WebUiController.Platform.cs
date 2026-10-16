@@ -24,7 +24,7 @@ internal sealed partial class WebUiController
     private async Task HandlePlatformAsync(CoreWebView2 core, JsonObject message, FormMain form)
     {
         var operation = ReadString(message, "operation") ?? "";
-        if (operation is not ("list" or "detail" or "download" or "categories")) return;
+        if (operation is not ("list" or "detail" or "download" or "categories" or "translate")) return;
         var source = ReadString(message, "source") ?? "";
         var requestId = ReadString(message, "requestId") ?? "";
         var id = ReadString(message, "id") ?? "";
@@ -33,13 +33,13 @@ internal sealed partial class WebUiController
         var category = ReadString(message, "category") ?? "";
         var generation = _generation;
         bool Current() => !_disposed && generation == _generation && _view?.CoreWebView2 == core;
-        void Send(JsonObject reply)
+        void Send(JsonObject reply) => PostUi(() =>
         {
             if (!Current()) return;
             reply["source"] = source; reply["requestId"] = requestId; reply["id"] = id; reply["page"] = page;
             reply["resourceType"] = resourceType; reply["category"] = category;
             core.PostWebMessageAsJson(reply.ToJsonString());
-        }
+        });
         try
         {
             PlatformPackCatalog.ValidateSource(source);
@@ -52,8 +52,21 @@ internal sealed partial class WebUiController
                 Task.Run(() => ModDownload.DlModRequest(uri.AbsoluteUri), ct).WaitAsync(ct));
             if (operation == "categories")
             {
-                var items = await _platformCatalog.GetCategoriesAsync(source, resourceType, token).ConfigureAwait(false);
+                var items = await _platformCatalog.GetCategoriesAsync(source, resourceType, token);
                 Send(new JsonObject { ["type"] = "platformCategories", ["items"] = JsonSerializer.SerializeToNode(items, McmodJson) });
+                return;
+            }
+            if (operation == "translate")
+            {
+                if (source is not ("curseforge" or "modrinth")) throw new ArgumentException("只翻译 CurseForge 与 Modrinth 条目。");
+                PlatformPackCatalog.ValidateId(source, id);
+                var address = $"https://mod.mcimirror.top/translate/{source}/{id}";
+                var json = await Task.Run(() => ModDownload.DlModRequest(address), token).WaitAsync(token);
+                if (json.Length > 200_000) throw new InvalidDataException("翻译结果超过大小上限。");
+                var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidDataException("翻译结果不是 JSON 对象。");
+                var text = root["translated"]?.ToString()?.Trim() ?? "";
+                if (text.Length > 8000) text = text[..8000];
+                Send(new JsonObject { ["type"] = "platformTranslation", ["text"] = text });
                 return;
             }
             if (operation == "list")
@@ -79,9 +92,10 @@ internal sealed partial class WebUiController
                 var projects = await (source == "curseforge"
                     ? ModComp.CompRequest.GetListByIdsFromCurseforgeAsync([pack.ProjectId])
                     : ModComp.CompRequest.GetListByIdsFromModrinthAsync([pack.ProjectId])).WaitAsync(token);
+                await SwitchToUiAsync(form.Dispatcher);
                 var project = projects.FirstOrDefault(p => p.Id == pack.ProjectId && p.Type == ResourceCompType(resourceType) && p.FromCurseForge == (source == "curseforge"));
                 if (project is null) throw new InvalidDataException("平台未返回对应资源的下载信息，请打开项目网站查看。");
-                if (!Current() || !IsPresented || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
+                if (_disposed || !Current() || !IsPresented || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
                 if (resourceType == "plugin")
                 {
                     var selected = ServerPluginDownloads.Pick(pack.MinecraftVersions);

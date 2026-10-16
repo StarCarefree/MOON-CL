@@ -33,7 +33,7 @@ internal sealed class LaunchProgressPresentation : IDisposable
         _timer.Tick += Tick;
         _window.CancelRequested += CancelRequested;
         _window.Closed += (_, _) => { _closed = true; _timer.Stop(); };
-        _window.BeginLaunch(name);
+        _window.Dispatcher.BeginInvoke(() => _window.BeginLaunch(name));
         _timer.Start();
     }
 

@@ -14,9 +14,34 @@ internal static class RoomPresentation
 {
     internal static string Bounded(string? text, int max = 80) => new((text ?? "").Where(c => !char.IsControl(c) && c != '/' && c != '\\').Take(max).ToArray());
     internal static string GameText(RoomGameStatus? game) => game is null ? "Minecraft · 未启动" :
-        game.Display + (string.IsNullOrWhiteSpace(game.Version) ? "" : " · " + game.Version);
+        game.Display + (string.IsNullOrWhiteSpace(game.Version) ? "" : " · " + game.Version) +
+        (string.IsNullOrWhiteSpace(game.Server) ? "" : " · " + game.Server);
+    internal static string LoaderText(McInstance? instance)
+    {
+        if (instance?.Info is not { } info) return "原版";
+        if (info.HasNeoForge) return "NeoForge";
+        if (info.HasForge) return "Forge";
+        if (info.HasFabric) return "Fabric";
+        if (info.HasQuilt) return "Quilt";
+        if (info.HasLegacyFabric) return "Legacy Fabric";
+        if (info.HasCleanroom) return "Cleanroom";
+        if (info.HasLiteLoader) return "LiteLoader";
+        return "原版";
+    }
+    internal static IReadOnlyList<McInstance> SameVersion(string? version)
+    {
+        var target = (version ?? "").Trim();
+        if (target.Length == 0) return [];
+        try
+        {
+            return ModInstanceList.mcInstanceList.ToArray().SelectMany(pair => pair.Value.ToArray())
+                .Where(instance => string.Equals(instance.Info?.VanillaName, target, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(instance => instance.PathInstance, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToArray();
+        }
+        catch (Exception) { return []; }
+    }
 
-    internal static RoomGameStatus LocalGame(McInstance? selected)
+    internal static RoomGameStatus LocalGame(McInstance? selected, IEnumerable<PCL.Core.Minecraft.Launcher.PackDefinition>? catalog = null, RoomPackShare? chosen = null, bool manual = false)
     {
         try
         {
@@ -39,9 +64,20 @@ internal static class RoomPresentation
             }
             else if (live is null && watchers.LastOrDefault() is { State: ModWatcher.Watcher.MinecraftState.Crashed } crashed)
             { instance = crashed.version; state = "failed"; }
-            return new RoomGameStatus(Bounded(instance?.Name), Bounded(instance?.Info?.VanillaName), state);
+            var pack = manual ? chosen : RoomPackShareResolver.Resolve(instance, catalog) ?? chosen;
+            return new RoomGameStatus(Bounded(instance?.Name), Bounded(instance?.Info?.VanillaName), state, pack, HostServer(live));
         }
         catch (Exception) { return new RoomGameStatus(); }
+    }
+    internal static string HostServer(ModWatcher.Watcher? watcher)
+    {
+        if (watcher is null) return "";
+        try
+        {
+            var path = Path.Combine(watcher.version.PathIndie, "logs", "latest.log");
+            return RoomSetupAutomation.FindJoinedServer(path) ?? "";
+        }
+        catch (Exception) { return ""; }
     }
     internal static McInstance? LatestRunningInstance()
     {

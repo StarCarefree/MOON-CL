@@ -9,4 +9,7 @@ public sealed record LaunchProgressSnapshot(
     string Detail,
     double? Progress,
     bool TelemetryConnected = false,
-    string? Warning = null);
+    string? Warning = null,
+    string? Target = null,
+    long? Current = null,
+    long? Total = null);

@@ -52,7 +52,7 @@ try{
  await page.locator('#filter-mc').selectOption('1.20.1'); req=await last(); assert.equal(req.minecraft,'1.20.1');
  await page.locator('#filter-loader').selectOption('Fabric'); req=await last(); assert.equal(req.loader,'Fabric');
  await page.locator('#filter-sort').selectOption('updated'); req=await last(); assert.equal(req.sort,'updated');
- await reply(req,[mr],5); await page.locator('#modrinth-next-page').click(); const second=await last();
+ await reply(req,[mr],5); await page.locator('#next-page').click(); const second=await last();
  assert.equal(second.page,2); assert.equal(second.query,'adventure'); assert.equal(second.loader,'Fabric'); assert.equal(second.sort,'updated');
  await reply(second,[item('modrinth','bbbb1234')]); await reply(req,[mr]);
  assert.equal(await card('modrinth-bbbb1234').count(),1); assert.equal(await card(mr.id).count(),0);

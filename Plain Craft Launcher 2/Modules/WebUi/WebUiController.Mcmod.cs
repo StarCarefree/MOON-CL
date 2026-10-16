@@ -32,16 +32,17 @@ internal sealed partial class WebUiController
         var minecraft = ReadString(message, "minecraft") ?? "";
         var loader = ReadString(message, "loader") ?? "";
         var category = message["category"] is JsonValue c && c.TryGetValue<int>(out var categoryValue) ? categoryValue : 0;
+        var sort = ReadString(message, "sort") ?? "";
         var requestId = ReadString(message, "requestId") ?? "";
         var resourceType = ReadString(message, "resourceType") ?? "modpack";
         var generation = _generation;
         bool Current() => !_disposed && generation == _generation && _view?.CoreWebView2 == core;
-        void Send(JsonObject reply)
+        void Send(JsonObject reply) => PostUi(() =>
         {
             if (!Current()) return;
             reply["resourceType"] = resourceType; reply["requestId"] = requestId;
             core.PostWebMessageAsJson(reply.ToJsonString());
-        }
+        });
         try
         {
             BrowseResourceTypes.RequireSupported("mcmod", resourceType);
@@ -54,7 +55,7 @@ internal sealed partial class WebUiController
             }
             if (operation == "list")
             {
-                var result = await _mcmodCatalog.GetPageAsync(page, _mcmodLifetime.Token, minecraft, loader, category, resourceType);
+                var result = await _mcmodCatalog.GetPageAsync(page, _mcmodLifetime.Token, minecraft, loader, category, resourceType, sort);
                 Send(new JsonObject { ["type"] = "mcmodList", ["page"] = result.Page, ["totalPages"] = result.TotalPages,
                     ["requestId"] = requestId, ["categories"] = JsonSerializer.SerializeToNode(result.Categories, McmodJson), ["items"] = JsonSerializer.SerializeToNode(result.Items, McmodJson) });
                 return;
@@ -83,9 +84,10 @@ internal sealed partial class WebUiController
                 var projectId = await Task.Run(() => ModComp.ResolveLinkToProjectId(url), _mcmodLifetime.Token);
                 if (string.IsNullOrEmpty(projectId)) throw new InvalidDataException("关联平台未返回项目，可打开作者链接手动下载。");
                 var projects = await (fromCurseForge ? ModComp.CompRequest.GetListByIdsFromCurseforgeAsync([projectId]) : ModComp.CompRequest.GetListByIdsFromModrinthAsync([projectId]));
+                await SwitchToUiAsync(form.Dispatcher);
                 var project = projects.FirstOrDefault(p => p.Type == ResourceCompType(resourceType) && p.FromCurseForge == fromCurseForge);
                 if (project is null) throw new InvalidDataException("关联平台项目类型不符或不可用，可打开作者链接手动下载。");
-                if (!Current() || !IsPresented || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
+                if (_disposed || !Current() || !IsPresented || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
                 // Native detail retrieves the actual version/file list and uses the existing download/install path.
                 Hide();
                 form.PageChange(new FormMain.PageStackData
@@ -159,7 +161,8 @@ internal sealed partial class WebUiController
         }
         if (_library is null) throw new InvalidOperationException("启动器尚未就绪，没有转存。");
         var started = await _library.InstallBrowseQuarkAsync(id, detail.Name, shareUrl, path);
-        if (!current()) return;
+        await SwitchToUiAsync(_form?.Dispatcher ?? throw new ObjectDisposedException(nameof(WebUiController)));
+        if (_disposed || !current()) return;
         send(new JsonObject { ["type"] = "quarkDownload", ["id"] = id, ["shareId"] = shareId, ["accepted"] = started });
         Refresh(force: true);
     }

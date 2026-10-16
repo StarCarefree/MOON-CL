@@ -7,6 +7,34 @@ using System.Text.RegularExpressions;
 
 namespace PCL.Core.Minecraft.Launcher;
 
+public sealed record CatalogPackOffer
+{
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string Minecraft { get; init; } = "";
+    public string Loader { get; init; } = "";
+    public string DownloadUrl { get; init; } = "";
+    public string FileName { get; init; } = "";
+    public string Sha256 { get; init; } = "";
+    public string ShareUrl { get; init; } = "";
+    public string SharePath { get; init; } = "";
+    public string Modrinth { get; init; } = "";
+}
+
+public sealed record ServerDefinition
+{
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string Description { get; init; } = "";
+    public string Address { get; init; } = "";
+    public string Minecraft { get; init; } = "";
+    public bool Vanilla { get; init; }
+    public string Icon { get; init; } = "";
+    public string Website { get; init; } = "";
+    public string Source { get; init; } = "";
+    public IReadOnlyList<CatalogPackOffer> Packs { get; init; } = [];
+}
+
 public sealed record PackDefinition
 {
     public string Id { get; init; } = "";
@@ -58,26 +86,63 @@ public static class PackCatalog
         return uri;
     }
 
-    public static IReadOnlyList<PackDefinition> Parse(string json, Uri source)
+    public const string FabulouslyOptimizedId = "fabulously-optimized";
+    public const string FabulouslyOptimizedUrl = "https://modrinth.com/modpack/fabulously-optimized";
+
+    public sealed record Document(IReadOnlyList<PackDefinition> Packs, IReadOnlyList<ServerDefinition> Servers);
+
+    public static IReadOnlyList<PackDefinition> Parse(string json, Uri source) => ParseDocument(json, source).Packs;
+
+    public static Document ParseDocument(string json, Uri source)
     {
         using var document = JsonDocument.Parse(json);
-        var array = document.RootElement.GetProperty("packs");
+        if (document.RootElement.ValueKind != JsonValueKind.Object) throw new InvalidDataException("目录必须是 JSON 对象。");
+        var packs = document.RootElement.TryGetProperty("packs", out var packArray) ? ParsePacks(packArray, source) : [];
+        var servers = document.RootElement.TryGetProperty("servers", out var serverArray) ? ParseServers(serverArray, source) : [];
+        return new Document(packs, servers);
+    }
+
+    public static string Serialize(IReadOnlyList<PackDefinition> packs, IReadOnlyList<ServerDefinition> servers)
+    {
+        var root = new Dictionary<string, object?>
+        {
+            ["packs"] = packs.Select(pack => new Dictionary<string, string>
+            {
+                ["id"] = pack.Id, ["name"] = pack.Name, ["description"] = pack.Description, ["version"] = pack.Version,
+                ["minecraft"] = pack.Minecraft, ["author"] = pack.Author, ["loader"] = pack.Loader,
+                ["icon"] = pack.Icon, ["background"] = pack.Background, ["downloadUrl"] = pack.DownloadUrl,
+                ["fileName"] = pack.FileName, ["sha256"] = pack.Sha256, ["shareUrl"] = pack.ShareUrl, ["sharePath"] = pack.SharePath
+            }),
+            ["servers"] = servers.Select(server => new Dictionary<string, object?>
+            {
+                ["id"] = server.Id, ["name"] = server.Name, ["description"] = server.Description, ["address"] = server.Address,
+                ["minecraft"] = server.Minecraft, ["vanilla"] = server.Vanilla, ["icon"] = server.Icon,
+                ["website"] = server.Website, ["source"] = server.Source,
+                ["packs"] = server.Packs.Select(offer => new Dictionary<string, string>
+                {
+                    ["id"] = offer.Id, ["name"] = offer.Name, ["minecraft"] = offer.Minecraft, ["loader"] = offer.Loader,
+                    ["downloadUrl"] = offer.DownloadUrl, ["fileName"] = offer.FileName, ["sha256"] = offer.Sha256,
+                    ["shareUrl"] = offer.ShareUrl, ["sharePath"] = offer.SharePath, ["modrinth"] = offer.Modrinth
+                })
+            })
+        };
+        return JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static IReadOnlyList<PackDefinition> ParsePacks(JsonElement array, Uri source)
+    {
+        if (array.ValueKind != JsonValueKind.Array) throw new InvalidDataException("packs 必须是数组。");
         if (array.GetArrayLength() > 100) throw new InvalidDataException("预设数量超过 100。");
         var result = new List<PackDefinition>();
         foreach (var item in array.EnumerateArray())
         {
-            string Get(string key) => item.TryGetProperty(key, out var v) ? v.GetString() ?? "" : "";
+            if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("整合包条目必须是对象。");
+            string Get(string key) => item.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
             string Url(string key) => Get(key) is { Length: > 0 } url ? HttpUri(url, source).AbsoluteUri : "";
-            var id = Get("id");
-            if (!Regex.IsMatch(id, "^[a-z0-9][a-z0-9_-]{0,63}$") || result.Any(p => p.Id == id))
-                throw new InvalidDataException("预设 ID 无效或重复。");
-            var fileName = Get("fileName");
-            if (fileName.Length == 0) fileName = "pack.zip";
-            if (Path.GetFileName(fileName) != fileName || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                !(fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || fileName.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidDataException("下载文件名必须为 ZIP 或 MRPACK 文件名。");
-            var sha = Get("sha256");
-            if (sha.Length > 0 && !Regex.IsMatch(sha, "^[0-9a-fA-F]{64}$")) throw new InvalidDataException("SHA256 格式无效。");
+            var id = RequireId(Get("id"), "预设");
+            if (result.Any(p => p.Id == id)) throw new InvalidDataException("预设 ID 无效或重复。");
+            var fileName = ArchiveName(Get("fileName"));
+            var sha = Sha(Get("sha256"));
             var pack = new PackDefinition
             {
                 Id = id, Name = Get("name"), Description = Get("description"), Version = Get("version"),
@@ -90,6 +155,107 @@ public static class PackCatalog
             result.Add(pack);
         }
         return result;
+    }
+
+    private static IReadOnlyList<ServerDefinition> ParseServers(JsonElement array, Uri source)
+    {
+        if (array.ValueKind != JsonValueKind.Array) throw new InvalidDataException("servers 必须是数组。");
+        if (array.GetArrayLength() > 500) throw new InvalidDataException("服务器数量超过 500。");
+        var result = new List<ServerDefinition>();
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("服务器条目必须是对象。");
+            string Get(string key) => item.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+            string Url(string key) => Get(key) is { Length: > 0 } url ? HttpUri(url, source).AbsoluteUri : "";
+            var id = RequireId(Get("id"), "服务器");
+            if (result.Any(server => server.Id == id)) throw new InvalidDataException("服务器 ID 重复。");
+            var address = Get("address").Trim();
+            if (!IsAddress(address)) throw new InvalidDataException("服务器地址无效。");
+            var minecraft = Get("minecraft").Trim();
+            if (minecraft.Length > 32 || minecraft.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_')))
+                throw new InvalidDataException("服务器 MC 版本无效。");
+            var vanilla = item.TryGetProperty("vanilla", out var flag) && flag.ValueKind == JsonValueKind.True;
+            var offers = item.TryGetProperty("packs", out var offersNode) ? ParseOffers(offersNode, source) : [];
+            result.Add(new ServerDefinition
+            {
+                Id = id, Name = RequireText(Get("name"), "服务器名称"), Description = Get("description"),
+                Address = address, Minecraft = minecraft, Vanilla = vanilla, Icon = Url("icon"),
+                Website = Url("website"), Source = Get("source"), Packs = offers
+            });
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<CatalogPackOffer> ParseOffers(JsonElement array, Uri source)
+    {
+        if (array.ValueKind != JsonValueKind.Array || array.GetArrayLength() > 20) throw new InvalidDataException("服务器推荐整合包无效。");
+        var result = new List<CatalogPackOffer>();
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("推荐整合包必须是对象。");
+            string Get(string key) => item.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+            string Url(string key) => Get(key) is { Length: > 0 } url ? HttpUri(url, source).AbsoluteUri : "";
+            var id = RequireId(Get("id"), "推荐整合包");
+            if (result.Any(offer => offer.Id == id)) throw new InvalidDataException("推荐整合包 ID 重复。");
+            var modrinth = Url("modrinth");
+            if (modrinth.Length > 0 && !modrinth.StartsWith("https://modrinth.com/", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("推荐整合包的 Modrinth 地址无效。");
+            result.Add(new CatalogPackOffer
+            {
+                Id = id, Name = RequireText(Get("name"), "推荐整合包名称"), Minecraft = Get("minecraft"), Loader = Get("loader"),
+                DownloadUrl = Url("downloadUrl"), FileName = Get("fileName").Length == 0 ? "" : ArchiveName(Get("fileName")),
+                Sha256 = Sha(Get("sha256")), ShareUrl = Url("shareUrl"), SharePath = Get("sharePath"), Modrinth = modrinth
+            });
+        }
+        return result;
+    }
+
+    public static bool IsAddress(string address)
+    {
+        if (address.Length is < 1 or > 253 || address.Contains(' ') || address.Contains("://", StringComparison.Ordinal)) return false;
+        var port = 25565;
+        var host = address;
+        var split = address.LastIndexOf(':');
+        if (split > 0 && address.IndexOf(':') == split)
+        {
+            host = address[..split];
+            if (!int.TryParse(address[(split + 1)..], out port) || port is < 1 or > 65535) return false;
+        }
+        return host.Length > 0 && host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' || ch == '_') && port > 0;
+    }
+
+    public static CatalogPackOffer RecommendedFabric(string minecraft) => new()
+    {
+        Id = FabulouslyOptimizedId, Name = "Fabulously Optimized", Minecraft = minecraft, Loader = "Fabric",
+        Modrinth = FabulouslyOptimizedUrl
+    };
+
+    private static string RequireId(string id, string kind)
+    {
+        if (!Regex.IsMatch(id, "^[a-z0-9][a-z0-9_-]{0,63}$")) throw new InvalidDataException(kind + " ID 无效。");
+        return id;
+    }
+
+    private static string RequireText(string value, string kind)
+    {
+        var text = value.Trim();
+        if (text.Length is 0 or > 120) throw new InvalidDataException(kind + "无效。");
+        return text;
+    }
+
+    private static string ArchiveName(string fileName)
+    {
+        if (fileName.Length == 0) fileName = "pack.zip";
+        if (Path.GetFileName(fileName) != fileName || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            !(fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || fileName.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("下载文件名必须为 ZIP 或 MRPACK 文件名。");
+        return fileName;
+    }
+
+    private static string Sha(string sha)
+    {
+        if (sha.Length > 0 && !Regex.IsMatch(sha, "^[0-9a-fA-F]{64}$")) throw new InvalidDataException("SHA256 格式无效。");
+        return sha;
     }
 
     /// <summary>Canonical containment check for all update paths, including Windows drive/ADS syntax.</summary>

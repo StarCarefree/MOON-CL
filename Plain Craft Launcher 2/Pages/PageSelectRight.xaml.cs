@@ -14,6 +14,7 @@ using PCL.Core.App.Configuration.Storage;
 using FileSystem = Microsoft.VisualBasic.FileIO.FileSystem;
 using PCL.Core.App.Localization;
 using PCL.Core.UI;
+using PCL.Core.Minecraft;
 
 namespace PCL;
 
@@ -22,9 +23,11 @@ public partial class PageSelectRight
     private const int normalDelay = 75; // 正常输入延迟0.075秒
     private const int quickDelay = 50; // 清空搜索框延迟0.05秒
     private bool isRefreshing;
+    private string _livePinSignature = "";
 
     private DateTime lastInputTime = DateTime.MinValue;
-    private DispatcherTimer reloadTimer;
+    private DispatcherTimer? reloadTimer;
+    private DispatcherTimer? _livePinTimer;
 
     // 窗口属性
     /// <summary>
@@ -51,6 +54,9 @@ public partial class PageSelectRight
 
         reloadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(normalDelay) };
         reloadTimer.Tick += ReloadTimer_Tick;
+        _livePinTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _livePinTimer.Tick += LivePinTimer_Tick;
+        _livePinTimer.Start();
     }
 
     private void PanVerSearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -96,6 +102,15 @@ public partial class PageSelectRight
         }
     }
 
+    private void LivePinTimer_Tick(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || isRefreshing || ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Finished) return;
+        var signature = string.Join("|", InstanceActivity.PriorityPaths(ModLaunch.LaunchingPaths()));
+        if (signature == _livePinSignature) return;
+        _livePinSignature = signature;
+        McInstanceListUI(ModInstanceList.mcInstanceListLoader);
+    }
+
     private void PageSelectRight_Unloaded(object sender, RoutedEventArgs e)
     {
         // 清理计时器
@@ -104,6 +119,12 @@ public partial class PageSelectRight
             reloadTimer.Stop();
             reloadTimer.Tick -= ReloadTimer_Tick;
             reloadTimer = null;
+        }
+        if (_livePinTimer is not null)
+        {
+            _livePinTimer.Stop();
+            _livePinTimer.Tick -= LivePinTimer_Tick;
+            _livePinTimer = null;
         }
     }
 
@@ -131,6 +152,8 @@ public partial class PageSelectRight
             // 加载 UI
             PanMain.Children.Clear();
 
+            var livePaths = InstanceActivity.PriorityPaths(ModLaunch.LaunchingPaths());
+            _livePinSignature = string.Join("|", livePaths);
             var hasVisibleFolders = false;
             var searchText = PanVerSearchBox.Text.Trim().ToLower(); // 获取搜索框文本
             var hasAnyResults = false;
@@ -151,6 +174,7 @@ public partial class PageSelectRight
                            (v.Desc is not null && v.Desc.ToLower().Contains(searchText)) || v.GetDefaultDescription()
                                .Replace(",", "").ToLower().Trim().Contains(searchText);
                 }).ToList();
+                filteredInstances = InstanceListPin.Pin(filteredInstances, instance => instance.PathInstance, livePaths);
                 if (filteredInstances.Count == 0)
                     continue;
 

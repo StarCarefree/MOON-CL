@@ -1,4 +1,5 @@
 using System.IO;
+using PCL.Network;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Windows.Media.Imaging;
@@ -15,7 +16,7 @@ internal sealed class LauncherLibrary : IDisposable
     private sealed record Settings(string CatalogUrl = "", string QuarkServiceUrl = "", string[]? CatalogUrls = null);
     private sealed record Installed(string Id, string Version);
     private readonly string _settingsPath = Path.Combine(AppContext.BaseDirectory, "PCL", "launcher-library.json");
-    private readonly string _quarkSessionPath = Path.Combine(AppContext.BaseDirectory, "PCL", "quark-open-session.bin");
+    private readonly QuarkOpenSessionStore _quarkSessions = new(AppContext.BaseDirectory);
     private readonly HttpClient _http = new(new HttpClientHandler { UseCookies = false }) { Timeout = TimeSpan.FromMinutes(30) };
     private readonly PackTransfer _transfer;
     private readonly HttpClient _catalogHttp = new(new HttpClientHandler
@@ -26,6 +27,17 @@ internal sealed class LauncherLibrary : IDisposable
     private string _catalogSource = "";
     private Settings _settings = new(CatalogUrls: []);
     private List<PackDefinition> _packs = [PackCatalog.BuiltIn];
+    internal IReadOnlyList<PackDefinition> CatalogPacks => _packs;
+    internal async Task InstallSharedAsync(PackDefinition pack)
+    {
+        pack = pack with { LocalArchive = "" };
+        if (string.IsNullOrWhiteSpace(pack.DownloadUrl) && string.IsNullOrWhiteSpace(pack.ShareUrl))
+            throw new InvalidDataException("这个分享没有公开下载地址。");
+        if (_work is not null) throw new InvalidOperationException("已有整合包任务在进行。");
+        await RunAsync(token => InstallAsync(pack, string.IsNullOrWhiteSpace(pack.DownloadUrl), token));
+        if (_error.Length > 0) throw new InvalidOperationException(_error);
+    }
+    private List<ServerDefinition> _servers = [];
     private readonly Dictionary<string, (McInstance Instance, string Version)> _installed = new();
     private readonly Dictionary<string, ExternalUpdatePlan> _updates = new();
     private readonly Dictionary<string, PackDefinition> _managed = new();
@@ -63,6 +75,7 @@ internal sealed class LauncherLibrary : IDisposable
     private string _selected = PackCatalog.StarRailId;
     private string _phase = "就绪";
     private string _error = "";
+    private string _taskScope = "library";
     private bool _selectCreatedInstance;
     private double _progress;
     private DateTime _nextScan;
@@ -90,9 +103,9 @@ internal sealed class LauncherLibrary : IDisposable
         }
     }
 
-    public JsonObject Capture()
+    public JsonObject Capture(bool scan = true)
     {
-        ScanInstalled();
+        if (scan) ScanInstalled();
         var account = ProfileService.Current;
         var source = ModMain.frmLoginProfileSkin?.Skin?.ImgBack?.Source as BitmapSource;
         if (!ReferenceEquals(source, _avatarSource))
@@ -125,6 +138,8 @@ internal sealed class LauncherLibrary : IDisposable
                 ["updateAvailable"] = _updates.ContainsKey(pack.Id)
             });
         }
+        var servers = new JsonArray();
+        foreach (var server in _servers) servers.Add(ServerJson(server));
         var type = account?.ProfileType switch
         {
             ProfileType.Microsoft => "Microsoft / Mojang",
@@ -135,18 +150,19 @@ internal sealed class LauncherLibrary : IDisposable
         return new JsonObject
         {
             ["account"] = new JsonObject { ["name"] = account?.UserName ?? "未登录", ["type"] = type, ["avatar"] = account is null ? "" : _avatar },
-            ["directory"] = ModFolder.mcFolderSelected ?? "", ["instances"] = instances, ["presets"] = presets, ["selected"] = _selected,
+            ["directory"] = ModFolder.mcFolderSelected ?? "", ["instances"] = instances, ["presets"] = presets, ["servers"] = servers, ["selected"] = _selected,
             ["task"] = new JsonObject { ["busy"] = _work is not null || ModLaunch.isLaunching,
                 ["gameRunning"] = ModWatcher.hasRunningMinecraft,
                 ["phase"] = ModLaunch.isLaunching ? "正在启动游戏" : ModWatcher.hasRunningMinecraft ? "游戏运行中" : _phase,
                 ["indeterminate"] = _work is not null && _installer is null && !_phase.StartsWith("下载整合包", StringComparison.Ordinal),
-                ["progress"] = ModLaunch.isLaunching ? ModLaunch.mcLaunchLoader.Progress : _installer is not null ? .25 + .75 * _installer.Progress : _progress, ["error"] = _error },
+                ["progress"] = ModLaunch.isLaunching ? ModLaunch.mcLaunchLoader.Progress : _installer is not null ? .25 + .75 * _installer.Progress : _progress,
+                ["scope"] = _taskScope, ["error"] = _error },
             ["config"] = new JsonObject { ["catalogUrl"] = _settings.CatalogUrl,
                 ["catalogUrls"] = new JsonArray(_settings.CatalogUrls!.Select(url => (JsonNode?)JsonValue.Create(url)).ToArray()),
                 ["catalogSource"] = _catalogSource, ["quarkServiceUrl"] = _settings.QuarkServiceUrl,
                 ["catalogDefaultActive"] = _settings.CatalogUrls!.Length == 0,
                 ["catalogDefaultUrls"] = new JsonArray(PackCatalogSources.DefaultUrls.Select(url => (JsonNode?)JsonValue.Create(url)).ToArray()),
-                ["quarkAuthorized"] = QuarkOpenSessionFile.TryLoad(_quarkSessionPath)?.HasRefreshableToken == true }
+                ["quarkAuthorized"] = HasQuarkSession() }
         };
     }
 
@@ -175,7 +191,7 @@ internal sealed class LauncherLibrary : IDisposable
         _managed.Clear();
         foreach (var instance in Instances().OrderBy(i => File.GetLastWriteTimeUtc(Path.Combine(i.PathInstance, "PCL", "launcher-pack.json"))))
         {
-            if (!File.Exists(Path.Combine(instance.PathInstance, instance.Name + ".json")) || File.Exists(Path.Combine(instance.PathInstance, ".pclignore"))) continue;
+            if (!File.Exists(Path.Combine(instance.PathInstance, instance.Name + ".json")) || File.Exists(Path.Combine(instance.PathInstance, ".pclignore")) || ExternalPackCheckOnce.IsExcludedLocalVersion(instance.Name, instance.PathInstance)) continue;
             try
             {
                 var marker = Path.Combine(instance.PathInstance, "PCL", "launcher-pack.json");
@@ -373,7 +389,7 @@ internal sealed class LauncherLibrary : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
             File.WriteAllText(_settingsPath + ".tmp", JsonSerializer.Serialize(settings));
             File.Move(_settingsPath + ".tmp", _settingsPath, true); _settings = settings;
-            if (urls.Length == 0) { _packs = [PackCatalog.BuiltIn]; _catalogSource = ""; }
+            if (urls.Length == 0) { _packs = [PackCatalog.BuiltIn]; _servers = []; _catalogSource = ""; }
         }
         if (operation is "refresh" or "configure" or "checkUpdates")
         {
@@ -389,12 +405,13 @@ internal sealed class LauncherLibrary : IDisposable
                     var packs = result.Packs.ToList();
                     if (packs.All(p => p.Id != PackCatalog.StarRailId)) packs.Insert(0, PackCatalog.BuiltIn);
                     _packs = packs;
+                    _servers = result.Servers.ToList();
                     _catalogSource = result.SourceUrl;
                     _phase = result.NotModified ? "预设目录未改变（304）" : "预设目录已刷新";
                     if (!_packs.Any(p => p.Id == _selected) && !_selected.StartsWith("instance:")) _selected = _packs[0].Id;
                 }
                 await CheckInstalledAsync(token, operation == "checkUpdates");
-            });
+            }, operation == "checkUpdates" ? "library" : "catalog");
             return;
         }
         if (operation == "authorizeQuark")
@@ -402,6 +419,11 @@ internal sealed class LauncherLibrary : IDisposable
             if (ModMain.MyMsgBox("将打开夸克官方授权页。完成后，通过夸克下载只会把目标整合包转存到你的网盘目录 MOONCL，不会转存整个分享，也不会读取浏览器 Cookie。",
                 "授权夸克网盘", "打开授权页", "取消") != 1) return;
             await RunAsync(AuthorizeQuarkAsync);
+            return;
+        }
+        if (operation == "joinServer")
+        {
+            await JoinServerAsync(message, form);
             return;
         }
         if (operation is not ("primary" or "installQuark")) return;
@@ -474,9 +496,137 @@ internal sealed class LauncherLibrary : IDisposable
         launch.LaunchButtonClick();
     }
 
-    private async Task RunAsync(Func<CancellationToken, Task> work)
+    private static JsonObject ServerJson(ServerDefinition server)
+    {
+        var packs = new JsonArray();
+        foreach (var offer in server.Packs)
+            packs.Add(new JsonObject
+            {
+                ["id"] = offer.Id, ["name"] = offer.Name, ["minecraft"] = offer.Minecraft, ["loader"] = offer.Loader,
+                ["downloadUrl"] = offer.DownloadUrl, ["fileName"] = offer.FileName, ["modrinth"] = offer.Modrinth
+            });
+        return new JsonObject
+        {
+            ["id"] = server.Id, ["name"] = server.Name, ["description"] = server.Description, ["address"] = server.Address,
+            ["minecraft"] = server.Minecraft, ["vanilla"] = server.Vanilla, ["icon"] = server.Icon,
+            ["website"] = server.Website, ["source"] = server.Source, ["packs"] = packs
+        };
+    }
+
+    private async Task JoinServerAsync(JsonObject message, FormMain form)
+    {
+        if (ModWatcher.hasRunningMinecraft || ModLaunch.isLaunching) throw new InvalidOperationException("请先关闭正在运行或启动中的游戏。");
+        var id = message["id"]?.GetValue<string>() ?? "";
+        var address = (message["address"]?.GetValue<string>() ?? "").Trim();
+        var minecraft = (message["minecraft"]?.GetValue<string>() ?? "").Trim();
+        var choice = message["choice"]?.GetValue<string>() ?? "";
+        var server = _servers.FirstOrDefault(item => item.Id == id);
+        if (server is not null)
+        {
+            address = server.Address;
+            minecraft = server.Minecraft;
+        }
+        else if (!PackCatalog.IsAddress(address) || minecraft.Length == 0)
+            throw new InvalidOperationException("服务器信息不完整。");
+        if (!PackCatalog.IsAddress(address)) throw new InvalidDataException("服务器地址无效。");
+        var instanceName = message["instance"]?.GetValue<string>() ?? "";
+        var instance = string.IsNullOrWhiteSpace(instanceName) ? null : Instances().FirstOrDefault(item => item.Name == instanceName);
+        if (choice == "vanilla")
+        {
+            instance = VanillaInstance(minecraft) ?? await DownloadVanillaAsync(minecraft);
+        }
+        else if (choice.StartsWith("pack:", StringComparison.Ordinal))
+        {
+            var offerId = choice["pack:".Length..];
+            var offer = server?.Packs.FirstOrDefault(item => item.Id == offerId)
+                ?? (offerId == PackCatalog.FabulouslyOptimizedId ? PackCatalog.RecommendedFabric(minecraft) : null)
+                ?? throw new InvalidOperationException("没有这个推荐整合包。");
+            if (!string.Equals(offer.Minecraft, minecraft, StringComparison.OrdinalIgnoreCase) && offer.Minecraft.Length > 0)
+                throw new InvalidOperationException("推荐整合包版本与服务器不一致。");
+            instance = await InstallOfferAsync(offer, minecraft);
+        }
+        if (instance is null || !VersionMatches(instance, minecraft))
+            throw new InvalidOperationException("没有与服务器版本 " + minecraft + " 匹配的可启动实例。");
+        SelectInstance(instance);
+        Launch(form, address);
+    }
+
+    private static bool VersionMatches(McInstance instance, string minecraft) =>
+        string.Equals(instance.Info.VanillaName, minecraft, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsVanilla(McInstance instance) =>
+        !instance.Info.HasForgelike && !instance.Info.HasFabriclike && !instance.Info.HasLiteLoader
+        && !instance.Info.HasLabyMod && !instance.Info.HasOptiFine;
+
+    private static McInstance? VanillaInstance(string minecraft) =>
+        Instances().FirstOrDefault(item => IsVanilla(item) && VersionMatches(item, minecraft) && item.Check());
+
+    private async Task<McInstance> DownloadVanillaAsync(string minecraft)
+    {
+        if (string.IsNullOrEmpty(ModFolder.mcFolderSelected)) throw new InvalidOperationException("请先选择 Minecraft 文件夹。");
+        _phase = "下载原版 " + minecraft;
+        PublishWork();
+        var loader = await Task.Run(() =>
+        {
+            var url = ModDownload.DlClientListGet(minecraft) as string;
+            if (string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException("版本列表里没有原版 " + minecraft + "。");
+            return ModDownloadLib.McDownloadClient(NetPreDownloadBehaviour.ExitWhileExistsOrDownloading, minecraft, url);
+        });
+        if (loader is not null)
+        {
+            _installer = loader;
+            while (loader.State is ModBase.LoadState.Loading or ModBase.LoadState.Waiting)
+            {
+                _progress = loader.Progress;
+                PublishWork();
+                await Task.Delay(400);
+            }
+            if (loader.State != ModBase.LoadState.Finished && VanillaInstance(minecraft) is null)
+                throw new InvalidOperationException(loader.Error?.Message ?? "原版下载没有完成。");
+        }
+        ModInstanceList.mcInstanceListForceRefresh = true;
+        await Task.Run(() => ModInstanceList.mcInstanceListLoader.WaitForExit(ModFolder.mcFolderSelected, isForceRestart: true));
+        return VanillaInstance(minecraft) ?? throw new InvalidOperationException("原版已下载，但没有找到可启动实例。");
+    }
+
+    private async Task<McInstance> InstallOfferAsync(CatalogPackOffer offer, string minecraft)
+    {
+        if (!string.IsNullOrWhiteSpace(offer.DownloadUrl))
+        {
+            var pack = new PackDefinition
+            {
+                Id = "server-" + offer.Id, Name = offer.Name, Description = offer.Name, Version = minecraft,
+                Minecraft = minecraft, Loader = offer.Loader, DownloadUrl = offer.DownloadUrl,
+                FileName = string.IsNullOrWhiteSpace(offer.FileName) ? offer.Id + ".mrpack" : offer.FileName,
+                Sha256 = offer.Sha256, ShareUrl = offer.ShareUrl, SharePath = offer.SharePath
+            };
+            await InstallAsync(pack, !string.IsNullOrWhiteSpace(offer.ShareUrl) && string.IsNullOrWhiteSpace(offer.DownloadUrl), CancellationToken.None);
+            return Instances().FirstOrDefault(item => VersionMatches(item, minecraft) && item.Name.Contains(offer.Name, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("整合包已交给启动器安装，但还没有找到对应实例。");
+        }
+        if (!string.IsNullOrWhiteSpace(offer.Modrinth))
+        {
+            _phase = "请在版本列表选择 " + minecraft;
+            ModMain.MyMsgBox("将打开 " + offer.Name + " 的 Modrinth 页面。请选择 Minecraft " + minecraft + " 的文件，下载 mrpack 后用启动器导入。导入完成后再回到服务器页一键进入。",
+                "下载推荐整合包", "打开 Modrinth", "取消");
+            if (!SystemChromeLink.TryOpenHttp(offer.Modrinth)) ModBase.OpenWebsite(offer.Modrinth);
+        }
+        throw new InvalidOperationException("这个推荐整合包没有可直接安装的文件。");
+    }
+
+    private static void Launch(FormMain form, string? server)
+    {
+        if (string.IsNullOrWhiteSpace(server)) { Launch(form); return; }
+        form.PageChange(FormMain.PageType.Launch);
+        if (ProfileService.Current is null) throw new InvalidOperationException("请点击左上角头像，先登录或创建离线账号。");
+        if (!ModLaunch.McLaunchStart(new ModLaunch.McLaunchOptions { ServerIp = server, instance = ModInstanceList.McMcInstanceSelected }))
+            throw new InvalidOperationException("启动器没有开始进入服务器。");
+    }
+
+    private async Task RunAsync(Func<CancellationToken, Task> work, string scope = "library")
     {
         using var cts = new CancellationTokenSource(); _work = cts; PackWorkInProgress = true; _progress = 0; _error = "";
+        _taskScope = scope;
         try { await work(cts.Token); }
         catch (OperationCanceledException) { _phase = "已取消"; }
         catch (ModBase.CancelledException) { _phase = "已取消"; }
@@ -486,7 +636,7 @@ internal sealed class LauncherLibrary : IDisposable
     }
 
     private bool HasQuarkSession() =>
-        QuarkOpenSessionFile.TryLoad(_quarkSessionPath)?.HasRefreshableToken == true;
+        _quarkSessions.Load()?.IsReusable == true;
 
     private async Task AuthorizeQuarkAsync(CancellationToken token)
     {
@@ -503,7 +653,7 @@ internal sealed class LauncherLibrary : IDisposable
             var session = await client.PollAsync(start, token).ConfigureAwait(false);
             if (session is not null)
             {
-                QuarkOpenSessionFile.Save(_quarkSessionPath, session);
+                _quarkSessions.Save(session);
                 _phase = "夸克网盘已授权。下载时只会转存目标整合包。";
                 return;
             }
@@ -514,11 +664,13 @@ internal sealed class LauncherLibrary : IDisposable
 
     private async Task<bool> TryOwnedDownloadAsync(PackDefinition pack, string temp, CancellationToken token, Action<string> setArchive)
     {
-        var session = QuarkOpenSessionFile.TryLoad(_quarkSessionPath);
-        if (session is null || !session.HasRefreshableToken) return false;
+        var session = _quarkSessions.Load();
+        if (session?.IsReusable != true) return false;
         _phase = "转存单个整合包到已授权网盘";
-        var owned = await new QuarkOpenClient(_http).ResolveOwnedAsync(session, pack.ShareUrl, pack.SharePath, token).ConfigureAwait(false);
-        QuarkOpenSessionFile.Save(_quarkSessionPath, owned.Session);
+        var client = new QuarkOpenClient(_http);
+        client.SessionRefreshed += _quarkSessions.Save;
+        var owned = await client.ResolveOwnedAsync(session, pack.ShareUrl, pack.SharePath, token).ConfigureAwait(false);
+        _quarkSessions.Save(owned.Session);
         var archive = PackCatalog.SafePath(temp, owned.Download.FileName);
         _phase = "下载已转存的整合包";
         try
@@ -674,12 +826,12 @@ internal sealed class LauncherLibrary : IDisposable
                 _phase = "已取消";
                 return false;
             }
-            await RunAsync(AuthorizeQuarkAsync);
+            await RunAsync(AuthorizeQuarkAsync, "browseQuark");
             if (_error.Length > 0) throw new InvalidOperationException(_error);
             if (!HasQuarkSession()) return false;
         }
         _selectCreatedInstance = true;
-        try { await RunAsync(token => InstallAsync(pack, true, token)); }
+        try { await RunAsync(token => InstallAsync(pack, true, token), "browseQuark"); }
         finally { _selectCreatedInstance = false; }
         if (_error.Length > 0) throw new InvalidOperationException(_error);
         return _phase != "已取消";

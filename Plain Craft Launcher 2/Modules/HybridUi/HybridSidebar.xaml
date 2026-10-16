@@ -27,6 +27,8 @@
                 <Border Height="1" Background="{StaticResource Hybrid.Line}" Margin="22,2,22,10" />
                 <TextBlock Grid.Row="1" Text="{DynamicResource Hybrid.LocalVersions}" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" HorizontalAlignment="Left" TextAlignment="Left" Margin="26,0,18,8" />
                 <ListBox x:Name="Versions" Grid.Row="2" Background="Transparent" BorderThickness="0" Padding="0" SelectionChanged="Version_SelectionChanged"
+                         PreviewMouseLeftButtonUp="Version_PreviewMouseLeftButtonUp"
+                         MouseMove="Versions_MouseMove" MouseLeave="Versions_MouseLeave"
                          ItemContainerStyle="{StaticResource Hybrid.VersionItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                          AutomationProperties.AutomationId="Hybrid.LocalVersions">
@@ -49,7 +51,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Image Width="16" Height="16" Source="{Binding Icon}" HorizontalAlignment="Left" VerticalAlignment="Center"
                                        RenderOptions.BitmapScalingMode="NearestNeighbor" IsHitTestVisible="False" />
-                                <StackPanel Grid.Column="1" Margin="0,0,26,0">
+                                <StackPanel x:Name="VersionText" Grid.Column="1" Margin="0,0,26,0">
                                     <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" FontSize="12" />
                                     <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" FontSize="10" Opacity="0.65" Margin="0,3,0,0" />
                                     <TextBlock Text="{Binding PlayText}" TextTrimming="CharacterEllipsis" FontSize="10" Opacity="0.55" Margin="0,2,0,0">

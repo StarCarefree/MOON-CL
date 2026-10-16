@@ -14,6 +14,7 @@ public static class RoomSetupAutomation
     private const int MaximumLogBytes = 256 * 1024;
     private static readonly Regex LanPort = new(@"(?:\[Server thread/[^\]]+\][^\r\n]*?:\s*Started serving on|\[(?:Render|Client) thread/[^\]]+\][^\r\n]*?:\s*(?:\[System\]\s*)?\[CHAT\]\s*Local game hosted on port)\s+(?<port>\d{1,5})(?!\d)", RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(100));
+    private static readonly Regex JoinedServer = new(@"\[(?:Render|Client|Server) thread/[^\]]+\][^\r\n]*?:\s*(?:Connecting to|Connected to a modded server\.)\s+(?<address>[A-Za-z0-9_.:-]{1,253})(?![\w.:-])", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
     public static string GenerateNetworkName(string roomCode)
     {
@@ -80,5 +81,49 @@ public static class RoomSetupAutomation
             return port;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or RegexMatchTimeoutException) { return null; }
+    }
+    /// <summary>Latest remote server the running client joined. Disconnect clears it; local LAN announcements do not count.</summary>
+    public static string? FindJoinedServer(string logPath)
+    {
+        var text = ReadLogTail(logPath);
+        if (text is null) return null;
+        string? address = null;
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Length > 4096) continue;
+            if (line.Contains("Disconnected", StringComparison.OrdinalIgnoreCase) || line.Contains("Lost connection", StringComparison.OrdinalIgnoreCase))
+            { address = null; continue; }
+            var match = JoinedServer.Match(line);
+            if (!match.Success) continue;
+            var value = match.Groups["address"].Value.Trim('.');
+            if (value.Length is > 0 and <= 253 && !value.Contains("..", StringComparison.Ordinal)) address = value;
+        }
+        return address;
+    }
+    private static string? ReadLogTail(string logPath)
+    {
+        if (string.IsNullOrWhiteSpace(logPath)) return null;
+        try
+        {
+            using var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var offset = Math.Max(0, stream.Length - MaximumLogBytes);
+            stream.Seek(offset, SeekOrigin.Begin);
+            var bytes = new byte[(int)Math.Min(MaximumLogBytes, stream.Length - offset)];
+            var read = 0;
+            while (read < bytes.Length)
+            {
+                var count = stream.Read(bytes, read, bytes.Length - read);
+                if (count == 0) break;
+                read += count;
+            }
+            var text = Encoding.UTF8.GetString(bytes, 0, read);
+            if (offset > 0)
+            {
+                var newline = text.IndexOf('\n');
+                text = newline >= 0 ? text[(newline + 1)..] : "";
+            }
+            return text;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
     }
 }

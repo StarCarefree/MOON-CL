@@ -25,27 +25,28 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid>
-                        <Border x:Name="Surface" CornerRadius="4" Background="{TemplateBinding Background}">
-                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        <Border x:Name="Plate" CornerRadius="6" Background="{TemplateBinding Background}" />
+                        <Border x:Name="Surface" CornerRadius="6" Background="#202226" Opacity="0"
+                                RenderTransformOrigin="0.5,0.5" SnapsToDevicePixels="True" IsHitTestVisible="False">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="0.8" ScaleY="0.8" />
+                            </Border.RenderTransform>
                         </Border>
+                        <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                         <Border x:Name="Marker" Width="3" Height="25" HorizontalAlignment="Left"
                                 Background="{StaticResource Hybrid.Accent}" CornerRadius="1.5" Visibility="Collapsed" />
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Surface" Property="Background" Value="#202226" />
-                            <Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" />
-                        </Trigger>
                         <Trigger Property="local:HybridNavigation.IsActive" Value="True">
-                            <Setter TargetName="Surface" Property="Background" Value="#242629" />
+                            <Setter TargetName="Plate" Property="Background" Value="#242629" />
                             <Setter TargetName="Marker" Property="Visibility" Value="Visible" />
                             <Setter Property="Foreground" Value="{StaticResource Hybrid.Accent}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
-                            <Setter TargetName="Surface" Property="BorderThickness" Value="1" />
+                            <Setter TargetName="Plate" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
+                            <Setter TargetName="Plate" Property="BorderThickness" Value="1" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45" />
@@ -72,28 +73,32 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
-                    <Border x:Name="Surface" CornerRadius="4" Background="Transparent" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="1.5">
-                        <Border.Effect>
-                            <DropShadowEffect x:Name="LaunchGlow" Color="#FFB942" BlurRadius="0" ShadowDepth="0" Opacity="0" />
-                        </Border.Effect>
-                        <ContentPresenter />
-                    </Border>
+                    <Grid>
+                        <Border x:Name="Plate" CornerRadius="6" Background="Transparent" BorderBrush="Transparent" BorderThickness="1.5">
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="LaunchGlow" Color="#FFB942" BlurRadius="0" ShadowDepth="0" Opacity="0" />
+                            </Border.Effect>
+                        </Border>
+                        <Border x:Name="Surface" CornerRadius="6" Background="#24272C" BorderBrush="#3A3E45" BorderThickness="1" Opacity="0" IsHitTestVisible="False"
+                                RenderTransformOrigin="0.5,0.5" SnapsToDevicePixels="True">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="0.8" ScaleY="0.8" />
+                            </Border.RenderTransform>
+                        </Border>
+                        <ContentPresenter Margin="{TemplateBinding Padding}" />
+                    </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Surface" Property="Background" Value="#1C1F23" />
-                            <Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" />
-                        </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Surface" Property="Background" Value="#292721" />
+                            <Setter TargetName="Plate" Property="Background" Value="#292721" />
                             <Setter Property="Foreground" Value="{StaticResource Hybrid.Accent}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
-                            <Setter TargetName="Surface" Property="BorderThickness" Value="1.5" />
+                            <Setter TargetName="Plate" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
+                            <Setter TargetName="Plate" Property="BorderThickness" Value="1.5" />
                         </Trigger>
                         <DataTrigger Binding="{Binding IsLaunching}" Value="True">
-                            <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
-                            <Setter TargetName="Surface" Property="Background" Value="#2A2214" />
+                            <Setter TargetName="Plate" Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" />
+                            <Setter TargetName="Plate" Property="Background" Value="#2A2214" />
                             <Setter Property="Foreground" Value="{StaticResource Hybrid.Accent}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                             <DataTrigger.EnterActions>

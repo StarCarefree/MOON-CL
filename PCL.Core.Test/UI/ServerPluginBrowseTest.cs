@@ -14,10 +14,10 @@ public sealed class ServerPluginBrowseTest
     {
         Assert.AreEqual("modpack", BrowseResourceTypes.All[0]);
         Assert.AreEqual(5, BrowseResourceTypes.CurseForgeClass("plugin"));
-        Assert.IsTrue(BrowseResourceTypes.Supports("curseforge", "plugin"));
+        Assert.IsFalse(BrowseResourceTypes.Supports("curseforge", "plugin"));
         Assert.IsTrue(BrowseResourceTypes.Supports("modrinth", "plugin"));
         Assert.IsFalse(BrowseResourceTypes.Supports("mcmod", "plugin"));
-        StringAssert.Contains(PlatformPackCatalog.SearchAddress("curseforge", 1, resourceType: "plugin").Query, "classId=5");
+        Assert.ThrowsExactly<NotSupportedException>(() => PlatformPackCatalog.SearchAddress("curseforge", 1, resourceType: "plugin"));
         StringAssert.Contains(Uri.UnescapeDataString(PlatformPackCatalog.SearchAddress("modrinth", 1, resourceType: "plugin").Query), "project_type:plugin");
     }
     [TestMethod]

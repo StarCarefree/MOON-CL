@@ -8,7 +8,7 @@ import java.util.*;
 /** Headless replacement for MLS's Swing child: reads its ORIGINAL DataOutputStream protocol. */
 public final class ProgressRelay {
     private static final Map<String, Bar> bars = new LinkedHashMap<String, Bar>();
-    private static String stage = "加载模组启动器", detail = "mod-loading-screen 已连接", status = "loading";
+    private static String stage = "加载模组启动器", detail = "mod-loading-screen 已连接", status = "loading", target = "";
     private static long current, total;
     private static String selected = "";
     private static Path file;
@@ -67,7 +67,7 @@ public final class ProgressRelay {
                 else if ("title".equals(a[1])) bar.title = a[2];
                 else if ("indeterminate".equals(a[1])) bar.indeterminate = Boolean.parseBoolean(a[2]);
                 selected = key; select(); break;
-            case 6: if (bars.isEmpty()) stage = a[0]; break;
+            case 6: target = a[0]; break;
             case 7: if (Boolean.parseBoolean(a[0])) { stage = "更新整合包"; detail = "mod-loading-screen 更新器"; } break;
             case 255: status = "ready"; stage = "模组初始化完成"; detail = "mod-loading-screen 已发出完成事件"; current = total = 1; break;
             default: break; // memory/source metadata do not advance loading progress.
@@ -86,7 +86,8 @@ public final class ProgressRelay {
         Path parent = file.getParent();
         if (!Files.isDirectory(parent)) { stopped = true; return; } // Launcher gone: keep draining MLS without affecting game.
         String json = "{\"protocol\":1,\"token\":" + quote(token) + ",\"status\":" + quote(status) +
-            ",\"stage\":" + quote(stage) + ",\"detail\":" + quote(detail) + ",\"current\":" + current + ",\"total\":" + total + "}";
+            ",\"stage\":" + quote(stage) + ",\"detail\":" + quote(detail) + ",\"target\":" + quote(target) +
+            ",\"current\":" + current + ",\"total\":" + total + "}";
         Path pending = file.resolveSibling("progress.tmp");
         try {
             Files.write(pending, json.getBytes(StandardCharsets.UTF_8));

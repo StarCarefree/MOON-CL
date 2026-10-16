@@ -109,36 +109,29 @@ public static class ModWatcher
         return GameLogLevel.Info;
     }
 
+    private static readonly Dictionary<GameLogLevel, SolidColorBrush> LogColors = CreateLogColors();
+
+    private static Dictionary<GameLogLevel, SolidColorBrush> CreateLogColors()
+    {
+        SolidColorBrush Frozen(byte r, byte g, byte b)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            brush.Freeze();
+            return brush;
+        }
+        return new Dictionary<GameLogLevel, SolidColorBrush>
+        {
+            [GameLogLevel.Debug] = Frozen(0x95, 0xA5, 0xA6),
+            [GameLogLevel.Info] = Frozen(0xFF, 0xFF, 0xFF),
+            [GameLogLevel.Warn] = Frozen(0xF3, 0x9C, 0x12),
+            [GameLogLevel.Error] = Frozen(0xE7, 0x4C, 0x3C),
+            [GameLogLevel.Fatal] = Frozen(0xC2, 0x36, 0x16)
+        };
+    }
+
     private static SolidColorBrush GetColor(GameLogLevel level)
     {
-        Func<string, SolidColorBrush> getColorBrush =
-            name => (SolidColorBrush)System.Windows.Application.Current.Resources[name];
-        switch (level)
-        {
-            case GameLogLevel.Debug:
-            {
-                return getColorBrush("ColorBrushDebug");
-            }
-            case GameLogLevel.Info:
-            {
-                getColorBrush(ThemeManager.IsDarkMode ? "ColorBrushInfoDark" : "ColorBrushInfo");
-                break;
-            }
-            case GameLogLevel.Warn:
-            {
-                return getColorBrush("ColorBrushWarn");
-            }
-            case GameLogLevel.Error:
-            {
-                return getColorBrush("ColorBrushError");
-            }
-            case GameLogLevel.Fatal:
-            {
-                return getColorBrush("ColorBrushFatal");
-            }
-        }
-
-        return getColorBrush(ThemeManager.IsDarkMode ? "ColorBrushInfoDark" : "ColorBrushInfo");
+        return LogColors.TryGetValue(level, out var brush) ? brush : LogColors[GameLogLevel.Info];
     }
 
     // 实时日志处理
@@ -226,6 +219,7 @@ public static class ModWatcher
         // 日志
         public List<string> waitingLog = new(1000);
         private nint windowHandle;
+        public nint WindowHandle => windowHandle;
         private string windowTitle = "";
 
         public Watcher(ModLoader.LoaderTask<Process, int> loader, McInstance version, string windowTitle,
@@ -335,11 +329,10 @@ public static class ModWatcher
                 waitingLog.Add(e.Data);
             }
 
+            if (e.Data is not null) fullLog.Add(e.Data);
             if (realTime)
             {
                 LogRealTime(e.Data, ref lastLevel);
-                if (e.Data is not null)
-                    fullLog.Add(e.Data);
             }
         }
 

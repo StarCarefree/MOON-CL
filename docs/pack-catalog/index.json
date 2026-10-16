@@ -16,5 +16,32 @@
       "shareUrl": "https://pan.quark.cn/s/e3f623dd58d6",
       "sharePath": "SRE哈比列车/4.4.0/公开版（不含地图）StarRailHarpyExpress V4.4.0-beta1.mrpack"
     }
+  ],
+  "servers": [
+    {
+      "id": "mclists",
+      "name": "MCLists",
+      "description": "公开 Minecraft 服务器目录。具体地址与版本以原站为准。",
+      "address": "www.mclists.cn",
+      "minecraft": "1.21.1",
+      "vanilla": false,
+      "icon": "",
+      "website": "https://www.mclists.cn/",
+      "source": "mclists",
+      "packs": [
+        {
+          "id": "fabulously-optimized",
+          "name": "Fabulously Optimized",
+          "minecraft": "1.21.1",
+          "loader": "Fabric",
+          "downloadUrl": "",
+          "fileName": "",
+          "sha256": "",
+          "shareUrl": "",
+          "sharePath": "",
+          "modrinth": "https://modrinth.com/modpack/fabulously-optimized"
+        }
+      ]
+    }
   ]
 }

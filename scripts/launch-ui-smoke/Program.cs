@@ -15,6 +15,7 @@ internal static partial class Program
     private static void Check(bool value, string message) { _checks++; if (!value) throw new Exception(message); }
     private static T Control<T>(HybridLaunchScreen view, string name) => (T)view.FindName(name);
     private static DispatcherTimer Clock(HybridLaunchScreen view) => (DispatcherTimer)typeof(HybridLaunchScreen).GetField("_clock", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view)!;
+    private static object? ClockOf(object instance, string name) => instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance);
     private static IEnumerable<DependencyObject> Tree(DependencyObject root)
     {
         yield return root;
@@ -52,19 +53,26 @@ internal static partial class Program
             {
                 await CheckPreferences(args[1]);
                 if (args.Length > 2) CheckBridgeRecording(args[2]);
+                if (SystemParameters.ClientAreaAnimation)
+                    Check(window.Opacity < 1 && ClockOf(window, "_entranceGuard") is DispatcherTimer { IsEnabled: true }, "Launch window must ease in instead of popping");
+                else
+                    Check(Math.Abs(window.Opacity - 1) < 0.001, "Disabled client animation must show the launch window immediately");
                 var view = (HybridLaunchScreen)window.FindName("Screen");
                 Check(window.Owner is null && window.ShowInTaskbar && !window.Topmost, "Must be an ownerless non-topmost independent window");
                 Check(window.IsVisible && Clock(view).IsEnabled, "Independent window must start its clock");
                 window.ApplyProgress(new(LaunchProgressPhase.Launcher, "补全游戏文件", "下载资源  ·  12 MiB/s", .42));
                 await Task.Delay(350); view.UpdateLayout();
+                Check(window.Opacity > 0.98, "Entrance must finish fully opaque");
                 Check(Control<TextBlock>(view, "Percentage").Text == "42%", "Launcher progress missing");
                 Check(Control<TextBlock>(view, "LauncherState").Text == "进行中", "Launcher step missing");
                 AssertLayout(view); Capture((FrameworkElement)window.Content, Path.Combine(output, "launch-window-launcher.png"));
                 window.ApplyProgress(new(LaunchProgressPhase.Game, "等待模组进度", "正在等待 mod-loading-screen", null));
                 Check(Control<TextBlock>(view, "Percentage").Text == "--", "Unknown game progress must not inherit launcher percentage");
-                window.ApplyProgress(new(LaunchProgressPhase.Game, "初始化 client", "Example Mod  ·  example", .25, true));
+                window.ApplyProgress(new(LaunchProgressPhase.Game, "初始化 client", "Example Mod  ·  example", .25, true, null, "StarRailExpress 开拓星穹谋杀案 1.21.1", 1, 4));
                 await Task.Delay(300);
                 Check(Control<TextBlock>(view, "Percentage").Text == "25%", "Game percentage missing");
+                Check(Control<TextBlock>(view, "CountText").Text == "1/4", "MLS target count missing");
+                Check(Control<TextBlock>(view, "VersionName").Text == "StarRailExpress 开拓星穹谋杀案 1.21.1", "MLS target title missing");
                 Check(Control<TextBlock>(view, "LauncherState").Text == "已完成" && Control<TextBlock>(view, "GameState").Text == "进行中", "Two phase hierarchy wrong");
                 Capture((FrameworkElement)window.Content, Path.Combine(output, "launch-screen.png"));
                 var cancel = 0; window.CancelRequested += (_, _) => cancel++;

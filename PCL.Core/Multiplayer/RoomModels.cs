@@ -85,12 +85,60 @@ public sealed record RoomConnection(string Mode, string Address = "", int Port =
     }
 }
 
-public sealed record RoomGameStatus(string Name = "", string Version = "", string State = "stopped")
+public sealed record RoomPackShare(string Id = "", string Name = "", string Version = "", string Minecraft = "",
+    string FileName = "", string DownloadUrl = "", string Sha256 = "", string ShareUrl = "", string SharePath = "")
+{
+    public void Validate()
+    {
+        if (!Regex.IsMatch(Id ?? "", "^[a-z0-9][a-z0-9_-]{0,63}$")) throw new ArgumentException("整合包标识无效。");
+        CheckShareText(Name, 80, "整合包名称"); CheckShareText(Version, 80, "整合包版本");
+        if ((Minecraft ?? "").Length > 40 || (Minecraft ?? "").Any(char.IsControl)) throw new ArgumentException("整合包 Minecraft 版本无效。");
+        var file = FileName ?? "";
+        if (!Regex.IsMatch(file, @"^[^\\/:*?""<>|\p{C}]+\.(?i:zip|mrpack)$") || file.EndsWith(' ') || file.StartsWith('.'))
+            throw new ArgumentException("整合包文件名必须是 .zip 或 .mrpack。");
+        var download = CheckUrl(DownloadUrl, "下载地址"); var share = CheckUrl(ShareUrl, "分享地址");
+        var hash = Sha256 ?? "";
+        if (hash.Length > 0 && !Regex.IsMatch(hash, "^[0-9a-fA-F]{64}$")) throw new ArgumentException("整合包 SHA256 无效。");
+        var path = SharePath ?? "";
+        if (path.Length > 512 || path.Any(char.IsControl) || path.Contains("..") || path.Contains('\\'))
+            throw new ArgumentException("整合包分享路径无效。");
+        if (download.Length == 0 && share.Length == 0) throw new ArgumentException("整合包需要公开下载地址或分享地址。");
+    }
+    private static void CheckShareText(string text, int max, string label)
+    {
+        if (string.IsNullOrWhiteSpace(text) || text.Length > max || text.Any(char.IsControl)) throw new ArgumentException(label + "无效或过长。");
+    }
+    private static string CheckUrl(string value, string label)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Length > 2048 || !Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment) || string.IsNullOrEmpty(uri.Host) || uri.Port == 0)
+            throw new ArgumentException("整合包" + label + "必须是不含凭据的 HTTP(S) 地址。");
+        return uri.AbsoluteUri;
+    }
+    [JsonIgnore] public string Display => Name + (string.IsNullOrWhiteSpace(Version) ? "" : " · " + Version);
+}
+
+public sealed record RoomGameStatus(string Name = "", string Version = "", string State = "stopped", RoomPackShare? Pack = null, string Server = "")
 {
     public void Validate()
     {
         if (Name.Length > 80 || Version.Length > 80 || Name.Any(char.IsControl) || Version.Any(char.IsControl) ||
             State is not ("stopped" or "launching" or "running" or "failed")) throw new ArgumentException("游戏状态信息无效。");
+        if (Server.Length > 253 || Server.Any(ch => char.IsControl(ch) || char.IsWhiteSpace(ch))) throw new ArgumentException("服务器地址无效。");
+        if (Server.Length > 0 && !IsServer(Server)) throw new ArgumentException("服务器地址无效。");
+        Pack?.Validate();
+    }
+    private static bool IsServer(string value)
+    {
+        var host = value; var port = 25565; var split = value.LastIndexOf(':');
+        if (split > 0 && value.IndexOf(':') == split)
+        {
+            host = value[..split];
+            if (!int.TryParse(value[(split + 1)..], out port)) return false;
+        }
+        return host.Length is > 0 and <= 253 && port is >= 1 and <= 65535 &&
+            (host.Contains(':') || host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-'));
     }
     [JsonIgnore] public string StateText => State switch { "launching" => "正在启动", "running" => "游戏运行中", "failed" => "启动失败", _ => "未启动" };
     [JsonIgnore] public string Display => (string.IsNullOrWhiteSpace(Name) ? "Minecraft" : Name) + " · " + StateText;

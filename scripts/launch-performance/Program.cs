@@ -17,7 +17,7 @@ internal static class Program
         => File.WriteAllText(Path.Combine(ModFolder.mcFolderSelected, "assets", "indexes", name + ".json"),
             JsonSerializer.Serialize(new { objects, @virtual = virtualFiles, map_to_resources = remap }));
 
-    private static string Hash(int value) => value.ToString("x40");
+    private static string Hash(int value) => Convert.ToHexStringLower(System.Security.Cryptography.SHA1.HashData(BitConverter.GetBytes(value)));
     private static string ObjectPath(int value) => Path.Combine(ModFolder.mcFolderSelected, "assets", "objects", Hash(value)[..2], Hash(value));
     private static void Put(string path, int size)
     {
@@ -65,6 +65,44 @@ internal static class Program
             scanTimes.Sort();
             Console.WriteLine($"SCAN 16000 existing: median={scanTimes[3]:F2} ms");
             if (args.Contains("--baseline")) return 0;
+
+            progress = new ModLoader.LoaderBase();
+            Check(ModAssets.McAssetsFixList(instance, false, ref progress).Count == 0, "Distributed asset scan failed");
+            Console.WriteLine($"PROGRESS 16000: {progress.Updates} updates");
+            Check(progress.Updates <= 103, "Asset scan must not send a progress event for every file");
+
+            // Exercise the bulk path, not just the small-index fallback, on each fresh scan.
+            File.Delete(ObjectPath(1));
+            Put(ObjectPath(2), 65);
+            File.Delete(ObjectPath(3));
+            Directory.CreateDirectory(ObjectPath(3));
+            var bulkMissing = ModAssets.McAssetsFixList(instance, false, ref progress);
+            Check(bulkMissing.Count == 3, "Bulk scan missed a deleted, resized or directory-only asset");
+            Check(bulkMissing.Select(f => f.LocalPath).ToHashSet().SetEquals(new[] { ObjectPath(1), ObjectPath(2), ObjectPath(3) }),
+                "Bulk scan returned the wrong missing files");
+            Directory.Delete(ObjectPath(3));
+            foreach (var i in Enumerable.Range(1, 3)) Put(ObjectPath(i), 64);
+            Check(ModAssets.McAssetsFixList(instance, false, ref progress).Count == 0, "Bulk scan cached stale metadata");
+            var removedDirectory = Path.GetDirectoryName(ObjectPath(1));
+            Directory.Delete(removedDirectory, true);
+            var removedTokens = ModAssets.McAssetsListGet(instance).Where(t => Path.GetDirectoryName(t.localPath) == removedDirectory).ToList();
+            Check(ModAssets.McAssetsFixList(instance, false, ref progress).Count == removedTokens.Count,
+                "Missing hash directory must queue all its assets");
+            Put(removedDirectory, 1);
+            Check(ModAssets.McAssetsFixList(instance, false, ref progress).Count == removedTokens.Count,
+                "Unreadable hash directory must fall back without dropping missing assets");
+            File.Delete(removedDirectory);
+            foreach (var token in removedTokens) Put(token.localPath, (int)token.size);
+            ModLoader.LoaderBase noProgress = null;
+            Check(ModAssets.McAssetsFixList(instance, false, ref noProgress).Count == 0, "Null progress feed failed");
+            for (var i = 0; i < 512; i++) Put(Path.Combine(removedDirectory, $"!unrelated-{i:D4}"), 1);
+            Check(ModAssets.McAssetsFixList(instance, false, ref noProgress).Count == 0,
+                "Crowded shared directory must preserve fallback checks");
+            File.Delete(ObjectPath(1));
+            var crowdedMissing = ModAssets.McAssetsFixList(instance, false, ref noProgress);
+            Check(crowdedMissing.Count == 1 && crowdedMissing[0].LocalPath == ObjectPath(1),
+                "Crowded directory fallback missed a deleted asset");
+            Put(ObjectPath(1), 64);
 
             Index("benchmark", new Dictionary<string, object>
             {
@@ -156,7 +194,12 @@ namespace PCL
     }
     public static class ModLoader
     {
-        public sealed class LoaderBase { public double Progress { get; set; } }
+        public sealed class LoaderBase
+        {
+            private double _progress;
+            public int Updates { get; private set; }
+            public double Progress { get => _progress; set { _progress = value; Updates++; } }
+        }
     }
     public static class ModDownload
     {

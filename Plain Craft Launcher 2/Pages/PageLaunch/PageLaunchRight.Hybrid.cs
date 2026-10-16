@@ -38,7 +38,7 @@ public partial class PageLaunchRight
         return sections.ToArray();
     }
 
-    public void PlayVersionSwitch() => HybridMotion.Swap(HeroIdentity);
+    public void PlayVersionSwitch() => HybridMotion.Crossfade(HeroText);
 
     public void ShowSelectedVersion(McInstance? instance)
     {
@@ -49,6 +49,7 @@ public partial class PageLaunchRight
         HeroIcon.Visibility = icon is null ? Visibility.Collapsed : Visibility.Visible;
         HeroIconLetter.Visibility = icon is null ? Visibility.Visible : Visibility.Collapsed;
         HeroIconLetter.Text = string.IsNullOrEmpty(instance?.Name) ? "M" : instance.Name[..1];
+        RunningInstanceCards.Refresh(PanRunning, instance);
     }
 
     private string DescribeVersion(McInstance instance)

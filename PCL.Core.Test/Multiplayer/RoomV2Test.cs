@@ -63,6 +63,20 @@ public sealed class RoomV2Test
         Assert.ThrowsExactly<ArgumentException>(() => new RoomPresence(Convert.ToBase64String(tiny)).Validate());
     }
     [TestMethod]
+    public void PackShareAcceptsPublicDownloadsAndRejectsLocalPaths()
+    {
+        var pack = new RoomPackShare("starrail-harpy-express", "SRE", "4.4.0", "1.21.1", "pack.mrpack", "https://example.com/pack.mrpack", new string('a', 64), "", "folder/pack.mrpack");
+        pack.Validate();
+        new RoomGameStatus("实例", "1.21.1", "running", pack).Validate();
+        Assert.ThrowsExactly<ArgumentException>(() => (pack with { DownloadUrl = "file:///C:/packs/a.mrpack", ShareUrl = "" }).Validate());
+        Assert.ThrowsExactly<ArgumentException>(() => (pack with { DownloadUrl = "https://user:secret@example.com/a.mrpack" }).Validate());
+        Assert.ThrowsExactly<ArgumentException>(() => (pack with { SharePath = "../secret.mrpack" }).Validate());
+        Assert.ThrowsExactly<ArgumentException>(() => (pack with { FileName = "pack.exe" }).Validate());
+        Assert.ThrowsExactly<ArgumentException>(() => new RoomGameStatus("实例", "1.21.1", "running", pack with { Id = "../pack" }).Validate());
+        new RoomGameStatus("实例", "1.21.1", "running", null, "play.example.com:25566").Validate();
+        Assert.ThrowsExactly<ArgumentException>(() => new RoomGameStatus("实例", "1.21.1", "running", null, "bad server").Validate());
+    }
+    [TestMethod]
     public async Task OfficialNodeCanUseTemporaryHttpButNeverLeaksItsAddressInErrors()
     {
         var address = new Uri(RoomServiceDirectory.OfficialUrl);

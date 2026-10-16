@@ -98,6 +98,11 @@ public partial class HybridLaunchScreen : UserControl
             LaunchProgressPhase.Failed => "启动失败",
             _ => "准备启动环境"
         } : snapshot.Stage;
+        if (!string.IsNullOrWhiteSpace(snapshot.Target))
+        {
+            VersionName.Text = snapshot.Target;
+            VersionName.ToolTip = snapshot.Target;
+        }
         DetailText.Text = string.IsNullOrWhiteSpace(snapshot.Detail) ? _phase switch
         {
             LaunchProgressPhase.Game => "游戏进度由加载模组提供；未收到进度时不估算百分比",
@@ -116,11 +121,12 @@ public partial class HybridLaunchScreen : UserControl
         StageName.ToolTip = StageName.Text;
         DetailText.ToolTip = DetailText.Text;
         NoticeText.ToolTip = NoticeText.Text;
+        Percentage.Text = _progress.HasValue ? $"{_progress.Value * 100:0}%" : "--";
+        CountText.Text = snapshot.Current is { } done && snapshot.Total is { } count && count > 0 ? $"{done}/{count}" : "";
         var accent = (Brush)FindResource(_phase == LaunchProgressPhase.Failed ? "Launch.Error" : "Hybrid.Accent");
         Percentage.Foreground = ProgressFill.Background = UnknownFill.Background = accent;
         NoticeText.Foreground = (Brush)FindResource(_phase == LaunchProgressPhase.Failed ? "Launch.Error"
             : !string.IsNullOrWhiteSpace(snapshot.Warning) ? "Hybrid.Accent" : "Hybrid.Muted");
-        Percentage.Text = _progress.HasValue ? $"{_progress.Value * 100:0}%" : "--";
         CancelButton.IsEnabled = !_terminal && !_cancelPending;
         CancelButton.Content = _cancelPending && !_terminal ? "正在取消…" : "取消启动";
         PaintSteps();
@@ -145,6 +151,7 @@ public partial class HybridLaunchScreen : UserControl
     public void EndLaunch()
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(EndLaunch); return; }
+        if (Window.GetWindow(this) is HybridLaunchWindow host) host.StopEntrance();
         _active = false;
         _elapsed.Stop();
         StopMotion();

@@ -80,16 +80,9 @@ public partial class FormMain
         var covered = visible || HybridRoomsView.Visibility == Visibility.Visible;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
-        if (visible)
-        {
-            PanBrowse.Opacity = 0;
-            PanBrowse.RenderTransform = new TranslateTransform(0, 12);
-            ModAnimation.AniStart(new[]
-            {
-                ModAnimation.AaOpacity(PanBrowse, 1, 160),
-                ModAnimation.AaTranslateY(PanBrowse, -12, 360, 0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak))
-            }, "Hybrid Browse");
-        }
+        ModAnimation.AniStop("Hybrid Browse");
+        PanBrowse.Opacity = 1;
+        PanBrowse.RenderTransform = Transform.Identity;
         UpdateHybridShell();
     }
 
@@ -185,9 +178,12 @@ public partial class FormMain
                 : selected is null ? Lang.Text("Hybrid.NoVersions") : Lang.Text("Hybrid.Ready");
             if (versionChanged) home.PlayVersionSwitch();
         }
+        var folder = ModFolder.mcFolderSelected;
+        if (!string.IsNullOrEmpty(folder) && ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Loading)
+            ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, folder,
+                ModLoader.LoaderFolderRunType.RunOnUpdated, 1, @"versions\");
         if (ModInstanceList.mcInstanceListLoader.State == ModBase.LoadState.Finished)
         {
-            var folder = ModFolder.mcFolderSelected;
             var prefix = string.IsNullOrEmpty(folder) ? null : Path.GetFullPath(Path.Combine(folder, "versions")) + Path.DirectorySeparatorChar;
             var instances = prefix is null ? [] : ModInstanceList.mcInstanceList.ToArray().SelectMany(pair => pair.Value.ToArray())
                 .Where(instance => instance.PathInstance.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))

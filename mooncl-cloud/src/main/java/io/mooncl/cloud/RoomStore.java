@@ -1,9 +1,11 @@
 package io.mooncl.cloud;
+package io.mooncl.cloud;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.time.*;
+import java.util.Locale;
 import java.util.*;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -34,17 +36,78 @@ final class RoomStore {
         Join(String playerName, String password) { this(playerName, password, null, null); }
         @Override public String toString() { return "Join[redacted]"; }
     }
-    record Game(String name, String version, String state) {
+    record Game(String name, String version, String state, RoomPackShare pack, String server) {
         Game validated() {
             String n = profileText(name, "game name"), v = profileText(version, "game version");
             String s = state == null ? "stopped" : state;
             if (!Set.of("stopped", "launching", "running", "failed").contains(s))
                 throw new ApiException(400, "Invalid game state");
-            return new Game(n, v, s);
+            return new Game(n, v, s, pack == null ? null : pack.validated(), serverAddress(server));
         }
     }
     record Presence(String avatar, Game game) {
         @Override public String toString() { return "Presence[redacted]"; }
+    }
+    static String serverAddress(String value) {
+        if (value == null || value.isEmpty()) return "";
+        if (value.length() > 253 || value.chars().anyMatch(ch -> Character.isISOControl(ch) || Character.isWhitespace(ch)))
+            throw new ApiException(400, "Invalid game server");
+        String host = value;
+        int port = 25565;
+        int split = value.lastIndexOf(':');
+        if (split > 0 && value.indexOf(':') == split) {
+            host = value.substring(0, split);
+            try { port = Integer.parseInt(value.substring(split + 1)); }
+            catch (NumberFormatException exception) { throw new ApiException(400, "Invalid game server"); }
+        }
+        if (host.isEmpty() || host.length() > 253 || port < 1 || port > 65535
+                || !(host.matches("[A-Za-z0-9.-]+") || host.contains(":")))
+            throw new ApiException(400, "Invalid game server");
+        return value;
+    }
+    /** Public download descriptor only. Never a local path, token, or uploaded archive. */
+    record RoomPackShare(String id, String name, String version, String minecraft, String fileName,
+                         String downloadUrl, String sha256, String shareUrl, String sharePath) {
+        RoomPackShare validated() {
+            String packId = id == null ? "" : id;
+            if (!packId.matches("[a-z0-9][a-z0-9_-]{0,63}")) throw new ApiException(400, "Invalid pack id");
+            String packName = shareText(name, 80, "pack name");
+            String packVersion = shareText(version, 80, "pack version");
+            String mc = minecraft == null ? "" : minecraft;
+            if (mc.length() > 40 || mc.chars().anyMatch(Character::isISOControl))
+                throw new ApiException(400, "Invalid pack minecraft");
+            String file = fileName == null ? "" : fileName;
+            if (!file.matches("[^\\\\/:*?\\\"<>|\\p{Cntrl}]+\\.(?i:zip|mrpack)") || file.endsWith(" ") || file.startsWith("."))
+                throw new ApiException(400, "Invalid pack file name");
+            String download = httpUrl(downloadUrl, "pack download");
+            String hash = sha256 == null ? "" : sha256;
+            if (!hash.matches("(?:[a-fA-F0-9]{64})?")) throw new ApiException(400, "Invalid pack sha256");
+            String share = httpUrl(shareUrl, "pack share");
+            String path = sharePath == null ? "" : sharePath;
+            if (path.length() > 512 || path.chars().anyMatch(Character::isISOControl) || path.contains("..") || path.contains("\\"))
+                throw new ApiException(400, "Invalid pack share path");
+            if (download.isEmpty() && share.isEmpty()) throw new ApiException(400, "Pack needs a public download or share URL");
+            return new RoomPackShare(packId, packName, packVersion, mc, file, download, hash.toLowerCase(Locale.ROOT), share, path);
+        }
+        private static String shareText(String value, int max, String field) {
+            if (value == null || value.isBlank() || value.length() > max || value.chars().anyMatch(Character::isISOControl))
+                throw new ApiException(400, "Invalid " + field);
+            return value;
+        }
+        private static String httpUrl(String value, String field) {
+            if (value == null || value.isEmpty()) return "";
+            if (value.length() > 2048) throw new ApiException(400, "Invalid " + field);
+            try {
+                java.net.URI uri = java.net.URI.create(value);
+                if (!("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                        || uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawFragment() != null
+                        || uri.getPort() == 0 || uri.getPort() > 65535)
+                    throw new IllegalArgumentException();
+                return uri.toString();
+            } catch (IllegalArgumentException exception) {
+                throw new ApiException(400, "Invalid " + field);
+            }
+        }
     }
     record Routes(List<RoomRoute> routes) {}
     record Member(String id, String name, boolean isHost, String avatar, Game game) {}

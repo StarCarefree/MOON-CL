@@ -31,6 +31,8 @@ public sealed class QuarkOpenSession
     }
 
     public bool HasRefreshableToken => AccessToken.Length > 0 && RefreshToken.Length > 0;
+    public bool IsReusable => HasRefreshableToken &&
+        (RefreshExpiresAt == 0 || RefreshExpiresAt > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     public override string ToString() => "QuarkOpenSession";
 
     public bool Matches(string accessToken, string refreshToken)
@@ -103,6 +105,9 @@ public sealed class QuarkOpenClient
     private readonly HttpClient _http;
     private readonly QuarkPackClient _packs;
     private QuarkOpenSession? _session;
+
+    /// <summary>Persist rotated credentials immediately, even if a later save/download fails.</summary>
+    public event Action<QuarkOpenSession>? SessionRefreshed;
 
     public QuarkOpenClient(HttpClient http) : this(http, new QuarkPackClient(http)) { }
 
@@ -199,6 +204,7 @@ public sealed class QuarkOpenClient
             new { refresh_token = session.RefreshToken, device_id = session.DeviceId }, token, null, false).ConfigureAwait(false);
         var refreshed = SessionFrom(Data(document), session.DeviceId);
         _session = refreshed;
+        SessionRefreshed?.Invoke(refreshed);
         return refreshed;
     }
 
@@ -228,7 +234,13 @@ public sealed class QuarkOpenClient
     private async Task<string> OwnedFidAsync(JsonElement saved, QuarkShareFile file, string folderFid, CancellationToken token)
     {
         var current = saved;
-        var status = Int(current, "status", 2);
+        // The service reports the actual destination; it need not be the requested folder.
+        // Keep it across task responses that contain only status/task_id.
+        folderFid = SavedFolder(current, folderFid);
+        // saveas may return only { task_id, task_sync }, not a completed task result.
+        var hasTask = current.TryGetProperty("task_id", out var taskNode)
+            && taskNode.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(taskNode.GetString());
+        var status = Int(current, "status", hasTask ? 0 : 2);
         if (status is 0 or 1)
         {
             var taskId = Text(current, "task_id");
@@ -238,6 +250,7 @@ public sealed class QuarkOpenClient
                 using var document = await CallAsync(HttpMethod.Post, "/open/v1/task/query", _session,
                     new { task_id = taskId }, token, null, true).ConfigureAwait(false);
                 current = Data(document).Clone();
+                folderFid = SavedFolder(current, folderFid);
                 status = Int(current, "status", -1);
                 if (status is 0 or 1) continue;
                 break;
@@ -247,6 +260,15 @@ public sealed class QuarkOpenClient
         var fid = FirstFid(current);
         if (!string.IsNullOrEmpty(fid)) return fid;
         return await FindSavedAsync(file, folderFid, token).ConfigureAwait(false);
+    }
+
+    private static string SavedFolder(JsonElement data, string fallback)
+    {
+        if (data.TryGetProperty("save_as", out var save) && save.ValueKind == JsonValueKind.Object
+            && save.TryGetProperty("to_pdir_fid", out var folder) && folder.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(folder.GetString()))
+            return folder.GetString()!; // "0" is a valid destination (root).
+        return fallback;
     }
 
     private async Task<string> FindSavedAsync(QuarkShareFile file, string folderFid, CancellationToken token)
@@ -308,8 +330,13 @@ public sealed class QuarkOpenClient
     {
         if (!item.TryGetProperty(key, out var parent) || parent.ValueKind != JsonValueKind.String) return false;
         var value = parent.GetString();
-        return !string.IsNullOrEmpty(value) && !string.Equals(value, folderFid, StringComparison.Ordinal);
+        // List responses can contain randomized opaque IDs (~...|...), unlike /dir's raw FID.
+        // The list request already scopes the results to folderFid; encoded strings are not comparable.
+        return !string.IsNullOrEmpty(value) && !IsOpaqueFid(value) && !IsOpaqueFid(folderFid)
+            && !string.Equals(value, folderFid, StringComparison.Ordinal);
     }
+
+    private static bool IsOpaqueFid(string fid) => fid.StartsWith('~') && fid.IndexOf('|') > 1;
 
     private static bool IsDirectory(JsonElement item)
     {
@@ -513,8 +540,12 @@ public static class QuarkOpenSessionFile
         }), null, DataProtectionScope.CurrentUser);
         var directory = Path.GetDirectoryName(path) ?? throw new QuarkOpenException("无法保存夸克授权。");
         Directory.CreateDirectory(directory);
-        var temp = path + ".tmp";
-        File.WriteAllBytes(temp, protectedBytes);
-        File.Move(temp, path, true);
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temp, protectedBytes);
+            File.Move(temp, path, true);
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 }

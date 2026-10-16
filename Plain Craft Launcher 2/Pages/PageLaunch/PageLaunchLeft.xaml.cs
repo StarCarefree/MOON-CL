@@ -170,6 +170,9 @@ public partial class PageLaunchLeft
                 if (ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Finished)
                     ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, ModFolder.mcFolderSelected,
                         ModLoader.LoaderFolderRunType.ForceRun, 1, @"versions\", true);
+                else
+                    ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, ModFolder.mcFolderSelected,
+                        ModLoader.LoaderFolderRunType.RunOnUpdated, 1, @"versions\");
                 if (ModInstanceList.mcInstanceList.Count == 0 ||
                     ModInstanceList.mcInstanceList.First().Value[0].Logo.Contains("RedstoneBlock"))
                 {

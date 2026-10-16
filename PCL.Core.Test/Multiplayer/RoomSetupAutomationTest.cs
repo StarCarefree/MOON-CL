@@ -71,4 +71,16 @@ public sealed class RoomSetupAutomationTest
         Assert.AreEqual("IPv6 直连 · 1", RoomSetupAutomation.SuggestRouteName("ipv6", 1));
         Assert.AreEqual("EasyTier 组网 · 12", RoomSetupAutomation.SuggestRouteName("easytier", 99));
     }
+    [TestMethod]
+    public void JoinedServerUsesLatestConnectionAndClearsAfterDisconnect()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "mooncl-room-server-" + Guid.NewGuid().ToString("N") + ".log");
+        File.WriteAllText(path, "[12:00:00] [Render thread/INFO]: Connecting to play.example.com\n[12:01:00] [Render thread/INFO]: Connecting to 192.0.2.10:25566\n[12:02:00] [Render thread/INFO]: Lost connection: timed out\n");
+        try { Assert.IsNull(RoomSetupAutomation.FindJoinedServer(path)); }
+        finally { File.Delete(path); }
+        path = Path.Combine(Path.GetTempPath(), "mooncl-room-server-" + Guid.NewGuid().ToString("N") + ".log");
+        File.WriteAllText(path, "[12:00:00] [Render thread/INFO]: Connecting to old.example.com\n[12:01:00] [Render thread/INFO]: Connected to a modded server. play.example.org:25566\n");
+        try { Assert.AreEqual("play.example.org:25566", RoomSetupAutomation.FindJoinedServer(path)); }
+        finally { File.Delete(path); }
+    }
 }

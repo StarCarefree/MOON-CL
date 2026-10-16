@@ -13,6 +13,9 @@ public final class MlsIpcHarness {
         screen.getMethod("createCustomProgressBar", String.class, String.class, int.class).invoke(null, "fixture", "游戏资源", 100);
         Method op = screen.getDeclaredMethod("customProgressBarOp", String[].class); op.setAccessible(true);
         op.invoke(null, (Object)new String[] { "fixture", "progress", "42" });
+        screen.getMethod("setTitleFromMetadata", String.class, String.class, String.class)
+            .invoke(null, "star-rail", "开拓星穹谋杀案", "1.21.1");
+        op.invoke(null, (Object)new String[] { "fixture", "progress", "42" });
         Thread.sleep(800);
         Method close = screen.getDeclaredMethod("close"); close.setAccessible(true); close.invoke(null);
         Thread.sleep(300);

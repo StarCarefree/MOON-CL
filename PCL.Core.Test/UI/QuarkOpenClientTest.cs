@@ -53,6 +53,44 @@ public sealed class QuarkOpenClientTest
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task RefreshedCredentialsPersistEvenWhenLaterRequestFails(bool serverExpired)
+    {
+        var root = Path.Combine(Environment.GetEnvironmentVariable("PI_SCRATCH_DIR") ?? Path.GetTempPath(), "quark-refresh-" + Guid.NewGuid().ToString("N"));
+        var store = new QuarkOpenSessionStore(root, root);
+        var rotated = false;
+        using var handler = new Handler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/agent/v1/oauth/access_token/rotate")
+            {
+                rotated = true;
+                return Task.FromResult(Json(new { status = 0, data = new { access_token = "rotated-access", refresh_token = "rotated-refresh", device_id = "device-1" } }));
+            }
+            if (request.RequestUri.Host == "drive-pc.quark.cn")
+                return Task.FromResult(request.RequestUri.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
+                    ? Json(new { code = 0, data = new { stoken = Stoken } })
+                    : Json(new { data = new { list = new[] { new { file_name = "pack.mrpack", fid = "share-fid", dir = false, size = 100, share_fid_token = "file-token" } } } }));
+            if (!rotated) return Task.FromResult(Json(new { status = 1, errno = 11001, data = new { } }));
+            Assert.IsTrue(new QuarkOpenSessionStore(root, root).Load()!.Matches("rotated-access", "rotated-refresh"));
+            return Task.FromResult(Json(new { status = 1, errno = 32003, data = new { } }));
+        });
+        using var http = new HttpClient(handler);
+        var client = new QuarkOpenClient(http);
+        client.SessionRefreshed += store.Save;
+        try
+        {
+            var initial = new QuarkOpenSession(Access, Refresh, "device-1", serverExpired ? 0 : 1, 0);
+            store.Save(initial);
+            await Assert.ThrowsExactlyAsync<QuarkOpenException>(() => client.ResolveOwnedAsync(initial, Share, "pack.mrpack", CancellationToken.None));
+            Assert.IsTrue(rotated);
+            Assert.IsTrue(new QuarkOpenSessionStore(root, root).Load()!.Matches("rotated-access", "rotated-refresh"));
+            Assert.AreEqual(1, handler.Paths.Count(path => path == "/agent/v1/oauth/access_token/rotate"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
     public void SignUsesMethodPathTimeAndDocumentedKey()
     {
         var expected = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
@@ -109,7 +147,9 @@ public sealed class QuarkOpenClientTest
 
     }
     [TestMethod]
-    public async Task OwnedSaveWithoutFidListsFolderByExactName()
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task OwnedSaveWithoutFidListsFolderByExactName(bool opaqueParent)
     {
         var listBodies = new List<string>();
         using var handler = new Handler(async (request, ct) =>
@@ -126,7 +166,7 @@ public sealed class QuarkOpenClientTest
             {
                 "/open/v1/dir" => Json(new { status = 0, errno = 0, data = new { fid = "folder-fid" } }),
                 "/open/v1/share/saveas" => SaveAsWithoutFid(body),
-                "/open/v1/file/list" => ListPage(body, listBodies),
+                "/open/v1/file/list" => ListPage(body, listBodies, opaqueParent),
                 "/open/v1/file/get_download_url" => DownloadFor(body),
                 _ => throw new AssertFailedException(request.RequestUri.AbsolutePath)
             };
@@ -156,7 +196,7 @@ public sealed class QuarkOpenClientTest
         return Json(new { status = 0, errno = 0, data = new { status = 2, task_id = "task-1" } });
     }
 
-    private static HttpResponseMessage ListPage(string body, List<string> bodies)
+    private static HttpResponseMessage ListPage(string body, List<string> bodies, bool opaqueParent)
     {
         bodies.Add(body);
         if (bodies.Count == 1)
@@ -186,7 +226,7 @@ public sealed class QuarkOpenClientTest
                 {
                     new { fid = "dir-fid", filename = "pack.mrpack", size = 93_571_003, parent_fid = "folder-fid", file_type = 0 },
                     new { fid = "wrong-size", file_name = "pack.mrpack", size = 12, parent_fid = "folder-fid", file_type = 1 },
-                    new { fid = "owned-fid", filename = "pack.mrpack", size = 93_571_003, pdir_fid = "folder-fid", file_type = 1 }
+                    new { fid = "owned-fid", filename = "pack.mrpack", size = 93_571_003, parent_fid = opaqueParent ? "~encrypted-parent|tag" : "folder-fid", file_type = "1" }
                 }
             }
         });
@@ -197,6 +237,60 @@ public sealed class QuarkOpenClientTest
         using var json = JsonDocument.Parse(body);
         Assert.AreEqual("owned-fid", json.RootElement.GetProperty("fid").GetString());
         return Json(new { status = 0, errno = 0, data = new { fid = "owned-fid", file_name = "pack.mrpack", size = 93_571_003, download_url = Signed } });
+    }
+
+    [TestMethod]
+    [DataRow(false, "0", false, false)]
+    [DataRow(true, "actual-folder", false, false)]
+    [DataRow(true, "actual-folder", true, false)]
+    [DataRow(true, "actual-folder", true, true)]
+    public async Task OwnedSaveUsesReturnedDestinationEvenWhenTaskOmitsIt(bool pending, string destination, bool destinationInTask, bool taskOnly)
+    {
+        var queried = false;
+        var queryCount = 0;
+        var listed = new List<string>();
+        using var handler = new Handler(async (request, ct) =>
+        {
+            if (request.RequestUri!.Host == "drive-pc.quark.cn")
+            {
+                if (request.RequestUri.AbsolutePath.EndsWith("/token", StringComparison.Ordinal))
+                    return Json(new { code = 0, data = new { stoken = Stoken } });
+                return Json(new { data = new { list = new[] { new { file_name = "pack.mrpack", fid = "share-fid", dir = false, size = 93_571_003, share_fid_token = "file-token" } } } });
+            }
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
+            switch (request.RequestUri.AbsolutePath)
+            {
+                case "/open/v1/dir":
+                    return Json(new { status = 0, data = new { fid = "folder-fid" } });
+                case "/open/v1/share/saveas":
+                    if (taskOnly) return Json(new { status = 0, data = new { task_id = "task-1", task_sync = false } });
+                    return Json(new { status = 0, data = new { status = pending ? 1 : 2, task_id = "task-1", save_as = new { to_pdir_fid = destinationInTask ? "folder-fid" : destination } } });
+                case "/open/v1/task/query":
+                    queried = true;
+                    queryCount++;
+                    if (taskOnly && queryCount == 1) return Json(new { status = 0, data = new { status = 1, task_id = "task-1" } });
+                    return destinationInTask
+                        ? Json(new { status = 0, data = new { status = 2, task_id = "task-1", save_as = new { to_pdir_fid = destination } } })
+                        : Json(new { status = 0, data = new { status = 2, task_id = "task-1" } });
+                case "/open/v1/file/list":
+                    using (var json = JsonDocument.Parse(body))
+                        listed.Add(json.RootElement.GetProperty("parent_fid").GetString()!);
+                    return Json(new { status = 0, data = new { last_page = true, file_list = listed.Last() == destination
+                        ? new[] { new { fid = "owned-fid", filename = "pack.mrpack", size = 93_571_003, parent_fid = destination, file_type = 1 } }
+                        : Array.Empty<object>() } });
+                case "/open/v1/file/get_download_url":
+                    return DownloadFor(body);
+                default:
+                    throw new AssertFailedException(request.RequestUri.AbsolutePath);
+            }
+        });
+        using var http = new HttpClient(handler);
+        var owned = await new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None);
+        Assert.AreEqual("pack.mrpack", owned.Download.FileName);
+        CollectionAssert.AreEqual(new[] { destination }, listed);
+        Assert.AreEqual(pending, queried);
+        Assert.AreEqual(pending ? taskOnly ? 2 : 1 : 0, queryCount);
+        Assert.AreEqual(1, handler.Paths.Count(path => path == "/open/v1/share/saveas"));
     }
 
     [TestMethod]

@@ -7,8 +7,8 @@ namespace PCL.Core.Test.UI;
 public sealed class LaunchProgressStateTest
 {
     private const string Token = "test-session";
-    private static string Packet(string status = "loading", int current = 3, int total = 10, string token = Token)
-        => $$"""{"protocol":1,"token":"{{token}}","status":"{{status}}","stage":"初始化模组","detail":"Example Mod","current":{{current}},"total":{{total}}} """;
+    private static string Packet(string status = "loading", int current = 3, int total = 10, string token = Token, string target = "StarRailExpress 开拓星穹谋杀案 1.21.1")
+        => $$"""{"protocol":1,"token":"{{token}}","status":"{{status}}","stage":"初始化模组","detail":"Example Mod","target":"{{target}}","current":{{current}},"total":{{total}}} """;
 
     [TestMethod]
     public void LauncherAndGameProgressAreSeparate()
@@ -21,8 +21,11 @@ public sealed class LaunchProgressStateTest
         Assert.AreEqual(LaunchProgressPhase.Game, state.Snapshot.Phase);
         Assert.IsTrue(state.AcceptTelemetry(Packet(), Token));
         Assert.AreEqual(.3, state.Snapshot.Progress);
+        Assert.AreEqual(3, state.Snapshot.Current);
+        Assert.AreEqual(10, state.Snapshot.Total);
         state.Launcher("late", 1, "late");
         Assert.AreEqual("初始化模组", state.Snapshot.Stage);
+        Assert.AreEqual("StarRailExpress 开拓星穹谋杀案 1.21.1", state.Snapshot.Target);
     }
 
     [TestMethod]

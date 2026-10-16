@@ -32,6 +32,27 @@ public static class InstanceActivity
 
     public static int DistinctCount() => LivePaths().Count;
 
+    /// <summary>Live instance paths, most recently started first. Launching paths that are not yet watched come first.</summary>
+    public static string[] PriorityPaths(IEnumerable<string>? launchingPaths = null)
+    {
+        var paths = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (launchingPaths is not null)
+        {
+            foreach (var path in launchingPaths)
+            {
+                if (string.IsNullOrEmpty(path) || !seen.Add(path)) continue;
+                paths.Add(path);
+            }
+        }
+        foreach (var watcher in Snapshot().Reverse())
+        {
+            if (!IsLive(watcher) || watcher.version?.PathInstance is not { } livePath || !seen.Add(livePath)) continue;
+            paths.Add(livePath);
+        }
+        return paths.ToArray();
+    }
+
     public static void Tick()
     {
         var live = LivePaths();

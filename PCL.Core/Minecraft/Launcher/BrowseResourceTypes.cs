@@ -23,14 +23,16 @@ public static class BrowseResourceTypes
     public static bool Supports(string source, string type)
     {
         Validate(type);
-        return source switch { "curseforge" => true, "modrinth" => type != "world", "mcmod" => type is "modpack" or "datapack", _ => false };
+        return source switch { "curseforge" => type != "plugin", "modrinth" => type != "world", "mcmod" => type is "modpack" or "datapack", _ => false };
     }
     public static void RequireSupported(string source, string type)
     {
         if (Supports(source, type)) return;
         throw new NotSupportedException(source == "modrinth"
             ? "Modrinth 当前未提供地图类型的目录接口，请切换到 CurseForge 浏览地图。"
-            : "MC百科当前仅提供可识别的整合包和数据包索引；此类型请切换到 CurseForge 或 Modrinth。");
+            : source == "curseforge"
+                ? "CurseForge 当前不作为服务器插件来源，请切换到 Modrinth。"
+                : "MC百科当前仅提供可识别的整合包和数据包索引；此类型请切换到 CurseForge 或 Modrinth。");
     }
     public static bool UsesModLoader(string type) => Validate(type) == "modpack";
 }

@@ -94,6 +94,24 @@ internal static class HybridMotion
         }, "Hybrid Swap " + element.GetHashCode());
     }
 
+    /// <summary>
+    /// Version change on the games page: text slides in without a hard cut to transparent,
+    /// and without EaseOutBack's opening reverse kick.
+    /// </summary>
+    public static void Crossfade(FrameworkElement element)
+    {
+        if (element is null || element.Visibility != Visibility.Visible) return;
+        var current = element.RenderTransform is TranslateTransform shift ? shift.X : 0;
+        if (current < 0 || current > 10) current = 0;
+        element.Opacity = Math.Max(element.Opacity, 0.42);
+        element.RenderTransform = new TranslateTransform(current, 0);
+        ModAnimation.AniStart(new[]
+        {
+            ModAnimation.AaOpacity(element, 1 - element.Opacity, 180),
+            ModAnimation.AaTranslateX(element, 8 - current, 220, 0, new ModAnimation.AniEaseOutFluent(ModAnimation.AniEasePower.Weak))
+        }, "Hybrid Crossfade " + element.GetHashCode());
+    }
+
     public static void Pop(FrameworkElement card, FrameworkElement backdrop)
     {
         card.RenderTransformOrigin = new Point(0.5, 0.5);
@@ -138,5 +156,24 @@ internal static class HybridMotion
             ModAnimation.AaScaleTransform(element, 0.045, 280, 70,
                 new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak))
         }, "Hybrid Press " + element.GetHashCode());
+    }
+
+    /// <summary>
+    /// PCL CE 列表项悬停：浮层从中心放大并淡入，离开时收回。底下的选中色不动。
+    /// </summary>
+    public static void Float(FrameworkElement surface, bool over, string name)
+    {
+        if (surface is null) return;
+        surface.RenderTransformOrigin = new Point(0.5, 0.5);
+        var current = surface.RenderTransform is ScaleTransform existing ? existing.ScaleX : over ? 0.8 : 1;
+        surface.RenderTransform = new ScaleTransform(current, current);
+        var targetScale = over ? 1d : 0.8d;
+        var time = over ? 120 : 180;
+        var ease = new ModAnimation.AniEaseOutFluent();
+        ModAnimation.AniStart(new[]
+        {
+            ModAnimation.AaScaleTransform(surface, targetScale - current, (int)Math.Round(time * (over ? 1.6d : 1d)), ease: ease),
+            ModAnimation.AaOpacity(surface, (over ? 1d : 0d) - surface.Opacity, time, ease: ease)
+        }, name);
     }
 }

@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Windows.Threading;
+using PCL.Core.Minecraft;
 using PCL.Core.Minecraft.Launcher;
 namespace PCL;
 
@@ -74,9 +74,45 @@ public partial class HybridSidebar : UserControl
         InitializeComponent();
         Loaded += (_, _) =>
         {
-            foreach (var button in Nav.Children.OfType<Button>().Append(AccountButton))
+            foreach (var button in Nav.Children.OfType<Button>().Append(AccountButton).Append(VersionList))
+            {
                 button.PreviewMouseLeftButtonDown += (_, _) => HybridMotion.Press(button);
+                button.MouseEnter += (_, _) => FloatNav(button, true);
+                button.MouseLeave += (_, _) => FloatNav(button, false);
+            }
         };
+    }
+
+
+    private ListBoxItem? _floatedVersion;
+
+    private static void FloatNav(Button button, bool over)
+    {
+        if (button.Template.FindName("Surface", button) is not Border surface) return;
+        HybridMotion.Float(surface, over, "Hybrid Nav " + button.GetHashCode());
+    }
+
+    private void Versions_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (Versions.InputHitTest(e.GetPosition(Versions)) is not DependencyObject hit) return;
+        var item = ItemsControl.ContainerFromElement(Versions, hit) as ListBoxItem;
+        if (ReferenceEquals(item, _floatedVersion)) return;
+        FloatVersion(_floatedVersion, false);
+        FloatVersion(item, true);
+        _floatedVersion = item;
+    }
+
+    private void Versions_MouseLeave(object sender, MouseEventArgs e)
+    {
+        FloatVersion(_floatedVersion, false);
+        _floatedVersion = null;
+    }
+
+    private static void FloatVersion(ListBoxItem? item, bool over)
+    {
+        if (item is null) return;
+        if (item.Template.FindName("Surface", item) is not Border surface) return;
+        HybridMotion.Float(surface, over, "Hybrid Version " + item.GetHashCode());
     }
 
     public void PlayEntrance() => HybridMotion.SlideIn(Nav.Children.OfType<FrameworkElement>().Append(AccountButton).ToArray());
@@ -91,6 +127,15 @@ public partial class HybridSidebar : UserControl
     {
         if (!_synchronising && Versions.SelectedItem is VersionEntry entry)
             NavigationRequested?.Invoke(this, new HybridNavigationEventArgs("instance", entry.Instance));
+    }
+
+    private void Version_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_synchronising || e.Handled) return;
+        if (Versions.InputHitTest(e.GetPosition(Versions)) is not DependencyObject hit) return;
+        if (ItemsControl.ContainerFromElement(Versions, hit) is not ListBoxItem { DataContext: VersionEntry entry }) return;
+        if (!ReferenceEquals(Versions.SelectedItem, entry)) return;
+        NavigationRequested?.Invoke(this, new HybridNavigationEventArgs("instance", entry.Instance));
     }
 
     private void VersionSettings_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -108,17 +153,11 @@ public partial class HybridSidebar : UserControl
 
     public void UpdateVersions(McInstance[] instances, McInstance? selected, string[]? launchingPaths = null, string? launchingPrefix = null)
     {
-        var launching = launchingPaths ?? [];
+        var priority = InstanceActivity.PriorityPaths(launchingPaths);
         var rank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < launching.Length; i++)
-            if (!string.IsNullOrEmpty(launching[i])) rank[launching[i]] = i;
+        for (var i = 0; i < priority.Length; i++) rank[priority[i]] = i;
         var prefix = string.IsNullOrWhiteSpace(launchingPrefix) ? "启动中" : launchingPrefix;
-        var ordered = instances
-            .Select((instance, index) => (instance, index))
-            .OrderBy(item => rank.ContainsKey(item.instance.PathInstance ?? "") ? 0 : 1)
-            .ThenBy(item => rank.TryGetValue(item.instance.PathInstance ?? "", out var place) ? place : item.index)
-            .Select(item => item.instance)
-            .ToArray();
+        var ordered = InstanceListPin.Pin(instances, instance => instance.PathInstance, priority).ToArray();
         var newlyLaunching = rank.Keys.Any(path => !_seenLaunching.Contains(path));
         _seenLaunching.Clear();
         foreach (var path in rank.Keys) _seenLaunching.Add(path);
@@ -215,10 +254,24 @@ public partial class HybridSidebar : UserControl
         if (string.IsNullOrEmpty(path)) return;
         Dispatcher.BeginInvoke(() =>
         {
-            if (Versions.ItemContainerGenerator.ContainerFromItem(Versions.SelectedItem) is not FrameworkElement item) return;
+            if (Versions.ItemContainerGenerator.ContainerFromItem(Versions.SelectedItem) is not ListBoxItem item) return;
             if (!string.Equals((item.DataContext as VersionEntry)?.Instance.PathInstance, path, StringComparison.OrdinalIgnoreCase)) return;
-            HybridMotion.Swap(item);
+            if (FindNamed(item, "VersionText") is FrameworkElement text)
+                HybridMotion.Crossfade(text);
         }, DispatcherPriority.Loaded);
+    }
+
+    private static FrameworkElement? FindNamed(DependencyObject root, string name)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is FrameworkElement element && element.Name == name) return element;
+            var nested = FindNamed(child, name);
+            if (nested is not null) return nested;
+        }
+        return null;
     }
 
     private static string VersionIconPath(McInstance instance)

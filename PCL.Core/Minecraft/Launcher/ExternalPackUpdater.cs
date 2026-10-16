@@ -25,6 +25,13 @@ public sealed class ExternalPackCheckOnce
     public static string Normalize(string root) =>
         Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+
+    /// <summary>Local copies the test pack must not scan, register, or update. Their version files stay untouched.</summary>
+    public static bool IsExcludedLocalVersion(string instanceName, string root)
+    {
+        var name = Path.GetFileName(Normalize(string.IsNullOrWhiteSpace(instanceName) ? root : instanceName));
+        return name.Equals("SRE4.3", StringComparison.OrdinalIgnoreCase) || name.Equals("se录制", StringComparison.OrdinalIgnoreCase);
+    }
     public bool IsDone(string root) => _done.Contains(Normalize(root));
 
     public void MarkDone(string root) => _done.Add(Normalize(root));

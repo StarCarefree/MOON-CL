@@ -8,6 +8,8 @@
 
 原生我的游戏只展示真实本地版本。SRE (`starrail-harpy-express` / StarRailHarpyExpress) 保留在浏览页作为标明的测试整合包，下载/更新/夸克/配置继续调用现有 LauncherLibrary 后端，界面不假下载。
 
+侧栏本地版本和旧版本列表都会把正在启动或已经启动的实例暂时排到各自列表前面，最近开始的在前。游戏结束后恢复原分类和排序，不改收藏、卡片或 PCL.ini。
+
 浏览目录现支持 MC 百科整合包、站点筛选与专属详情 UI，SRE 继续置顶。来源和下载衔接说明见 [mcmod-browse.md](mcmod-browse.md)。
 
 ## 精简发布包（用户最终确认）

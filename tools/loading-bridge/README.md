@@ -19,9 +19,9 @@ Unknown class variants fail open. Headless, Android or `mod-loading-screen.disab
 
 Java `DataOutputStream`: byte packet ID, byte argument count, then `writeUTF` strings (modified UTF-8). It is NOT normal UTF-8, a socket, or game log text.
 
-Handled: 0 entrypoint begin/count, 1 mod entrypoint invocation, 2 entrypoint end, 4 custom bar creation, 5 custom bar operations, 6 title, 7 updater activity, 255 final-entrypoint completion. Packet 3 memory and 8 source dates do not advance loading percentages. Unknown totals are indeterminate. Each entrypoint type/custom bar has its own percentage, not an invented whole-game estimate.
+Handled: 0 entrypoint begin/count, 1 mod entrypoint invocation, 2 entrypoint end, 4 custom bar creation, 5 custom bar operations, 6 target title, 7 updater activity, 255 final-entrypoint completion. Packet 6 is the MLS window title (`StarRailExpress` plus the first non-builtin mod name and version) and stays separate from the current bar. Packet 3 memory and 8 source dates do not advance loading percentages. Unknown totals are indeterminate. Each entrypoint type/custom bar has its own percentage, not an invented whole-game estimate.
 
-The relay atomically writes bounded JSON protocol 1 snapshots with `token`, `status` (`loading`, `ready`, `unavailable`), `stage`, `detail`, `current`, `total`. It publishes a 1 s heartbeat while the pipe is open. EOF is a disconnected feed, not successful completion. MLS's packet 255 means its final entrypoint completed; MOONCL also waits for its existing game-window readiness signal. This does not measure subsequent world loading or guarantee all resource reload work has completed.
+The relay atomically writes bounded JSON protocol 1 snapshots with `token`, `status` (`loading`, `ready`, `unavailable`), `stage`, `detail`, `target`, `current`, `total`. It publishes a 1 s heartbeat while the pipe is open. EOF is a disconnected feed, not successful completion. MLS's packet 255 means its final entrypoint completed; MOONCL also waits for its existing game-window readiness signal. This does not measure subsequent world loading or guarantee all resource reload work has completed.
 
 ## Build / verify
 

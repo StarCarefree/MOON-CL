@@ -25,12 +25,14 @@ try {
  assert.equal(await page.locator('#cards [data-pack-id]').nth(1).getAttribute('data-pack-id'),index.id);
  await page.locator('#source-modrinth').check(); let mrReq=await last('modrinth'); await reply(mrReq,[mr]);
  assert.equal(await page.locator('#source-curseforge').isChecked(),true); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),1);
- await page.locator('#platform-next-page').click(); cfReq=await last('curseforge'); assert.equal(cfReq.page,2);
- assert.equal(await page.locator('#modrinth-page-label').textContent(),'Modrinth · 第 1 页 / 3');
- await reply(cfReq,[cf]); await page.locator('#modrinth-next-page').click(); mrReq=await last('modrinth'); await reply(mrReq,[mr]);
- assert.match(await page.locator('#platform-page-label').textContent(),/第 2 页/); assert.match(await page.locator('#modrinth-page-label').textContent(),/第 2 页/);
+ await page.locator('#next-page').click(); cfReq=await last('curseforge'); assert.equal(cfReq.page,2);
+ assert.match(await page.locator('#page-label').textContent(), /Modrinth · 第 1 页/);
+ assert.doesNotMatch(await page.locator('#page-label').textContent(),/CurseForge · 第 2 页/);
+ await reply(cfReq,[cf]); await page.locator('#next-page').click(); mrReq=await last('modrinth'); await reply(mrReq,[mr]);
+ assert.match(await page.locator('#page-label').textContent(),/CurseForge · 第 2 页/); assert.match(await page.locator('#page-label').textContent(),/Modrinth · 第 2 页/);
+ assert.equal(await page.locator('.pagination').count(),1);
  await page.locator('#source-curseforge').uncheck(); assert.equal(await card(cf.id).count(),0); assert.equal(await card(mr.id).count(),1);
- await page.locator('#source-curseforge').check(); assert.equal(await card(cf.id).count(),1); assert.match(await page.locator('#modrinth-page-label').textContent(),/第 2 页/);
+ await page.locator('#source-curseforge').check(); assert.equal(await card(cf.id).count(),1); assert.match(await page.locator('#page-label').textContent(),/Modrinth · 第 2 页/);
  console.log('PASS default MCL-first selection, simultaneous CF/MR aggregation and independent pagination/cache');
 
  await page.locator('#include-mcmod').check(); let mcReq=await last(null,'list','mcmod');
@@ -86,7 +88,7 @@ try {
  await reply(cfReq,[{...cf,id:'curseforge-999',projectId:'999',resourceType:'world',name:'DEMO map'}]);
  assert.equal(await card(index.id).count(),0); assert.equal(await page.locator('.stage').isVisible(),true); assert.equal(await page.locator('#pack-name').textContent(),'DEMO map');
  await page.locator('#type-modpack').click(); assert.equal(await card(index.id).count(),1);
- assert.equal(await page.locator('#platform-next-page').isDisabled(),false);
+ assert.equal(await page.locator('#next-page').isDisabled(),false);
  console.log('PASS MCL stays modpack-only and cached resource/source page totals restore');
 
  await page.locator('#source-curseforge').uncheck();
@@ -99,7 +101,7 @@ try {
  assert.match(await card(index.id).textContent(),/DEMO actual refreshed index/); assert.match(await page.locator('#mcl-message').textContent(),/catalog\.example/);
  assert.equal(await page.locator('#cards >button').first().getAttribute('data-pack-id'),'starrail-harpy-express');
  await page.locator('#source-mcl').uncheck(); assert.equal(await card(index.id).count(),0); assert.equal(await page.locator('#cards >button').count(),0);
- assert.match(await page.locator('#catalog-caption-main').textContent(),/请选择/);
+ assert.equal(await page.locator('#cards >button').count(),0);
  await page.locator('#source-mcl').check(); assert.equal(await card(index.id).count(),1);
  console.log('PASS remote-index request once, authoritative snapshot refresh, MCL default priority and no-explorer empty state');
 

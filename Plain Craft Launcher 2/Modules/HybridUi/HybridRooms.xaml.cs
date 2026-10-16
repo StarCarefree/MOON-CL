@@ -28,6 +28,8 @@ public partial class HybridRooms : UserControl, IDisposable
     private CancellationTokenSource? _operation;
     private RoomSession? _session;
     private RoomPresence _presence = new();
+    private RoomPackShare? _sharedPack;
+    private bool _packManual;
     private ImageSource? _face, _hat;
     private DateTime _nextHeartbeat = DateTime.MinValue;
     private DateTime? _presenceDue;
@@ -72,7 +74,8 @@ public partial class HybridRooms : UserControl, IDisposable
         var avatar = _presence.Avatar;
         if (!ReferenceEquals(_face, face) || !ReferenceEquals(_hat, hat))
         { _face = face; _hat = hat; avatar = RoomPresentation.EncodeAvatar(face, hat); }
-        var next = new RoomPresence(avatar, RoomPresentation.LocalGame(selected));
+        var catalog = ModMain.frmMain?.WebUi.Library.CatalogPacks;
+        var next = new RoomPresence(avatar, RoomPresentation.LocalGame(selected, catalog, _sharedPack, _packManual));
         if (next == _presence) return;
         _presence = next;
         _presenceDue ??= DateTime.UtcNow.AddSeconds(3);
@@ -133,6 +136,7 @@ public partial class HybridRooms : UserControl, IDisposable
             view.Update(self ? member with { Avatar = _presence.Avatar, Game = _presence.Game } : member, self, _avatars);
         }
         if (_session.IsHost) HostGame.Text = CurrentHostGame.Text = "房主游戏：" + RoomPresentation.GameText(_presence.Game);
+        RenderPack(room);
         var published = room.EffectiveRoutes;
         foreach (var stale in _routes.Where(v => !published.Any(r => r.Id == v.Route.Id)).ToArray()) _routes.Remove(stale);
         foreach (var route in published)
@@ -562,5 +566,81 @@ public partial class HybridRooms : UserControl, IDisposable
         try { await session.LeaveAsync(timeout.Token); }
         catch (Exception) { /* Best effort; no room identifiers, addresses or credentials are logged. */ }
         finally { session.Dispose(); }
+    }
+    private void RenderPack(RoomSnapshot room)
+    {
+        var host = room.Members.FirstOrDefault(member => member.IsHost);
+        var pack = _session?.IsHost == true ? _presence.Game?.Pack : host?.Game?.Pack;
+        var text = pack is null ? "整合包：未分享" : "整合包：" + pack.Display;
+        PackShare.Text = text;
+        var mine = _session?.IsHost == true;
+        SharePackButton.Visibility = Show(mine);
+        SharePackButton.Content = pack is null ? "分享整合包" : "更换 / 停止";
+        DownloadPackButton.Visibility = Show(!mine && pack is not null);
+        DownloadPackButton.IsEnabled = !_busy && pack is not null;
+        JoinHostButton.Visibility = Show(!mine && !string.IsNullOrWhiteSpace(host?.Game?.Server) && !string.IsNullOrWhiteSpace(host?.Game?.Version));
+        JoinHostButton.IsEnabled = !_busy;
+    }
+    private void SharePack_Click(object sender, RoutedEventArgs e)
+    {
+        if (_session?.IsHost != true || _busy) return;
+        var catalog = (ModMain.frmMain?.WebUi.Library.CatalogPacks ?? []).Where(RoomPackShareResolver.Shareable).Take(100).ToArray();
+        if (catalog.Length == 0) { Status.Text = "整合包目录里没有可公开下载的条目。"; return; }
+        var dialog = new Window
+        {
+            Title = "分享整合包", Width = 420, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize, Background = new SolidColorBrush(Color.FromRgb(23, 25, 27))
+        };
+        var list = new ListBox { Margin = new Thickness(16, 44, 16, 56), Background = new SolidColorBrush(Color.FromRgb(32, 34, 36)), Foreground = Brushes.WhiteSmoke };
+        foreach (var pack in catalog) list.Items.Add(pack.Name + " · " + pack.Version);
+        list.Items.Add("停止分享");
+        var hint = new TextBlock { Text = "只会发送公开下载地址，不会上传游戏文件。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)) };
+        var confirm = new Button { Content = "确定", Width = 88, Height = 30, Margin = new Thickness(0, 0, 112, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
+        var cancel = new Button { Content = "取消", Width = 88, Height = 30, Margin = new Thickness(0, 0, 16, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsCancel = true };
+        confirm.Click += (_, _) => { if (list.SelectedIndex >= 0) dialog.DialogResult = true; };
+        dialog.Content = new Grid { Children = { hint, list, confirm, cancel } };
+        if (dialog.ShowDialog() != true || list.SelectedIndex < 0) return;
+        _packManual = true;
+        _sharedPack = list.SelectedIndex == catalog.Length ? null : RoomPackShareResolver.From(catalog[list.SelectedIndex]);
+        _presenceDue = DateTime.UtcNow;
+        UpdateLocalState(PlayerName.Text, _face, _hat, _selectedInstance);
+        Status.Text = _sharedPack is null ? "已停止分享整合包。" : "正在分享 " + _sharedPack.Display + "。";
+    }
+    private async void DownloadPack_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
+    {
+        var pack = _session?.Room?.Members.FirstOrDefault(member => member.IsHost)?.Game?.Pack
+            ?? throw new InvalidOperationException("房主还没有分享整合包。");
+        pack.Validate();
+        Status.Text = "正在下载房主分享的整合包……";
+        var library = ModMain.frmMain?.WebUi.Library ?? throw new InvalidOperationException("整合包安装服务尚未就绪。");
+        await library.InstallSharedAsync(RoomPackShareResolver.ToPack(pack));
+        Guard(ct);
+        Status.Text = "整合包已交给启动器安装。安装完成后可在我的游戏里启动。";
+    });
+    private void JoinHost_Click(object sender, RoutedEventArgs e)
+    {
+        var game = _session?.Room?.Members.FirstOrDefault(member => member.IsHost)?.Game;
+        if (_session?.IsHost == true || game is null || string.IsNullOrWhiteSpace(game.Server) || string.IsNullOrWhiteSpace(game.Version)) return;
+        game.Validate();
+        var choices = RoomPresentation.SameVersion(game.Version);
+        if (choices.Count == 0) { Status.Text = "本机没有 " + game.Version + " 的游戏版本。请先安装同版本的 Fabric、Forge 或其他客户端。"; return; }
+        var dialog = new Window
+        {
+            Title = "加入房主服务器", Width = 460, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize, Background = new SolidColorBrush(Color.FromRgb(23, 25, 27))
+        };
+        var list = new ListBox { Margin = new Thickness(16, 44, 16, 56), Background = new SolidColorBrush(Color.FromRgb(32, 34, 36)), Foreground = Brushes.WhiteSmoke };
+        foreach (var instance in choices) list.Items.Add(instance.Name + " · " + RoomPresentation.LoaderText(instance));
+        var hint = new TextBlock { Text = "房主正在 " + game.Server + "。选择你的 " + game.Version + " 客户端后启动并连接。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)), TextWrapping = TextWrapping.Wrap };
+        var confirm = new Button { Content = "启动并连接", Width = 110, Height = 30, Margin = new Thickness(0, 0, 112, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
+        var cancel = new Button { Content = "取消", Width = 88, Height = 30, Margin = new Thickness(0, 0, 16, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsCancel = true };
+        confirm.Click += (_, _) => { if (list.SelectedIndex >= 0) dialog.DialogResult = true; };
+        dialog.Content = new Grid { Children = { hint, list, confirm, cancel } };
+        if (dialog.ShowDialog() != true || list.SelectedIndex < 0) return;
+        var selected = choices[list.SelectedIndex];
+        ModInstanceList.McMcInstanceSelected = selected;
+        if (!ModLaunch.McLaunchStart(new ModLaunch.McLaunchOptions { instance = selected, ServerIp = game.Server }))
+            Status.Text = "启动器没有开始进入 " + game.Server + "。";
+        else Status.Text = "正在用 " + selected.Name + " 连接 " + game.Server + "。";
     }
 }

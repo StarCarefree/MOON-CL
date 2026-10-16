@@ -92,7 +92,13 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 
 实测（本机直接调用官方接口，未使用自建解析服务）：分享目录和目标 `.mrpack` 都存在，约 93,571,003 字节，匿名 `fr=win` 能解析出签名 URL，但 CDN GET 仍返回 **HTTP 412**。改用 `fr=pc` 时官方直接拒绝，业务码 `23018`，提示 `download file size limit`。已按官方协议唤起夸克网盘客户端 `qkclouddrive://openShareModal?pwdid=e3f623dd58d6&source=13&pwd_id=e3f623dd58d6&share_dn=e3f623dd58d6`（不带 user_token）。窗口标题为「分享链接」，监听的下载目录没有新的 `.mrpack`。浏览器本地接口 `127.0.0.1:9128` 只有通知路由，没有下载路由。因此未授权时，夸克客户端只能打开分享窗口。
 
-已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 整理的开放平台契约，网关 `https://open-api-drive.quark.cn`）：下载时如果还没有夸克授权，会先弹出窗口询问是否授权并下载。同意后才打开 `https://pan.quark.cn` 授权页；服务配置里的「授权夸克网盘」仍可单独授权。令牌用 DPAPI 存在 `PCL/quark-open-session.bin`，不进入 WebUI，也不从浏览器 Cookie 读取。授权后若匿名直链返回 412，只把路径指向的那一个 `.mrpack`/`.zip` 转存到用户网盘目录 `MOONCL`（不传 `save_all`，大于 512 MiB 直接拒绝），再调用 `get_download_url`，下载时只带该会话自己的 `x_pan_client_id` / `x_pan_access_token`。拒绝授权且没有普通下载地址时不会转存，也不会打开分享窗口。浏览页整合包的夸克来源同样使用这条路径：点击后可选跳转或直接下载，直接下载先进入版本页，玩家选定一个文件后才转存那一个文件。开放平台签名探测已返回 HTTP 200、`status=0`、授权页主机为 `pan.quark.cn`；本次没有完成用户授权，因此没有实测这个 `.mrpack` 的转存或下载。匿名 412 仍然成立，不能把已有同名文件当作成功。
+已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 整理的开放平台契约，网关 `https://open-api-drive.quark.cn`）：下载时如果还没有夸克授权，会先弹出窗口询问是否授权并下载。同意后才打开 `https://pan.quark.cn` 授权页；服务配置里的「授权夸克网盘」仍可单独授权。令牌用 DPAPI 存在 `%LOCALAPPDATA%/MOONCL/quark-open-session.bin`，首次读取会迁移旧 `PCL/quark-open-session.bin` 及单文件解包缓存中的有效授权；刷新令牌成功后立即落盘，不依赖下载成功，不进入 WebUI，也不从浏览器 Cookie 读取。授权后若匿名直链返回 412，只把路径指向的那一个 `.mrpack`/`.zip` 转存到用户网盘目录 `MOONCL`（不传 `save_all`，大于 512 MiB 直接拒绝），再调用 `get_download_url`，下载时只带该会话自己的 `x_pan_client_id` / `x_pan_access_token`。拒绝授权且没有普通下载地址时不会转存，也不会打开分享窗口。浏览页整合包的夸克来源同样使用这条路径：点击后可选跳转或直接下载，直接下载先进入版本页，玩家选定一个文件后才转存那一个文件。开放平台签名探测已返回 HTTP 200、`status=0`、授权页主机为 `pan.quark.cn`；本次没有完成用户授权，因此没有实测这个 `.mrpack` 的转存或下载。匿名 412 仍然成立，不能把已有同名文件当作成功。
+
+转存接口可能仅返回 `{task_id, task_sync}`，不能把缺少 `status` 当成完成；必须查询 `/open/v1/task/query` 到 `status=2` 后再取 `save_as_top_fids` 或回查目录。目录回查以 `save_as.to_pdir_fid` 为准（`"0"` 也是有效的根目录）；轮询响应省略目录时保留前一响应值，未返回目录才回退到请求目录。`file/list` 的 `parent_fid` 参数实测生效，`pdir_fid` 会被忽略。响应中的 `~…|…` 编码 FID 不可与原始 FID 或另一个编码 FID 直接比较；只能依赖已限定父目录的列表，并精确匹配文件名、大小，普通 FID 父目录不匹配和结果不唯一仍需拒绝。
+
+本次在线验证使用已有 DPAPI 授权，成功迁移到固定用户目录并从另一程序目录恢复。公开分享中的单个 `SDBF_b2_260804_hotfix2.zip`（51,517,289 字节）已完成转存任务轮询（`0 → 2`）、目标 FID 解析及下载直链验证；Range GET 返回 HTTP 206，仅读取 1 字节，没有安装或启动游戏。内置 SRE 分享在当前账号下为本人分享，服务端返回业务码 41017，不能用它作为跨账号转存成功的验证样本。早期匿名通道和未授权探测记录不代表本次结果。
+
+浏览下载任务使用 `task.scope=browseQuark`，错误只在对应夸克版本面板显示；`catalog` 任务错误才进入 MCL 来源统计，`library`/无 scope 的旧协议任务保留原任务提示区域。关闭夸克面板或切换资源类型不会把下载错误带进首页和目录统计。
 
 ## 验证命令
 

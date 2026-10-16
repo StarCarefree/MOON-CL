@@ -20,7 +20,7 @@ public sealed class LaunchProgressState
         {
             if (_gameStarted || _terminal) return;
             _snapshot = new(LaunchProgressPhase.Launcher, stage, detail,
-                double.IsFinite(progress) ? Math.Clamp(progress, 0, 1) : null);
+                double.IsFinite(progress) ? Math.Clamp(progress, 0, 1) : null, Target: _snapshot.Target);
         }
     }
 
@@ -30,7 +30,7 @@ public sealed class LaunchProgressState
         {
             if (_gameStarted || _terminal) return;
             _gameStarted = true;
-            _snapshot = new(LaunchProgressPhase.Game, "等待游戏加载信号", "Java 进程已启动，正在等待 mod-loading-screen", null, false, warning);
+            _snapshot = new(LaunchProgressPhase.Game, "等待游戏加载信号", "Java 进程已启动，正在等待 mod-loading-screen", null, false, warning, _snapshot.Target);
         }
     }
 
@@ -50,19 +50,29 @@ public sealed class LaunchProgressState
             if (status is not ("loading" or "ready" or "unavailable")) return false;
             var stage = Text(root, "stage", "游戏正在加载");
             var detail = Text(root, "detail", "mod-loading-screen 实时进度");
+            var incoming = Text(root, "target", "");
+            string? target = incoming.Length == 0 ? null : incoming;
+            long? currentCount = null, totalCount = null;
             double? progress = null;
-            if (root.TryGetProperty("current", out var current) && current.TryGetDouble(out var done) &&
-                root.TryGetProperty("total", out var total) && total.TryGetDouble(out var count) &&
-                double.IsFinite(done) && double.IsFinite(count) && count > 0 && done >= 0)
-                progress = Math.Clamp(done / count, 0, 1);
+            if (root.TryGetProperty("current", out var current) && current.TryGetInt64(out var done) &&
+                root.TryGetProperty("total", out var total) && total.TryGetInt64(out var count))
+            {
+                if (done >= 0 && count > 0)
+                {
+                    currentCount = done;
+                    totalCount = count;
+                    progress = Math.Clamp(done / (double)count, 0, 1);
+                }
+            }
             lock (_gate)
             {
                 if (_terminal) return false;
                 _gameStarted = true;
+                target ??= _snapshot.Target;
                 if (status == "unavailable")
                 {
                     if (_connected) SignalLost();
-                    else _snapshot = new(LaunchProgressPhase.Game, "等待游戏窗口", detail, null, false, stage);
+                    else _snapshot = new(LaunchProgressPhase.Game, "等待游戏窗口", detail, null, false, stage, target);
                     return true;
                 }
                 _connected = true;
@@ -72,10 +82,10 @@ public sealed class LaunchProgressState
                     _terminal = _windowAppeared;
                     _snapshot = _windowAppeared
                         ? Ready()
-                        : new(LaunchProgressPhase.Game, "模组初始化完成", "正在等待游戏窗口就绪", null, true);
+                        : new(LaunchProgressPhase.Game, "模组初始化完成", "正在等待游戏窗口就绪", null, true, null, target);
                 }
                 else if (!_modComplete)
-                    _snapshot = new(LaunchProgressPhase.Game, stage, detail, progress, true);
+                    _snapshot = new(LaunchProgressPhase.Game, stage, detail, progress, true, null, target, currentCount, totalCount);
                 return true;
             }
         }
@@ -91,7 +101,7 @@ public sealed class LaunchProgressState
             _terminal = true;
             _snapshot = _connected ? Ready()
                 : new(LaunchProgressPhase.Ready, "游戏窗口已打开", "未收到模组进度信号；已按游戏窗口状态完成交接", null, false,
-                    "此实例未提供游戏内部加载百分比");
+                    "此实例未提供游戏内部加载百分比", _snapshot.Target);
         }
     }
 
@@ -101,7 +111,7 @@ public sealed class LaunchProgressState
         {
             if (_terminal) return;
             _terminal = true;
-            _snapshot = new(LaunchProgressPhase.Failed, "游戏加载信号已中断", "游戏可以继续运行；请查看游戏窗口或启动日志", null, _connected);
+            _snapshot = new(LaunchProgressPhase.Failed, "游戏加载信号已中断", "游戏可以继续运行；请查看游戏窗口或启动日志", null, _connected, null, _snapshot.Target);
         }
     }
 
@@ -110,12 +120,12 @@ public sealed class LaunchProgressState
         lock (_gate)
         {
             _terminal = true;
-            _snapshot = new(LaunchProgressPhase.Failed, "启动未完成", detail, null, _connected);
+            _snapshot = new(LaunchProgressPhase.Failed, "启动未完成", detail, null, _connected, null, _snapshot.Target);
         }
     }
 
-    private static LaunchProgressSnapshot Ready()
-        => new(LaunchProgressPhase.Ready, "你的世界，准备就绪", "模组初始化完成，游戏窗口已就绪", 1, true);
+    private LaunchProgressSnapshot Ready()
+        => new(LaunchProgressPhase.Ready, "你的世界，准备就绪", "模组初始化完成，游戏窗口已就绪", 1, true, null, _snapshot.Target);
 
     private static string Text(JsonElement root, string name, string fallback)
     {

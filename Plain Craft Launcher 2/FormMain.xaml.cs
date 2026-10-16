@@ -55,6 +55,7 @@ public partial class FormMain
     private bool isWindowLoadFinished;
     private readonly DragHelper _helper = new();
     private readonly WebUiController _webUi = new();
+    internal WebUiController WebUi => _webUi;
 
 
     public FormMain()

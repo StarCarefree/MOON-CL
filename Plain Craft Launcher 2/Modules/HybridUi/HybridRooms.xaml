@@ -195,18 +195,24 @@
       <Button x:Name="MemberNext" Content="›" Style="{StaticResource Action}" Margin="0" Click="MemberNext_Click" AutomationProperties.AutomationId="Rooms.MemberNext" AutomationProperties.Name="下一页玩家"/>
      </StackPanel>
      <Grid Grid.Column="2" Margin="10,0" VerticalAlignment="Center">
-      <Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="16"/></Grid.RowDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="22"/></Grid.RowDefinitions>
       <Grid>
-       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
        <TextBlock Text="游戏线路" Foreground="#D9BC75" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
-       <Border x:Name="EditorCard" Grid.Column="1">
+       <TextBlock Grid.Column="1" x:Name="HostGame" Margin="8,0,8,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="10"
+                  Foreground="#ADA99F" VerticalAlignment="Center" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.AutomationId="Rooms.HostGame"/>
+       <Border x:Name="EditorCard" Grid.Column="2">
         <Button Content="＋ 发布" Style="{StaticResource Action}" Height="26" Padding="6,2" Click="OpenRouteEditor_Click" AutomationProperties.AutomationId="Rooms.OpenRouteEditor"/>
        </Border>
-       <Button x:Name="RemoveRouteButton" Grid.Column="2" Content="移除" Style="{StaticResource Action}" Height="26" Padding="6,2" Margin="0"
+       <Button x:Name="RemoveRouteButton" Grid.Column="3" Content="移除" Style="{StaticResource Action}" Height="26" Padding="6,2" Margin="0"
                Click="RemoveRoute_Click" AutomationProperties.AutomationId="Rooms.RemoveRoute"/>
       </Grid>
-      <TextBlock Grid.Row="1" x:Name="HostGame" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="10"
-                 Foreground="#ADA99F" VerticalAlignment="Center" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.AutomationId="Rooms.HostGame"/>
+      <DockPanel Grid.Row="1" LastChildFill="True">
+       <Button x:Name="DownloadPackButton" DockPanel.Dock="Right" Content="下载" Style="{StaticResource Gold}" Height="20" Padding="6,0" Margin="4,0,0,0" Click="DownloadPack_Click" AutomationProperties.AutomationId="Rooms.DownloadPack"/>
+       <Button x:Name="SharePackButton" DockPanel.Dock="Right" Content="分享" Style="{StaticResource Action}" Height="20" Padding="6,0" Margin="4,0,0,0" Click="SharePack_Click" AutomationProperties.AutomationId="Rooms.SharePack"/>
+       <TextBlock x:Name="PackShare" Text="整合包：未分享" FontSize="10" Foreground="#ADA99F" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.AutomationId="Rooms.PackShare"/>
+       <Button x:Name="JoinHostButton" DockPanel.Dock="Right" Content="加入" Style="{StaticResource Gold}" Height="20" Padding="6,0" Margin="4,0,0,0" Click="JoinHost_Click" Visibility="Collapsed" AutomationProperties.AutomationId="Rooms.JoinHost"/>
+      </DockPanel>
      </Grid>
      <Grid Grid.Column="2" Grid.Row="1" Margin="8,3">
       <ListBox x:Name="RouteList" Background="#202224" Foreground="#EEECE5" BorderThickness="0" SelectionChanged="Route_Changed"

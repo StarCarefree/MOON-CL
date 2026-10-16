@@ -37,7 +37,7 @@ try {
     $observed | Set-Content (Join-Path $work 'observed.jsonl') -Encoding utf8
     $packets = @($observed | ForEach-Object { $_ | ConvertFrom-Json })
     if (!($packets | Where-Object { $_.current -eq 1 -and $_.total -eq 4 -and $_.detail.Contains('测试模组') -and $_.detail.Contains([char]0) })) { throw 'Entrypoint count / modified UTF round-trip failed' }
-    if (!($packets | Where-Object { $_.current -eq 42 -and $_.total -eq 100 })) { throw 'Custom progress did not arrive' }
+    if (!($packets | Where-Object { $_.current -eq 42 -and $_.total -eq 100 -and $_.stage -eq '游戏资源' -and $_.target -eq 'StarRailExpress 开拓星穹谋杀案 1.21.1' })) { throw 'Custom progress or MLS target title did not arrive' }
     if (!($packets | Where-Object status -eq 'ready')) { throw 'Completion packet 255 did not arrive' }
     if ($packets | Where-Object token -ne 'harness-token') { throw 'Wrong session token' }
     "PASS: real MLS JAR binary IPC -> native bridge; entrypoint 1/4, custom 42/100, Unicode/NUL, ready event"

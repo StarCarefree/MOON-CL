@@ -50,12 +50,12 @@ public static class PackCatalogSources
     public static string[] Effective(string[]? configured) => configured is { Length: > 0 } ? configured : DefaultUrls;
 }
 
-public sealed record PackCatalogResult(string SourceUrl, IReadOnlyList<PackDefinition> Packs, bool NotModified);
+public sealed record PackCatalogResult(string SourceUrl, IReadOnlyList<PackDefinition> Packs, IReadOnlyList<ServerDefinition> Servers, bool NotModified);
 
 /// <summary>Single-operation owner. Bounded metadata and cancellation; caches only validated snapshots.</summary>
 public sealed class PackCatalogClient
 {
-    private sealed record Cached(string? ETag, IReadOnlyList<PackDefinition> Packs);
+    private sealed record Cached(string? ETag, IReadOnlyList<PackDefinition> Packs, IReadOnlyList<ServerDefinition> Servers);
     private const int MaxBytes = 4 * 1024 * 1024;
     private readonly HttpClient _http;
     private readonly TimeSpan _sourceTimeout;
@@ -93,7 +93,7 @@ public sealed class PackCatalogClient
                 if (response.StatusCode == HttpStatusCode.NotModified)
                 {
                     if (cached is null) throw new InvalidDataException("服务返回 304，但本机没有可复用目录。");
-                    return new PackCatalogResult(url, cached.Packs, true);
+                    return new PackCatalogResult(url, cached.Packs, cached.Servers, true);
                 }
                 response.EnsureSuccessStatusCode();
                 if (response.Content.Headers.ContentLength > MaxBytes) throw new InvalidDataException("目录元数据超过 4 MiB。");
@@ -109,9 +109,11 @@ public sealed class PackCatalogClient
                 timeout.Token.ThrowIfCancellationRequested();
                 // Redirected directory URLs are the base for relative pack/image links.
                 var source = response.RequestMessage?.RequestUri ?? new Uri(url);
-                var packs = PackCatalog.Parse(Encoding.UTF8.GetString(output.ToArray()), source).ToArray();
-                _cache[url] = new Cached(response.Headers.ETag?.ToString(), Array.AsReadOnly(packs));
-                return new PackCatalogResult(url, _cache[url].Packs, false);
+                var document = PackCatalog.ParseDocument(Encoding.UTF8.GetString(output.ToArray()), source);
+                var packs = document.Packs.ToArray();
+                var servers = document.Servers.ToArray();
+                _cache[url] = new Cached(response.Headers.ETag?.ToString(), Array.AsReadOnly(packs), Array.AsReadOnly(servers));
+                return new PackCatalogResult(url, _cache[url].Packs, _cache[url].Servers, false);
             }
             catch (OperationCanceledException) when (!token.IsCancellationRequested)
             {

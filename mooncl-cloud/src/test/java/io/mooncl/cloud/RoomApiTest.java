@@ -189,6 +189,25 @@ class RoomApiTest {
         clock.advance(1);
         call(get(room(host)).header("Authorization", auth(host))).andExpect(status().isNotFound());
     }
+    @Test void gamePackIsSharedToMembersAndInvalidPackDoesNotReplacePresence() throws Exception {
+        String pack = "\"pack\":{\"id\":\"starrail-harpy-express\",\"name\":\"SRE\",\"version\":\"4.4.0\",\"minecraft\":\"1.21.1\",\"fileName\":\"pack.mrpack\",\"downloadUrl\":\"https://example.com/pack.mrpack\",\"sha256\":\"" + "a".repeat(64) + "\",\"sharePath\":\"folder/pack.mrpack\"}";
+        JsonNode host = json(call(post(ROOT).contentType("application/json").content(
+                "{\"name\":\"Room\",\"playerName\":\"Host\",\"connection\":null,\"game\":{\"state\":\"running\"," + pack + "}}"))
+                .andExpect(status().isOk()));
+        assertThat(host.at("/room/members/0/game/pack/downloadUrl").asText()).isEqualTo("https://example.com/pack.mrpack");
+        JsonNode guest = json(call(post(room(host) + "/join").contentType("application/json").content("{\"playerName\":\"Guest\"}"))
+                .andExpect(status().isOk()));
+        call(get(room(host)).header("Authorization", auth(guest))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[0].game.pack.fileName").value("pack.mrpack"));
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json")
+                .content("{\"game\":{\"state\":\"running\",\"pack\":{\"id\":\"bad\",\"name\":\"x\",\"version\":\"1\",\"fileName\":\"pack.exe\",\"downloadUrl\":\"file:///C:/secret.zip\"}}}"))
+                .andExpect(status().isBadRequest());
+        call(get(room(host)).header("Authorization", auth(host))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[0].game.pack.id").value("starrail-harpy-express"));
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json")
+                .content("{\"game\":{\"state\":\"stopped\"}}")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[0].game.pack").doesNotExist());
+    }
 
     @Test void overlayDescriptorsWorkThroughRoutesAndRejectIrrelevantFields() throws Exception {
         JsonNode host = create();
