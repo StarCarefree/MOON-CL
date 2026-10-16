@@ -127,10 +127,11 @@
             <option value="updated">最近更新</option>
             <option value="newest">最新发布</option>
           </select></label>
-          <label for="filter-category">分类<select id="filter-category"><option value="">全部分类</option></select></label>
+          <label for="filter-category">分类<select id="filter-category"><option value="">全部分类</option></select><small id="category-help" role="status"></small><button id="category-retry" type="button" hidden>重试分类</button></label>
           <button id="reset-filters" type="button" class="ghost">重置筛选</button>
         </form>
         <div class="catalog-caption"><p id="catalog-caption-main">CurseForge 搜索、版本、加载器与排序由平台处理 · 每页 24 个</p><p id="catalog-caption-note">本地预设按搜索框即时筛选 · 未连接时不请求网络 · 分类仅用于 MC百科</p></div>
+        <div id="sources-summary" class="source-status" role="status" aria-live="polite"><p id="sources-summary-message"></p><div id="sources-summary-actions"></div></div>
         <div id="mcl-status" class="source-status" role="status"><p id="mcl-message">MCL 远端整合包目录</p><button id="mcl-refresh" type="button" disabled>刷新 MCL 目录</button><button id="mcl-config" type="button">目录配置</button></div>
         <div id="platform-status" class="source-status" role="status" aria-live="polite">
           <p id="platform-message">连接启动器后加载 CurseForge。</p>
@@ -200,6 +201,40 @@
       <summary>整合包介绍</summary>
       <p id="detail-description" class="detail-description"></p>
     </details>
+  </dialog>
+
+  <dialog id="quark-choice" aria-labelledby="quark-choice-title">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">夸克网盘</p>
+        <h2 id="quark-choice-title">下载来源</h2>
+      </div>
+      <button id="close-quark-choice" type="button" aria-label="关闭夸克选项">×</button>
+    </div>
+    <p id="quark-choice-text" class="panel-description"></p>
+    <div class="panel-actions">
+      <button id="quark-choice-cancel" type="button">取消</button>
+      <button id="quark-jump" type="button">跳转</button>
+      <button id="quark-direct" type="button" class="primary">直接下载</button>
+    </div>
+  </dialog>
+  <dialog id="quark-download" class="pack-detail" aria-labelledby="quark-download-title">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">下载</p>
+        <h2 id="quark-download-title">选择版本</h2>
+      </div>
+      <button id="close-quark-download" type="button" aria-label="关闭下载页">×</button>
+    </div>
+    <p class="panel-description">在这个下载页选择要安装的版本。只会转存你点中的一个整合包，不会转存整个分享。</p>
+    <p id="quark-download-path" class="panel-description"></p>
+    <div id="quark-download-status" class="source-status" role="status"><p id="quark-download-message"></p></div>
+    <div id="quark-versions" class="quark-versions" aria-label="夸克分享中的版本"></div>
+    <div class="panel-actions">
+      <button id="quark-up" type="button" hidden>返回上级</button>
+      <button id="quark-download-retry" type="button" hidden>重试</button>
+      <button id="quark-download-jump" type="button">改为跳转</button>
+    </div>
   </dialog>
 
   <dialog id="services" aria-labelledby="services-title">

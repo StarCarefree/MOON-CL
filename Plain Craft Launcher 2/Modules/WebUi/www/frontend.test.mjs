@@ -306,16 +306,17 @@ try {
   await filtered.locator('#include-mcmod').uncheck();
   const hiddenCount = (await messages(filtered)).length;
   assert.equal(await filtered.locator('#filter-category').isDisabled(), true);
-  await filtered.locator('#filter-category').evaluate(node => { node.value = '15'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await send(filtered, snapshot());
   assert.equal((await messages(filtered)).length, hiddenCount);
   await filtered.locator('#include-mcmod').check();
+  await filtered.locator('#filter-category').selectOption('15');
   assert.deepEqual(listPayload((await messages(filtered)).at(-1)), { type: 'mcmod', operation: 'list', page: 1, loader: 'Fabric', minecraft: '1.12.2', category: 15 });
   await send(filtered, { type: 'mcmodList', page: 1, totalPages: 2, items: [unknown] });
   assert.equal(await card(filtered, unknown.id).count(), 1);
   const beforeCachedToggle = (await messages(filtered)).length;
   await filtered.locator('#include-mcmod').uncheck();
   await filtered.locator('#include-mcmod').check();
+  await filtered.locator('#filter-category').selectOption('15');
   assert.equal((await messages(filtered)).length, beforeCachedToggle);
   assert.equal(await card(filtered, unknown.id).count(), 1);
   const beforeText = (await messages(filtered)).length;

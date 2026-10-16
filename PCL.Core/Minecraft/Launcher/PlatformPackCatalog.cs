@@ -52,7 +52,7 @@ public static class PlatformPackCatalog
         if (source == "curseforge" ? !int.TryParse(id, out var number) || number <= 0 : !Regex.IsMatch(id, "^[a-zA-Z0-9]{8}$"))
             throw new ArgumentException("无效的整合包项目 ID。");
     }
-    public static Uri SearchAddress(string source, int page, string query = "", string minecraft = "", string loader = "", string sort = "relevance", string resourceType = "modpack")
+    public static Uri SearchAddress(string source, int page, string query = "", string minecraft = "", string loader = "", string sort = "relevance", string resourceType = "modpack", string category = "")
     {
         ValidateSource(source);
         BrowseResourceTypes.RequireSupported(source, resourceType);
@@ -63,6 +63,7 @@ public static class PlatformPackCatalog
         if (loader.Length > 0 && !Loaders.ContainsKey(loader)) throw new ArgumentException("此平台不支持该加载器筛选。");
         if (!BrowseResourceTypes.UsesModLoader(resourceType) && loader.Length > 0) throw new ArgumentException("当前资源类型不使用模组加载器筛选。");
         if (sort is not ("relevance" or "downloads" or "updated" or "newest")) throw new ArgumentException("未知的排序方式。");
+        BrowseCategories.ValidateSelection(source, category);
         var offset = (page - 1) * PageSize;
         if (source == "curseforge")
         {
@@ -70,11 +71,13 @@ public static class PlatformPackCatalog
             return new Uri($"https://api.curseforge.com/v1/mods/search?gameId=432&classId={BrowseResourceTypes.CurseForgeClass(resourceType)}&pageSize={PageSize}&index={offset}&sortField={sortId}&sortOrder=desc" +
                 (query.Length > 0 ? "&searchFilter=" + Uri.EscapeDataString(query) : "") +
                 (minecraft.Length > 0 ? "&gameVersion=" + Uri.EscapeDataString(minecraft) : "") +
-                (loader.Length > 0 ? "&modLoaderType=" + Loaders[loader].Cf : ""));
+                (loader.Length > 0 ? "&modLoaderType=" + Loaders[loader].Cf : "") +
+                (category.Length > 0 ? "&categoryId=" + category : ""));
         }
         var facets = new List<string[]> { new[] { "project_type:" + resourceType } };
         if (minecraft.Length > 0) facets.Add(["versions:" + minecraft]);
         if (loader.Length > 0) facets.Add(["categories:" + loader.ToLowerInvariant()]);
+        if (category.Length > 0) facets.Add(["categories:" + category]);
         return new Uri($"https://api.modrinth.com/v2/search?limit={PageSize}&offset={offset}&index={sort}&query={Uri.EscapeDataString(query)}&facets={Uri.EscapeDataString(JsonSerializer.Serialize(facets))}");
     }
     public static Uri DetailAddress(string source, string id)
@@ -164,9 +167,14 @@ public sealed class PlatformPackClient(Func<Uri, CancellationToken, Task<string>
     private readonly Dictionary<string, string[]> _authors = new();
     private readonly Dictionary<string, string> _latestVersions = new();
 
-    public async Task<PlatformPackPage> GetPageAsync(string source, int page, string query = "", string minecraft = "", string loader = "", string sort = "relevance", CancellationToken token = default, string resourceType = "modpack")
+    public async Task<PlatformPackPage> GetPageAsync(string source, int page, string query = "", string minecraft = "", string loader = "", string sort = "relevance", CancellationToken token = default, string resourceType = "modpack", string category = "")
     {
-        var address = PlatformPackCatalog.SearchAddress(source, page, query, minecraft, loader, sort, resourceType);
+        var address = PlatformPackCatalog.SearchAddress(source, page, query, minecraft, loader, sort, resourceType, category);
+        if (category.Length > 0)
+        {
+            var known = await GetCategoriesAsync(source, resourceType, token).ConfigureAwait(false);
+            if (!known.Any(item => item.Id == category)) throw new ArgumentException("所选分类不属于当前资源类型。");
+        }
         return (PlatformPackPage)await CachedAsync(address, async ct =>
         {
             var json = await fetch(address, ct).ConfigureAwait(false);
@@ -230,6 +238,15 @@ public sealed class PlatformPackClient(Func<Uri, CancellationToken, Task<string>
                 }
             }
             return pack;
+        }, token, resourceType).ConfigureAwait(false);
+    }
+    public async Task<IReadOnlyList<BrowseCategory>> GetCategoriesAsync(string source, string resourceType, CancellationToken token = default)
+    {
+        var address = BrowseCategories.Address(source, resourceType);
+        return (IReadOnlyList<BrowseCategory>)await CachedAsync(address, async ct =>
+        {
+            var json = await fetch(address, ct).ConfigureAwait(false);
+            return BrowseCategories.Parse(source, resourceType, json);
         }, token, resourceType).ConfigureAwait(false);
     }
     private async Task<object> CachedAsync(Uri address, Func<CancellationToken, Task<object>> build, CancellationToken token, string resourceType)

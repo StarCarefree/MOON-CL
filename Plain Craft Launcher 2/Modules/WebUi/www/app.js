@@ -197,6 +197,7 @@ Object.defineProperties(platform, {
   page: { get: () => platformPosition().page, set: value => { platformPosition().page = value; } },
   totalPages: { get: () => platformPosition().totalPages, set: value => { platformPosition().totalPages = value; } }
 });
+const categoryState = { items: new Map(), pending: new Map(), errors: new Map(), requests: new Map(), sequence: 0 };
 const RESOURCE_TYPES = { datapack: "数据包", world: "地图", modpack: "整合包", shader: "光影包", resourcepack: "材质包" };
 function resourceTypeOf(item) { return item?.resourceType || (/^mcmod-datapack-/.test(item?.id || "") ? "datapack" : "modpack"); }
 function resourcePayload(type = browse.resourceType) { return type === "modpack" ? {} : { resourceType: type }; }
@@ -218,7 +219,7 @@ function renderResourceTypes() {
   for (const type of Object.keys(RESOURCE_TYPES)) ui[`type-${type}`].setAttribute("aria-selected", String(type === browse.resourceType));
   document.querySelector(".stage").hidden = browse.resourceType !== "modpack" || !sourceEnabled("mcl");
   ui["filter-loader"].disabled = browse.resourceType !== "modpack";
-  ui["filter-category"].disabled = browse.resourceType !== "modpack" || !catalog.include;
+  ui["filter-category"].disabled = categoryOptions().length === 0;
   setText("catalog-title", resourceLabel() + "列表");
   if (browse.resourceType !== "modpack") setText("catalog-caption-main", `${resourceLabel()} · 搜索、游戏版本与排序按当前来源处理`);
   if (catalog.include && !supportsResource("mcmod")) {
@@ -700,6 +701,7 @@ function receive(data) {
     else if (data.type === "browse" || data.type === "page") applySnapshot(data);
     else if (data.type === "error") showHostError(data.message);
     else if (data.type === "presentation") applyPresentation(data.visible);
+    else if (data.type === "platformCategories" || data.type === "mcmodCategories" || data.operation === "categories" && ["platformError", "mcmodError"].includes(data.type)) receiveCategories(data);
     else if (["mcmodList", "mcmodDetail", "mcmodLinks", "mcmodError"].includes(data.type)) receiveMcmod(data);
     else if (["platformList", "platformDetail", "platformError"].includes(data.type)) receivePlatform(data);
   } catch { showHostError(text().badSnapshot); }
@@ -735,7 +737,7 @@ function normalizeMcmod(item) {
 function siteFilters() {
   const minecraft = ui["filter-mc"].value;
   const loader = browse.resourceType === "modpack" ? ui["filter-loader"].value : "";
-  const category = browse.resourceType === "modpack" ? Number(ui["filter-category"].value) : 0;
+  const category = Number(categoryFor("mcmod")) || 0;
   return { ...resourcePayload(), ...(minecraft ? { minecraft } : {}), ...(loader ? { loader } : {}), ...(category ? { category } : {}) };
 }
 function filterKey() { return JSON.stringify(siteFilters()); }
@@ -758,7 +760,7 @@ function syncFilterOptions(items) {
   for (const [id, options, label] of [
     ["filter-mc", versions.map(value => [value, value]), "全部版本"],
     ["filter-loader", activeLoaders().map(value => [value, value]), "全部加载器"],
-    ["filter-category", SITE_CATEGORIES.map((value, index) => [String(index + 1), value]), "全部分类"]
+    ["filter-category", categoryOptions(), "全部分类"]
   ]) {
     const node = ui[id];
     const selected = node.value;
@@ -772,15 +774,16 @@ function syncFilterOptions(items) {
       return option;
     }));
     node.value = options.some(([value]) => value === selected) ? selected : "";
+    if (id === "filter-category" && selected && node.value !== selected) {
+      catalog.page = 1; resetPlatformPages();
+      queueMicrotask(() => { render(); ensureBrowse(); });
+    }
   }
 }
 function changeSiteFilters(event) {
-  const categoryOnly = event?.target?.id === "filter-category";
   catalog.page = 1;
   catalog.totalPages = catalog.pages.get(pageKey())?.totalPages || catalog.retained.get(filterKey())?.totalPages || 0;
-  if (isRemoteBrowse() && !categoryOnly) {
-    resetPlatformPages();
-  }
+  if (isRemoteBrowse()) resetPlatformPages();
   // Never present a different filter's results while this request is pending.
   render();
   ensureBrowse();
@@ -846,6 +849,7 @@ function receiveMcmod(data) {
     const request = catalog.requests.get(data.requestId);
     if (!request || catalog.latest.get(request.key) !== data.requestId || Number(data.page) !== request.page || (data.resourceType || "modpack") !== request.resourceType) return;
     const { key, filters, page } = request;
+    if (Array.isArray(data.categories) && data.categories.length) storeCategories("mcmod", request.resourceType, data.categories);
     if (!Array.isArray(data.items)) {
       receiveMcmod({ type: "mcmodError", operation: "list", page, requestId: data.requestId, message: "目录数据格式不正确，请重试。" });
       return;
@@ -898,7 +902,7 @@ function renderCatalogStatus() {
   const remote = isRemoteBrowse();
   for (const source of ["mcl", "curseforge", "modrinth"]) ui[`source-${source}`].checked = sourceEnabled(source);
   ui["include-mcmod"].checked = catalog.include;
-  ui["filter-category"].disabled = !catalog.include;
+  ui["filter-category"].disabled = categoryOptions().length === 0;
   ui["filter-sort-label"].hidden = !remote;
   const names = [...browse.sources].map(sourceName).join(" + ");
   setText("catalog-caption-main", names ? `${names} · 可多选探索器，各来源独立分页` : "请选择一个或多个探索器");
@@ -921,7 +925,7 @@ function renderCatalogStatus() {
   ui["next-page"].disabled = !live || !catalog.totalPages || catalog.page >= catalog.totalPages || catalog.page >= 500;
   renderPlatformStatus();
   renderResourceTypes();
-  renderMclExplorer(); renderAssociationStatus(); queueAssociationLookup();
+  renderMclExplorer(); renderAssociationStatus(); queueAssociationLookup(); renderSourceSummary(); renderCategoryHelp();
 }
 function isRemoteBrowse() { return selectedPlatforms().length > 0; }
 function sourceName(source = primaryPlatformSource()) {
@@ -968,7 +972,8 @@ function platformFilters(source = primaryPlatformSource()) {
   const minecraft = ui["filter-mc"].value || "";
   const loader = browse.resourceType === "modpack" && PLATFORM_LOADERS.includes(ui["filter-loader"].value) ? ui["filter-loader"].value : "";
   const sort = PLATFORM_SORTS.includes(ui["filter-sort"]?.value) ? ui["filter-sort"].value : "relevance";
-  return { source, ...resourcePayload(), query: platform.query, minecraft, loader, sort };
+  const category = categoryFor(source);
+  return { source, ...resourcePayload(), query: platform.query, minecraft, loader, sort, ...(category ? { category } : {}) };
 }
 function platformFilterKey(source = primaryPlatformSource()) { return JSON.stringify(platformFilters(source)); }
 function platformPageKey(page = platform.page, source = primaryPlatformSource()) { return JSON.stringify([platformFilterKey(source), page]); }
@@ -988,6 +993,7 @@ function selectBrowseSource(source, enabled) {
 }
 function ensureBrowse() {
   if (state.link !== "live") return;
+  ensureCategories();
   for (const source of selectedPlatforms()) ensurePlatform(source);
   if (catalog.include) ensureMcmod();
   ensureMcl();
@@ -1541,7 +1547,7 @@ function queueAssociationLookup() {
     association.active = active;
     active.timeout = setTimeout(() => finishAssociation(null, "请求超时，请稍后重试"), REQUEST_TIMEOUT);
     if (!post({ type: "mcmod", operation: "links", id: wikiId(item), ...resourcePayload(active.resourceType), requestId })) finishAssociation(null, "连接已断开");
-    else renderAssociationStatus();
+    else { renderAssociationStatus(); renderSourceSummary(); }
   }, 500);
 }
 function finishAssociation(data, error = "") {
@@ -1573,3 +1579,113 @@ function modrinthProjectUrl(item) {
   }
   return "";
 }
+
+function categoryFor(source) {
+  const value = ui["filter-category"].value;
+  if (/^\d+$/.test(value)) return source === "mcmod" && browse.resourceType === "modpack" ? value : "";
+  const split = value.indexOf(":");
+  return split > 0 && value.slice(0, split) === source ? value.slice(split + 1) : "";
+}
+function categoryOptions() {
+  const options = [];
+  for (const source of ["curseforge", "modrinth", "mcmod"]) {
+    if (!sourceEnabled(source) || !supportsResource(source)) continue;
+    if (source === "mcmod" && browse.resourceType === "modpack") {
+      options.push(...SITE_CATEGORIES.map((name, i) => [String(i + 1), name])); continue;
+    }
+    const items = categoryState.items.get(`${source}:${browse.resourceType}`) || [];
+    options.push(...items.map(item => [`${source}:${item.id}`, `${sourceName(source)} · ${item.name}`]));
+  }
+  return options;
+}
+function ensureCategories(force = false) {
+  if (state.link !== "live" || !state.presented) return;
+  for (const source of ["curseforge", "modrinth", "mcmod"]) {
+    if (!sourceEnabled(source) || !supportsResource(source) || source === "mcmod" && browse.resourceType === "modpack") continue;
+    const key = `${source}:${browse.resourceType}`;
+    if (categoryState.pending.has(key) || !force && (categoryState.items.has(key) || categoryState.errors.has(key))) continue;
+    const requestId = `categories-${++categoryState.sequence}`;
+    categoryState.requests.set(requestId, { source, resourceType: browse.resourceType, key });
+    categoryState.errors.delete(key);
+    categoryState.pending.set(key, setTimeout(() => {
+      categoryState.pending.delete(key); categoryState.errors.set(key, "分类请求超时");
+      categoryState.requests.delete(requestId); render();
+    }, PLATFORM_TIMEOUT));
+    if (!post({ type: source === "mcmod" ? "mcmod" : "platform", operation: "categories", source, ...resourcePayload(), requestId })) {
+      clearRequest(categoryState.pending, key); categoryState.requests.delete(requestId);
+      categoryState.errors.set(key, "分类请求未发送");
+    }
+  }
+}
+function storeCategories(source, resourceType, items) {
+  const unique = new Map();
+  for (const item of items) {
+    const id = String(item?.id ?? ""), name = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!name || name.length > 200 || !/^[A-Za-z0-9_+.\-]{1,64}$/.test(id)) continue;
+    unique.set(id, { id, name });
+    if (unique.size >= 512) break;
+  }
+  categoryState.items.set(`${source}:${resourceType}`, [...unique.values()]);
+}
+function receiveCategories(data) {
+  const request = categoryState.requests.get(data.requestId);
+  if (!request || (data.resourceType || "modpack") !== request.resourceType || (data.source || "mcmod") !== request.source) return;
+  clearRequest(categoryState.pending, request.key); categoryState.requests.delete(data.requestId);
+  if (data.type.endsWith("Error") || !Array.isArray(data.items)) categoryState.errors.set(request.key, String(data.message || "分类数据格式不正确"));
+  else { storeCategories(request.source, request.resourceType, data.items); categoryState.errors.delete(request.key); }
+  render();
+}
+function renderCategoryHelp() {
+  const sources = ["curseforge", "modrinth", "mcmod"].filter(s => sourceEnabled(s) && supportsResource(s));
+  const loading = sources.filter(s => categoryState.pending.has(`${s}:${browse.resourceType}`));
+  const errors = sources.filter(s => categoryState.errors.has(`${s}:${browse.resourceType}`));
+  const selected = ui["filter-category"].selectedOptions[0];
+  setText("category-help", errors.length ? `分类暂不可用：${errors.map(sourceName).join("、")}` : loading.length ? `正在加载 ${loading.map(sourceName).join("、")} 分类…` : ui["filter-category"].value ? `${selected?.textContent || "分类"}；仅筛选对应来源` : categoryOptions().length ? "分类标签按所选来源生成" : "当前来源暂无可用分类");
+  ui["category-retry"].hidden = errors.length === 0;
+  ui["category-retry"].disabled = state.link !== "live";
+}
+function renderSourceSummary() {
+  const segments = [], loading = [], errors = [];
+  for (const source of ["mcl", "curseforge", "modrinth", "mcmod"]) {
+    if (!sourceEnabled(source) || source === "mcl" && browse.resourceType !== "modpack") continue;
+    const name = sourceName(source);
+    if (!supportsResource(source) && source !== "mcl") { segments.push(`${name}：此类型不可用`); continue; }
+    if (state.link !== "live") { segments.push(`${name}：未连接`); continue; }
+    if (source === "mcl") {
+      segments.push(`MCL ${packs().length}`);
+      if (!catalogUrls().length) segments.push("MCL 目录未配置");
+      if (sourceEnabled("mcl") && taskOf().busy) loading.push("MCL");
+      if (taskOf().error) errors.push(`MCL：${taskOf().error}`);
+      continue;
+    }
+    const key = source === "mcmod" ? pageKey() : platformPageKey(platformPosition(source).page, source);
+    const pending = source === "mcmod" ? catalog.listPending.has(key) : platform.listPending.has(key);
+    const error = source === "mcmod" ? catalog.listErrors.get(key) : platform.listErrors.get(key);
+    const page = source === "mcmod" ? catalog.pages.get(key) : platform.pages.get(key);
+    if (pending) loading.push(name);
+    if (error) errors.push(`${name}：${error}`);
+    if (page) segments.push(`${name} ${page.items.length}`);
+    else if (!pending && !error) segments.push(`${name}：等待加载`);
+  }
+  const count = catalogItems().filter(item => isSre(item) || matchesFilters(item)).length;
+  let message = `当前页 ${count} 个${resourceLabel()}（合并去重后）`;
+  if (segments.length) message += ` · ${segments.join(" / ")}`;
+  if (loading.length) message += ` · 加载中：${loading.join("、")}`;
+  if (errors.length) message += ` · ${errors.join("；")}`;
+  if (catalog.include && isRemoteBrowse() && supportsResource("mcmod")) message += ` · ${ui["association-message"].textContent}`;
+  setText("sources-summary-message", message);
+  ui["sources-summary"].hidden = browse.sources.size === 0;
+  ui["sources-summary"].dataset.state = errors.length ? "error" : loading.length ? "loading" : "ready";
+  ui["sources-summary"].setAttribute("aria-busy", String(loading.length > 0));
+  const actions = ui["sources-summary-actions"];
+  for (const id of ["mcl-refresh", "mcl-config", "platform-retry", "modrinth-retry", "mcmod-retry", "association-retry"]) {
+    const node = ui[id];
+    if (id.startsWith("mcl-")) node.hidden = !sourceEnabled("mcl") || browse.resourceType !== "modpack";
+    const owner = { "platform-retry": "curseforge", "modrinth-retry": "modrinth", "mcmod-retry": "mcmod" }[id];
+    if (owner && (!sourceEnabled(owner) || !supportsResource(owner))) node.hidden = true;
+    if (id === "association-retry" && (!catalog.include || !isRemoteBrowse() || !supportsResource("mcmod"))) node.hidden = true;
+    if (node.parentElement !== actions) actions.append(node);
+  }
+  for (const id of ["mcl-status", "platform-status", "modrinth-status", "mcmod-status", "association-status"]) ui[id].hidden = true;
+}
+ui["category-retry"].addEventListener("click", () => { ensureCategories(true); render(); });

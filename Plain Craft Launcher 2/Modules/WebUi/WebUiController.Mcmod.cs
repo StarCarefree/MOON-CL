@@ -17,13 +17,14 @@ internal sealed partial class WebUiController
         AllowAutoRedirect = false
     }) { Timeout = TimeSpan.FromSeconds(30) };
     private McmodCatalog? _mcmodCatalog;
+    private readonly HttpClient _quarkListHttp = new(new HttpClientHandler { UseCookies = false }) { Timeout = TimeSpan.FromSeconds(30) };
     private bool _openingMcmodDownload;
     private static readonly JsonSerializerOptions McmodJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private async Task HandleMcmodAsync(CoreWebView2 core, JsonObject message, FormMain form)
     {
         var operation = ReadString(message, "operation") ?? "";
-        if (operation is not ("list" or "detail" or "download" or "links")) return;
+        if (operation is not ("list" or "detail" or "download" or "links" or "categories" or "quarkList" or "quarkDownload")) return;
         var page = message["page"] is JsonValue p && p.TryGetValue<int>(out var pageValue) ? pageValue : 1;
         var id = message["id"] is JsonValue i && i.TryGetValue<int>(out var idValue) ? idValue : 0;
         var minecraft = ReadString(message, "minecraft") ?? "";
@@ -43,17 +44,28 @@ internal sealed partial class WebUiController
         {
             BrowseResourceTypes.RequireSupported("mcmod", resourceType);
             _mcmodCatalog ??= new McmodCatalog(_mcmodHttp);
+            if (operation == "categories")
+            {
+                var items = await _mcmodCatalog.GetCategoriesAsync(resourceType, _mcmodLifetime.Token);
+                Send(new JsonObject { ["type"] = "mcmodCategories", ["items"] = JsonSerializer.SerializeToNode(items, McmodJson) });
+                return;
+            }
             if (operation == "list")
             {
                 var result = await _mcmodCatalog.GetPageAsync(page, _mcmodLifetime.Token, minecraft, loader, category, resourceType);
                 Send(new JsonObject { ["type"] = "mcmodList", ["page"] = result.Page, ["totalPages"] = result.TotalPages,
-                    ["requestId"] = requestId, ["items"] = JsonSerializer.SerializeToNode(result.Items, McmodJson) });
+                    ["requestId"] = requestId, ["categories"] = JsonSerializer.SerializeToNode(result.Categories, McmodJson), ["items"] = JsonSerializer.SerializeToNode(result.Items, McmodJson) });
                 return;
             }
             var detail = await _mcmodCatalog.GetDetailAsync(id, _mcmodLifetime.Token, resourceType);
             if (operation is "detail" or "links")
             {
                 Send(new JsonObject { ["type"] = operation == "links" ? "mcmodLinks" : "mcmodDetail", ["id"] = id, ["item"] = JsonSerializer.SerializeToNode(detail, McmodJson) });
+                return;
+            }
+            if (operation is "quarkList" or "quarkDownload")
+            {
+                await HandleQuarkShareAsync(message, operation, id, resourceType, detail, Current, Send);
                 return;
             }
             if (_openingMcmodDownload) throw new InvalidOperationException("正在获取关联项目的下载信息，请稍候。");
@@ -89,5 +101,31 @@ internal sealed partial class WebUiController
                 ["requestId"] = requestId,
                 ["message"] = ex is OperationCanceledException ? "百科请求超时，请重试或打开百科页面。" : ex.Message });
         }
+    }
+
+    private async Task HandleQuarkShareAsync(JsonObject message, string operation, int id, string resourceType, McmodPack detail, Func<bool> current, Action<JsonObject> send)
+    {
+        if (resourceType != "modpack") throw new InvalidDataException("只有整合包可以在启动器里选择夸克版本。没有转存。");
+        var shareId = ReadString(message, "shareId") ?? "";
+        var shareUrl = QuarkClientLaunch.MatchShare(detail.Links.Select(link => link.Url), shareId);
+        if (shareUrl is null) throw new InvalidDataException("这个整合包没有对应的夸克分享，没有读取网盘。");
+        var path = ReadString(message, "path") ?? "";
+        if (path.Length > 4096) throw new InvalidDataException("夸克目录无效，没有读取网盘。");
+        if (operation == "quarkList")
+        {
+            var listing = await new QuarkPackClient(_quarkListHttp).ListAsync(shareUrl, path, _mcmodLifetime.Token);
+            if (!current()) return;
+            send(new JsonObject
+            {
+                ["type"] = "quarkVersions", ["id"] = id, ["shareId"] = shareId, ["path"] = listing.Path,
+                ["truncated"] = listing.Truncated, ["entries"] = JsonSerializer.SerializeToNode(listing.Entries, McmodJson)
+            });
+            return;
+        }
+        if (_library is null) throw new InvalidOperationException("启动器尚未就绪，没有转存。");
+        var started = await _library.InstallBrowseQuarkAsync(id, detail.Name, shareUrl, path);
+        if (!current()) return;
+        send(new JsonObject { ["type"] = "quarkDownload", ["id"] = id, ["shareId"] = shareId, ["accepted"] = started });
+        Refresh(force: true);
     }
 }

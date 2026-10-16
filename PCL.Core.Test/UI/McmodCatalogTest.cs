@@ -190,4 +190,24 @@ public sealed class McmodCatalogTest
         Assert.IsFalse(McmodCatalog.IsModrinthResource("https://user:pass@modrinth.com/modpack/example"));
         Assert.IsTrue(McmodCatalog.IsCurseForgeResource("https://www.curseforge.com/minecraft/modpacks/example/files/123"));
     }
+
+    [TestMethod]
+    public void DatapackCategoriesComeFromItsOwnFilterBlock()
+    {
+        var html = """<div class="modlist-filter-block category"><a onclick="window.location='/modlist.html?api=5&amp;category=35'">结构</a><a href="/modlist.html?api=5&amp;category=9">世界</a><a href="/modlist.html?api=5&amp;category=35">重复</a><a href="/modpack.html?category=1">错误命名空间</a></div><div class="modlist-list-frame"></div>""";
+        var page = McmodCatalog.ParsePage(html, resourceType: "datapack");
+        CollectionAssert.AreEqual(new[] { "35", "9" }, page.Categories.Select(c => c.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { "结构", "世界" }, page.Categories.Select(c => c.Name).ToArray());
+        Assert.AreEqual("modlist.html?api=5&page=1&category=35", McmodCatalog.ListPath(1, category: 35, resourceType: "datapack"));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => McmodCatalog.ListPath(1, category: 1001, resourceType: "datapack"));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => McmodCatalog.ListPath(1, category: 35));
+    }
+
+    [TestMethod]
+    public void IconOnlyCategoriesKeepTheProviderTooltipLabel()
+    {
+        var html = """<div class="modlist-filter-block category"><li title="农业与饮食"><a href="/modlist.html?api=5&amp;category=4"><svg></svg></a></li></div><div class="modlist-list-frame"></div>""";
+        var item = McmodCatalog.ParsePage(html, resourceType: "datapack").Categories.Single();
+        Assert.AreEqual("4", item.Id); Assert.AreEqual("农业与饮食", item.Name);
+    }
 }

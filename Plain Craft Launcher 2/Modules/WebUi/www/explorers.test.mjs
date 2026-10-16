@@ -37,6 +37,7 @@ try {
  const mc={id:'mcmod-1426',wikiId:1426,source:'mcmod',resourceType:'modpack',name:'DEMO wiki authoritative',links:[{url:cf.website+'/files/1?from=wiki'},{url:mr.website+'#download'}]};
  await send({type:'mcmodList',page:mcReq.page,totalPages:2,requestId:mcReq.requestId,items:[mc]});
  assert.equal(await card(mc.id).count(),1); assert.equal(await card(cf.id).count(),0); assert.equal(await card(mr.id).count(),0); assert.equal(await card(index.id).count(),1);
+ assert.match(await page.locator('#sources-summary-message').textContent(), /当前页 3 个整合包/);
  await page.locator('#include-mcmod').uncheck(); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),1);
  await page.locator('#include-mcmod').check(); assert.equal(await card(cf.id).count(),0);
  console.log('PASS actual project links prefer MC百科 over both providers; MCL survives and deselecting wiki restores provider rows');
@@ -50,6 +51,8 @@ try {
  await send({type:'presentation',visible:true});
  assert.equal(await card(cf.id).count(),1); await page.clock.fastForward(500);
  let links=await last(null,'links','mcmod'); assert.equal(links.id,777);
+ assert.equal(await page.locator('#association-status').isVisible(), false);
+ assert.equal(await page.locator('#sources-summary').isVisible(), true);
  const beforePause=links.requestId;
  await send({type:'presentation',visible:false}); await page.clock.fastForward(50000);
  await send({type:'mcmodLinks',id:777,requestId:beforePause,item:{...unknown,links:[{url:cf.website}]}});

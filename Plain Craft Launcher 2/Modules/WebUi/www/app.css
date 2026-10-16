@@ -551,6 +551,11 @@ select:focus-visible { outline: 2px solid #f3d7a2; outline-offset: 2px; }
 .detail-downloads h3 { margin: 0; font-size: 15px; }
 .detail-links, .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .detail-links button { text-align: left; max-width: 100%; overflow-wrap: anywhere; }
+#quark-download { width: min(760px, calc(100vw - 32px)); }
+.quark-versions { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.quark-versions button { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; }
+.quark-versions small { color: var(--muted); white-space: nowrap; }
+#quark-download-status[data-state="error"] { color: var(--danger); border-left: 3px solid var(--danger-line); }
 .detail-actions .primary { font-size: 14px; min-height: 40px; min-width: 0; }
 #download-status:empty { display: none; }
 @media (max-width: 840px) {
@@ -578,3 +583,9 @@ select:focus-visible { outline: 2px solid #f3d7a2; outline-offset: 2px; }
 #mcl-status, #association-status { flex-wrap: wrap; }
 #mcl-status p, #association-status p { flex: 1 1 260px; }
 @media (max-width: 560px) { .explorer-option { flex: 1 1 135px; } }
+
+#sources-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+#sources-summary-message { flex: 1 1 420px; line-height: 1.7; }
+#sources-summary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#category-help { color: var(--muted); font-size: 11px; line-height: 1.5; max-width: 260px; overflow-wrap: anywhere; }
+#sources-summary[data-state="error"] { border-left: 3px solid var(--danger-line); }

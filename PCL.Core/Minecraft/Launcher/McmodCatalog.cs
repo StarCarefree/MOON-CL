@@ -34,7 +34,11 @@ public sealed record McmodPack
     public string ModrinthUrl { get; init; } = "";
     public McmodLink[] Links { get; init; } = [];
 }
-public sealed record McmodPage(int Page, int TotalPages, IReadOnlyList<McmodPack> Items);
+public sealed record McmodCategory(string Id, string Name);
+public sealed record McmodPage(int Page, int TotalPages, IReadOnlyList<McmodPack> Items)
+{
+    public IReadOnlyList<McmodCategory> Categories { get; init; } = [];
+}
 
 /// <summary>Read-only adapter. Fetches only the public list/detail, never scripts or remote download redirects.</summary>
 public sealed class McmodCatalog(HttpClient http)
@@ -56,20 +60,23 @@ public sealed class McmodCatalog(HttpClient http)
 
     public static string ListPath(int page, string minecraft = "", string loader = "", int category = 0, string resourceType = "modpack")
     {
-        if (page is < 1 or > 500 || category is < 0 or > 15) throw new ArgumentOutOfRangeException(nameof(page));
+        if (page is < 1 or > 500 || category < 0 || category > (resourceType == "datapack" ? 1000 : 15)) throw new ArgumentOutOfRangeException(nameof(page));
         BrowseResourceTypes.RequireSupported("mcmod", resourceType);
         if (minecraft.Length > 0 && !Regex.IsMatch(minecraft, @"^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$"))
             throw new ArgumentException("无效的 Minecraft 版本筛选。");
         if (resourceType == "datapack")
         {
-            if (category != 0 || loader.Length > 0 && loader != "数据包") throw new ArgumentException("数据包不使用整合包的加载器或分类筛选。");
-            return $"modlist.html?api=5&page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "");
+            if (loader.Length > 0 && loader != "数据包") throw new ArgumentException("数据包不使用模组加载器筛选。");
+            return $"modlist.html?api=5&page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "") + (category > 0 ? "&category=" + category : "");
         }
         var api = loader.ToLowerInvariant() switch { "" => 0, "forge" => 1, "fabric" => 2, "quilt" => 3, "neoforge" => 7, "liteloader" => 5, "rift" => 6, "数据包" => 4, "行为包" => 8, _ => -1 };
         if (api < 0) throw new ArgumentException("无效的加载器筛选。");
         return $"modpack.html?page={page}" + (minecraft.Length > 0 ? "&mcver=" + Uri.EscapeDataString(minecraft) : "") +
             (api > 0 ? "&api=" + api : "") + (category > 0 ? "&category=" + category : "");
     }
+
+    public async Task<IReadOnlyList<McmodCategory>> GetCategoriesAsync(string resourceType = "modpack", CancellationToken token = default)
+        => (await GetPageAsync(1, token, resourceType: resourceType).ConfigureAwait(false)).Categories;
 
     public async Task<McmodPack> GetDetailAsync(int id, CancellationToken token = default, string resourceType = "modpack")
     {
@@ -145,7 +152,24 @@ public sealed class McmodCatalog(HttpClient http)
         if (packs.Count == 0 && !ByClass(root, "modlist-list-frame").Any()) throw new InvalidDataException("未识别到百科整合包列表，页面可能暂不可用或结构已变化。请在浏览器中查看百科。");
         var pages = ByClass(root, "common-pages").SelectMany(n => n.Descendants("a"))
             .Select(n => int.TryParse(n.GetAttributeValue("data-page", ""), out var p) ? p : 1).DefaultIfEmpty(1).Max();
-        return new McmodPage(page, Math.Clamp(pages, page, 500), packs);
+        return new McmodPage(page, Math.Clamp(pages, page, 500), packs) { Categories = ParseCategories(root, resourceType) };
+    }
+
+    private static IReadOnlyList<McmodCategory> ParseCategories(HtmlNode root, string resourceType)
+    {
+        var path = resourceType == "datapack" ? "modlist" : "modpack";
+        return ByClass(root, "modlist-filter-block").Where(n => HasClass(n, "category")).SelectMany(n => n.Descendants("a"))
+            .Select(a => new { Node = a, Match = Regex.Match(WebUtility.HtmlDecode(a.GetAttributeValue("onclick", "") + " " + a.GetAttributeValue("href", "")), @"/" + path + @"\.html\?[^'\""\s]*\bcategory=(\d+)(?:[&'\""\s]|$)") })
+            .Where(x => x.Match.Success && CategoryName(x.Node).Length > 0)
+            .Select(x => new McmodCategory(x.Match.Groups[1].Value, CategoryName(x.Node)))
+            .GroupBy(x => x.Id).Select(g => g.First()).Take(512).ToArray();
+    }
+
+    private static string CategoryName(HtmlNode node)
+    {
+        var name = Text(node);
+        if (name.Length == 0) name = WebUtility.HtmlDecode(node.GetAttributeValue("title", node.ParentNode?.GetAttributeValue("title", "") ?? "")).Trim();
+        return name.Length > 120 ? name[..120] : name;
     }
 
     public static McmodPack ParseDetail(string html, int id, string resourceType = "modpack")

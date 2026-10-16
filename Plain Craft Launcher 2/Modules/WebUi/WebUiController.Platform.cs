@@ -23,19 +23,20 @@ internal sealed partial class WebUiController
     private async Task HandlePlatformAsync(CoreWebView2 core, JsonObject message, FormMain form)
     {
         var operation = ReadString(message, "operation") ?? "";
-        if (operation is not ("list" or "detail" or "download")) return;
+        if (operation is not ("list" or "detail" or "download" or "categories")) return;
         var source = ReadString(message, "source") ?? "";
         var requestId = ReadString(message, "requestId") ?? "";
         var id = ReadString(message, "id") ?? "";
         var page = message["page"] is JsonValue pageNode && pageNode.TryGetValue<int>(out var number) ? number : 1;
         var resourceType = ReadString(message, "resourceType") ?? "modpack";
+        var category = ReadString(message, "category") ?? "";
         var generation = _generation;
         bool Current() => !_disposed && generation == _generation && _view?.CoreWebView2 == core;
         void Send(JsonObject reply)
         {
             if (!Current()) return;
             reply["source"] = source; reply["requestId"] = requestId; reply["id"] = id; reply["page"] = page;
-            reply["resourceType"] = resourceType;
+            reply["resourceType"] = resourceType; reply["category"] = category;
             core.PostWebMessageAsJson(reply.ToJsonString());
         }
         try
@@ -48,11 +49,17 @@ internal sealed partial class WebUiController
             var token = deadline.Token;
             _platformCatalog ??= new PlatformPackClient((uri, ct) =>
                 Task.Run(() => ModDownload.DlModRequest(uri.AbsoluteUri), ct).WaitAsync(ct));
+            if (operation == "categories")
+            {
+                var items = await _platformCatalog.GetCategoriesAsync(source, resourceType, token).ConfigureAwait(false);
+                Send(new JsonObject { ["type"] = "platformCategories", ["items"] = JsonSerializer.SerializeToNode(items, McmodJson) });
+                return;
+            }
             if (operation == "list")
             {
                 var result = await _platformCatalog.GetPageAsync(source, page,
                     ReadString(message, "query") ?? "", ReadString(message, "minecraft") ?? "",
-                    ReadString(message, "loader") ?? "", ReadString(message, "sort") ?? "relevance", token, resourceType);
+                    ReadString(message, "loader") ?? "", ReadString(message, "sort") ?? "relevance", token, resourceType, category);
                 Send(new JsonObject { ["type"] = "platformList", ["totalPages"] = result.TotalPages,
                     ["items"] = JsonSerializer.SerializeToNode(result.Items, McmodJson) });
                 return;

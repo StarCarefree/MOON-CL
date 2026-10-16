@@ -2,6 +2,8 @@
 
 浏览页先选择“数据包 / 地图 / 整合包 / 光影包 / 材质包”，再多选 MCL、CurseForge、Modrinth、MC百科探索器。默认 MCL 与 CurseForge，MCL 目录优先；SRE 只在整合包列表出现，不额外显示置顶说明。聚合、独立分页和百科优先去重规则见 [explorers.md](explorers.md)。非整合包页面隐藏 SRE 推荐区与“导入整合包”按钮。
 
+来源状态现合并为一条汇总提示，分类标签按所选探索器和资源类型生成；详见 [browse-categories.md](browse-categories.md)。
+
 ## 实际数据来源
 
 | 类型 | CurseForge classId | Modrinth 查询类型 | MC百科索引 |
