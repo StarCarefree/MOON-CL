@@ -7,7 +7,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-
+using System.Windows.Threading;
+using PCL.Core.Minecraft.Launcher;
 namespace PCL;
 
 public sealed class HybridNavigationEventArgs(string route, McInstance? instance = null) : EventArgs
@@ -122,7 +123,7 @@ public partial class HybridSidebar : UserControl
         _seenLaunching.Clear();
         foreach (var path in rank.Keys) _seenLaunching.Add(path);
         var signature = string.Join("\n", ordered.Select(instance =>
-            instance.PathInstance + "|" + instance.Name + "|" + instance.Desc + "|" + VersionIconPath(instance) + "|" + rank.ContainsKey(instance.PathInstance ?? "")));
+             instance.PathInstance + "|" + instance.Name + "|" + instance.Desc + "|" + VersionIconPath(instance) + "|" + PackIdentityStore.TryRead(instance.PathInstance)?.SidebarLine + "|" + PackReleaseWatcher.NoticeText(instance.PathInstance) + "|" + rank.ContainsKey(instance.PathInstance ?? "")));
         _synchronising = true;
         try
         {
@@ -179,6 +180,10 @@ public partial class HybridSidebar : UserControl
     }
     private static string VersionLine(McInstance instance)
     {
+         var release = PackReleaseWatcher.NoticeText(instance.PathInstance);
+         var intro = PackIdentityStore.TryRead(instance.PathInstance)?.SidebarLine;
+         if (!string.IsNullOrEmpty(release)) return release;
+         if (!string.IsNullOrWhiteSpace(intro)) return intro;
         var desc = instance.Desc?.Trim() ?? "";
         var missing = PCL.Core.App.Localization.Lang.Text("Select.Instance.Description.NotLoaded");
         if (desc.Length > 0 && desc != missing) return desc;

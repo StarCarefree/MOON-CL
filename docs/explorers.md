@@ -2,7 +2,7 @@
 
 ## 使用
 
-五类资源仍分别浏览。来源改为可多选探索器：MCL 整合包、CurseForge、Modrinth、MC百科。默认启用 MCL 和 CurseForge，MCL 选择项及目录条目都在最前；百科和 Modrinth 默认未勾选。MCL 仅提供整合包，其他资源类型沿用各平台的支持范围。
+各类资源分别浏览。来源可多选：MCL 整合包、CurseForge、Modrinth、MC百科。默认启用 MCL、CurseForge 和 MC百科，Modrinth 默认未勾选；MCL 选择项及目录条目仍在列表最前。搜索、类型、来源和筛选集中在同一面板，上方发现区跟随当前来源及结果生成，不再固定本地预设。MCL 仅提供整合包，其他资源类型沿用各平台的支持范围。
 
 CurseForge 和 Modrinth 各自加载、重试、分页，切换一个探索器不会清掉其他探索器的页码。搜索/游戏版本/适用的加载器/排序会发给已启用的平台；百科的专属分类值独立保留，不影响 MCL 条目或平台 API。取消某来源后隐藏其条目并停止新的浏览请求，已有请求可完成并缓存；不会取消启动器正在执行的安装或游戏更新。
 
@@ -37,6 +37,7 @@ node '.\Plain Craft Launcher 2\Modules\WebUi\www\explorers.test.mjs'
 node '.\Plain Craft Launcher 2\Modules\WebUi\www\frontend.test.mjs'
 node '.\Plain Craft Launcher 2\Modules\WebUi\www\platform.test.mjs'
 node '.\Plain Craft Launcher 2\Modules\WebUi\www\resource.test.mjs'
+node '.\Plain Craft Launcher 2\Modules\WebUi\www\discovery.test.mjs'
 dotnet test .\PCL.Core.Test\PCL.Core.Test.csproj -c Debug -p:Platform=x64 --filter 'FullyQualifiedName~PCL.Core.Test.UI'
 ```
 

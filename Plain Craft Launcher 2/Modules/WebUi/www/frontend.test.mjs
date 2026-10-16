@@ -192,6 +192,7 @@ try {
   console.log('PASS page races/cache, retained error data, retry/empty, source hide, hard page bounds');
 
   // Existing launcher operations and services keep their original messages.
+  await onlyExplorer(page, 'mcl'); // Native mutation checks must exercise the native hero, not a platform detail button.
   await send(page, snapshot());
   await page.locator('#primary').click();
   assert.deepEqual((await messages(page)).at(-1), { type: 'launcher', operation: 'primary' });
@@ -240,6 +241,7 @@ try {
   await send(page, snapshot({ task: { gameRunning: true } }));
   assert.equal(await page.locator('#primary').isDisabled(), true);
   await send(page, snapshot());
+  await page.locator('#include-mcmod').check(); // Restore the encyclopedia for the refresh/retained-page regression.
   await page.locator('#refresh').click();
   const refreshMessages = (await messages(page)).slice(-2);
   assert.deepEqual(refreshMessages[0], { type: 'launcher', operation: 'refresh' });
@@ -410,6 +412,59 @@ try {
   if (process.env.UI_SCREENSHOT_DIR) {
     await page.setViewportSize({ width: 1280, height: 960 });
     await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'mooncl-catalog.png'), fullPage: true });
+  }
+  {
+    const quarkPage = await setup();
+    await send(quarkPage, snapshot());
+    const share = 'https://pan.quark.cn/s/ff96d10800cd?pwd=ab12';
+    await send(quarkPage, { type: 'mcmodList', page: 1, totalPages: 1, items: [remote(1500)] });
+    await card(quarkPage, 'mcmod-1500').click();
+    await send(quarkPage, { type: 'mcmodDetail', item: remote(1500, { links: [{ name: '夸克网盘', url: share }, { name: 'DEMO manual download', url: 'https://example.org/demo.zip' }, { name: 'DEMO evil quark', url: 'https://pan.quark.cn.evil/s/ff96d10800cd' }] }) });
+    const buttons = quarkPage.locator('#detail-links button');
+    assert.equal(await buttons.count(), 3);
+    await buttons.nth(1).click();
+    assert.deepEqual((await messages(quarkPage)).at(-1), { type: 'openExternal', url: 'https://example.org/demo.zip' });
+    await buttons.nth(2).click();
+    assert.deepEqual((await messages(quarkPage)).at(-1), { type: 'openExternal', url: 'https://pan.quark.cn.evil/s/ff96d10800cd' });
+    const before = (await messages(quarkPage)).length;
+    await buttons.nth(0).click();
+    assert.equal((await messages(quarkPage)).length, before);
+    assert.equal(await quarkPage.locator('#quark-choice').evaluate(node => node.open), true);
+    await quarkPage.locator('#quark-choice-cancel').click();
+    assert.equal((await messages(quarkPage)).length, before);
+    await buttons.nth(0).click();
+    await quarkPage.locator('#quark-jump').click();
+    assert.deepEqual((await messages(quarkPage)).at(-1), { type: 'openExternal', url: share });
+    await buttons.nth(0).click();
+    await quarkPage.locator('#quark-direct').click();
+    const listed = (await messages(quarkPage)).at(-1);
+    assert.equal(listed.type, 'mcmod');
+    assert.equal(listed.operation, 'quarkList');
+    assert.equal(listed.id, 1500);
+    assert.equal(listed.shareId, 'ff96d10800cd');
+    assert.equal(listed.path, '');
+    assert.equal(listed.resourceType, 'modpack');
+    assert.equal(JSON.stringify(listed).includes('ab12'), false);
+    assert.equal(JSON.stringify(listed).includes('pan.quark.cn'), false);
+    assert.equal(await quarkPage.locator('#quark-download').evaluate(node => node.open), true);
+    assert.match(await quarkPage.locator('#quark-download-title').textContent(), /选择版本/);
+    await send(quarkPage, { type: 'quarkVersions', id: 1500, shareId: 'ff96d10800cd', path: '', truncated: false, requestId: listed.requestId, entries: [{ name: '1.20.1', path: '1.20.1', directory: true, size: 0 }, { name: 'pack.mrpack', path: 'pack.mrpack', directory: false, size: 1048576 }, { name: 'notes.txt', path: 'notes.txt', directory: false, size: 12 }] });
+    assert.equal(await quarkPage.locator('#quark-versions button').count(), 2);
+    await quarkPage.locator('#quark-versions button').nth(0).click();
+    const nested = (await messages(quarkPage)).at(-1);
+    assert.equal(nested.operation, 'quarkList');
+    assert.equal(nested.path, '1.20.1');
+    assert.equal(JSON.stringify(nested).includes('ab12'), false);
+    await send(quarkPage, { type: 'quarkVersions', id: 1500, shareId: 'ff96d10800cd', path: '1.20.1', requestId: nested.requestId, entries: [{ name: 'demo.mrpack', path: '1.20.1/demo.mrpack', directory: false, size: 2048 }] });
+    await quarkPage.locator('#quark-versions button').click();
+    const picked = (await messages(quarkPage)).at(-1);
+    assert.equal(picked.operation, 'quarkDownload');
+    assert.equal(picked.path, '1.20.1/demo.mrpack');
+    assert.equal(JSON.stringify(picked).includes('pwd'), false);
+    assert.equal(JSON.stringify(picked).includes('pan.quark.cn'), false);
+    await quarkPage.locator('#close-quark-download').click();
+    await quarkPage.close();
+    console.log('PASS quark source chooses jump or version page without posting the share URL');
   }
   assert.deepEqual(errors, []);
   console.log('PASS responsive catalog, visible keyboard focus, reduced motion; no page errors');

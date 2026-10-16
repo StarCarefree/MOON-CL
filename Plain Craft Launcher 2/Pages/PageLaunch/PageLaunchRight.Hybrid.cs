@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using PCL.Core.App;
 using PCL.Core.App.Localization;
+using PCL.Core.Minecraft.Launcher;
 using System.Windows;
 
 namespace PCL;
@@ -12,7 +13,30 @@ public partial class PageLaunchRight
     private DateTime _packDateChecked;
     private string? _packDate;
 
-    private void PlayHybridEntrance() => HybridMotion.Rise(HeroCard, NativeHintCard);
+    public void PlayPageSwitch()
+    {
+        var sections = VisibleSections();
+        foreach (var section in sections)
+            foreach (var control in GetAllAnimControls(section))
+                if (!disabledPageAnimControls.Contains(control))
+                    disabledPageAnimControls.Add(control);
+        HybridMotion.Enter("Hybrid Games Enter", sections);
+    }
+
+    private void PlayPageExit()
+    {
+        if (PageState is not (PageStates.ContentEnter or PageStates.ContentStay)) return;
+        HybridMotion.Leave("Hybrid Games Enter", VisibleSections());
+    }
+
+    private FrameworkElement[] VisibleSections()
+    {
+        var sections = new List<FrameworkElement>();
+        foreach (var child in PanMain.Children)
+            if (child is FrameworkElement element && element.Visibility == Visibility.Visible)
+                sections.Add(element);
+        return sections.ToArray();
+    }
 
     public void PlayVersionSwitch() => HybridMotion.Swap(HeroIdentity);
 
@@ -29,9 +53,13 @@ public partial class PageLaunchRight
 
     private string DescribeVersion(McInstance instance)
     {
-        var text = CustomDescription(instance) ?? VersionAndLoader(instance);
-        var updated = PackUpdateDate(instance);
-        return string.IsNullOrEmpty(updated) ? text : text + " · " + updated;
+        var version = VersionAndLoader(instance);
+        var intro = PackIdentityStore.TryRead(instance.PathInstance)?.HeroText;
+         var text = string.IsNullOrEmpty(intro) ? CustomDescription(instance) ?? version : version + "\n" + intro;
+         var release = PackReleaseWatcher.NoticeText(instance.PathInstance);
+         if (!string.IsNullOrEmpty(release)) text += "\n" + release;
+         var updated = PackUpdateDate(instance);
+         return string.IsNullOrEmpty(updated) ? text : text + " · " + updated;
     }
 
     private static string? CustomDescription(McInstance instance)

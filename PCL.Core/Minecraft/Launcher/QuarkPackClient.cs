@@ -27,6 +27,63 @@ public sealed class QuarkDownload
     }
 }
 
+public sealed class QuarkShareFile
+{
+    public string PwdId { get; }
+    public string Stoken { get; }
+    public string Fid { get; }
+    public string ShareFidToken { get; }
+    public string FileName { get; }
+    public long Size { get; }
+
+    public QuarkShareFile(string pwdId, string stoken, string fid, string shareFidToken, string fileName, long size)
+    {
+        PwdId = pwdId;
+        Stoken = stoken;
+        Fid = fid;
+        ShareFidToken = shareFidToken;
+        FileName = fileName;
+        Size = size;
+    }
+
+    public override string ToString() => FileName;
+}
+
+public sealed class QuarkShareEntry
+{
+    public string Name { get; }
+    public string Path { get; }
+    public bool Directory { get; }
+    public long Size { get; }
+
+    public QuarkShareEntry(string name, string path, bool directory, long size)
+    {
+        Name = name;
+        Path = path;
+        Directory = directory;
+        Size = size;
+    }
+
+    public override string ToString() => Name;
+}
+
+public sealed class QuarkShareListing
+{
+    public const int MaxEntries = 200;
+    public string Path { get; }
+    public bool Truncated { get; }
+    public IReadOnlyList<QuarkShareEntry> Entries { get; }
+
+    public QuarkShareListing(string path, bool truncated, IReadOnlyList<QuarkShareEntry> entries)
+    {
+        Path = path;
+        Truncated = truncated;
+        Entries = entries;
+    }
+
+    public override string ToString() => Path;
+}
+
 /// <summary>Resolves metadata only. The caller must use PackTransfer to download and report CDN errors.</summary>
 public class QuarkPackClient(HttpClient http)
 {
@@ -44,7 +101,7 @@ public class QuarkPackClient(HttpClient http)
             // Match the original spelling, not a URI-normalized path (which could hide traversal).
             var share = Regex.Match(shareUrl ?? "", @"\Ahttps://pan\.quark\.cn/s/([A-Za-z0-9]+)(?:\?pwd=([A-Za-z0-9]+))?\z", RegexOptions.CultureInvariant);
             if (!share.Success) throw new InvalidDataException();
-            var parts = ValidatePath(sharePath);
+            ValidatePath(sharePath);
             if (!string.IsNullOrEmpty(serviceUrl))
             {
                 var baseUri = PackCatalog.HttpUri(serviceUrl);
@@ -67,48 +124,13 @@ public class QuarkPackClient(HttpClient http)
                 return Download(Text(root, "url"), Text(root, "fileName"), headers);
             }
 
-            var pwdId = share.Groups[1].Value;
-            using var tokenJson = await RequestAsync(new Uri(Api + "share/sharepage/token?pr=ucpro&fr=win"),
-                new { pwd_id = pwdId, passcode = share.Groups[2].Value, support_visit_limit_private_share = true }, true, timeout.Token).ConfigureAwait(false);
-            var stoken = Text(Data(tokenJson), "stoken");
-            var parent = "0";
-            JsonElement selected = default;
-            var entries = 0;
-            for (var depth = 0; depth < parts.Length; depth++)
-            {
-                JsonElement? match = null;
-                for (var page = 1; ; page++)
-                {
-                    var query = "share/sharepage/detail?pr=ucpro&fr=win&pwd_id=" + Uri.EscapeDataString(pwdId) +
-                        "&stoken=" + Uri.EscapeDataString(stoken) + "&pdir_fid=" + Uri.EscapeDataString(parent) +
-                        "&_page=" + page + "&_size=100&_sort=file_type:asc,file_name:asc";
-                    using var listing = await RequestAsync(new Uri(Api + query), null, true, timeout.Token).ConfigureAwait(false);
-                    var list = Data(listing).GetProperty("list");
-                    var count = list.GetArrayLength();
-                    entries += count;
-                    if (count > 100 || entries > 10000) throw new InvalidDataException();
-                    foreach (var item in list.EnumerateArray())
-                    {
-                        if (!string.Equals(Text(item, "file_name"), parts[depth], StringComparison.Ordinal)) continue;
-                        if (match.HasValue) throw new InvalidDataException();
-                        match = item.Clone();
-                    }
-                    if (count < 100) break;
-                    // Never choose a possibly ambiguous match from an incompletely enumerated directory.
-                    if (page >= 100 || entries >= 10000) throw new InvalidDataException();
-                }
-                selected = match ?? throw new InvalidDataException();
-                var directory = selected.GetProperty("dir").GetBoolean();
-                if (directory != (depth < parts.Length - 1)) throw new InvalidDataException();
-                parent = Text(selected, "fid");
-            }
-            var fileToken = Text(selected, "share_fid_token");
+            var located = await LocateCore(shareUrl ?? "", sharePath, timeout.Token).ConfigureAwait(false);
             using var download = await RequestAsync(new Uri(Api + "file/download?pr=ucpro&fr=win"),
-                new { fids = new[] { parent }, pwd_id = pwdId, stoken, fids_token = new[] { fileToken }, support_error_code = new[] { "41060" } },
+                new { fids = new[] { located.Fid }, pwd_id = located.PwdId, stoken = located.Stoken, fids_token = new[] { located.ShareFidToken }, support_error_code = new[] { "41060" } },
                 true, timeout.Token).ConfigureAwait(false);
             var data = Data(download);
             if (data.GetArrayLength() != 1) throw new InvalidDataException();
-            return Download(Text(data[0], "download_url"), parts[^1], DownloadHeaders());
+            return Download(Text(data[0], "download_url"), located.FileName, DownloadHeaders());
         }
         catch (OperationCanceledException)
         {
@@ -124,6 +146,192 @@ public class QuarkPackClient(HttpClient http)
         {
             throw new InvalidDataException("夸克分享解析失败：地址、路径或响应无效。");
         }
+    }
+
+    public async Task<QuarkShareFile> LocateAsync(string shareUrl, string sharePath, CancellationToken token)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            return await LocateCore(shareUrl, sharePath, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (token.IsCancellationRequested) throw new OperationCanceledException("夸克分享解析已取消。", token);
+            throw new TimeoutException("夸克分享解析超时（30 秒）。");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new HttpRequestException("夸克分享解析 HTTP 请求失败。", null, ex.StatusCode);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            throw new InvalidDataException("夸克分享解析失败：地址、路径或响应无效。");
+        }
+    }
+
+    public async Task<QuarkShareListing> ListAsync(string shareUrl, string? directoryPath, CancellationToken token)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            return await ListCore(shareUrl, directoryPath, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (token.IsCancellationRequested) throw new OperationCanceledException("夸克分享解析已取消。", token);
+            throw new TimeoutException("夸克分享解析超时（30 秒）。");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new HttpRequestException("夸克分享解析 HTTP 请求失败。", null, ex.StatusCode);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            throw new InvalidDataException("夸克分享解析失败：地址、路径或响应无效。");
+        }
+    }
+
+    private async Task<QuarkShareListing> ListCore(string shareUrl, string? directoryPath, CancellationToken token)
+    {
+        var share = Regex.Match(shareUrl ?? "", @"\Ahttps://pan\.quark\.cn/s/([A-Za-z0-9]+)(?:\?pwd=([A-Za-z0-9]+))?\z", RegexOptions.CultureInvariant);
+        if (!share.Success) throw new InvalidDataException();
+        var parts = ValidateDirectory(directoryPath);
+        var pwdId = share.Groups[1].Value;
+        using var tokenJson = await RequestAsync(new Uri(Api + "share/sharepage/token?pr=ucpro&fr=win"),
+            new { pwd_id = pwdId, passcode = share.Groups[2].Value, support_visit_limit_private_share = true }, true, token).ConfigureAwait(false);
+        var stoken = Text(Data(tokenJson), "stoken");
+        var parent = "0";
+        for (var depth = 0; depth < parts.Length; depth++)
+        {
+            var match = await FindNamedAsync(pwdId, stoken, parent, parts[depth], token).ConfigureAwait(false);
+            if (!match.TryGetProperty("dir", out var dirNode) || dirNode.ValueKind != JsonValueKind.True) throw new InvalidDataException();
+            parent = Text(match, "fid");
+        }
+        var entries = new List<QuarkShareEntry>();
+        var truncated = false;
+        var scanned = 0;
+        for (var page = 1; ; page++)
+        {
+            var query = "share/sharepage/detail?pr=ucpro&fr=win&pwd_id=" + Uri.EscapeDataString(pwdId) +
+                "&stoken=" + Uri.EscapeDataString(stoken) + "&pdir_fid=" + Uri.EscapeDataString(parent) +
+                "&_page=" + page + "&_size=100&_sort=file_type:asc,file_name:asc";
+            using var listing = await RequestAsync(new Uri(Api + query), null, true, token).ConfigureAwait(false);
+            var list = Data(listing).GetProperty("list");
+            var count = list.GetArrayLength();
+            scanned += count;
+            if (count > 100 || scanned > 10000) throw new InvalidDataException();
+            foreach (var item in list.EnumerateArray())
+            {
+                if (entries.Count >= QuarkShareListing.MaxEntries) { truncated = true; break; }
+                if (!TryText(item, "file_name", out var name) || !SafeName(name)) continue;
+                if (!item.TryGetProperty("dir", out var childDir) || childDir.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) continue;
+                var directory = childDir.GetBoolean();
+                long size = 0;
+                if (!directory && item.TryGetProperty("size", out var sizeNode) && sizeNode.TryGetInt64(out var parsed) && parsed > 0) size = parsed;
+                var relative = parts.Length == 0 ? name : string.Join("/", parts) + "/" + name;
+                entries.Add(new QuarkShareEntry(name, relative, directory, size));
+            }
+            if (entries.Count >= QuarkShareListing.MaxEntries)
+            {
+                truncated = truncated || count == 100;
+                break;
+            }
+            if (count < 100) break;
+            if (page >= 100) { truncated = true; break; }
+        }
+        return new QuarkShareListing(parts.Length == 0 ? "" : string.Join("/", parts), truncated, entries);
+    }
+
+    private async Task<JsonElement> FindNamedAsync(string pwdId, string stoken, string parent, string name, CancellationToken token)
+    {
+        JsonElement? match = null;
+        var entries = 0;
+        for (var page = 1; ; page++)
+        {
+            var query = "share/sharepage/detail?pr=ucpro&fr=win&pwd_id=" + Uri.EscapeDataString(pwdId) +
+                "&stoken=" + Uri.EscapeDataString(stoken) + "&pdir_fid=" + Uri.EscapeDataString(parent) +
+                "&_page=" + page + "&_size=100&_sort=file_type:asc,file_name:asc";
+            using var listing = await RequestAsync(new Uri(Api + query), null, true, token).ConfigureAwait(false);
+            var list = Data(listing).GetProperty("list");
+            var count = list.GetArrayLength();
+            entries += count;
+            if (count > 100 || entries > 10000) throw new InvalidDataException();
+            foreach (var item in list.EnumerateArray())
+            {
+                if (!string.Equals(Text(item, "file_name"), name, StringComparison.Ordinal)) continue;
+                if (match.HasValue) throw new InvalidDataException();
+                match = item.Clone();
+            }
+            if (count < 100) break;
+            if (page >= 100 || entries >= 10000) throw new InvalidDataException();
+        }
+        return match ?? throw new InvalidDataException();
+    }
+
+    private static string[] ValidateDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return [];
+        if (path.Length > 4096) throw new InvalidDataException();
+        var parts = path.Split('/');
+        if (parts.Length > 99 || parts.Any(part => !SafeName(part))) throw new InvalidDataException();
+        return parts;
+    }
+
+    private static bool TryText(JsonElement element, string key, out string value)
+    {
+        value = "";
+        if (!element.TryGetProperty(key, out var node) || node.ValueKind != JsonValueKind.String) return false;
+        value = node.GetString() ?? "";
+        return value.Length > 0;
+    }
+
+    private async Task<QuarkShareFile> LocateCore(string shareUrl, string sharePath, CancellationToken token)
+    {
+        var share = Regex.Match(shareUrl ?? "", @"\Ahttps://pan\.quark\.cn/s/([A-Za-z0-9]+)(?:\?pwd=([A-Za-z0-9]+))?\z", RegexOptions.CultureInvariant);
+        if (!share.Success) throw new InvalidDataException();
+        var parts = ValidatePath(sharePath);
+        var pwdId = share.Groups[1].Value;
+        using var tokenJson = await RequestAsync(new Uri(Api + "share/sharepage/token?pr=ucpro&fr=win"),
+            new { pwd_id = pwdId, passcode = share.Groups[2].Value, support_visit_limit_private_share = true }, true, token).ConfigureAwait(false);
+        var stoken = Text(Data(tokenJson), "stoken");
+        var parent = "0";
+        JsonElement selected = default;
+        var entries = 0;
+        for (var depth = 0; depth < parts.Length; depth++)
+        {
+            JsonElement? match = null;
+            for (var page = 1; ; page++)
+            {
+                var query = "share/sharepage/detail?pr=ucpro&fr=win&pwd_id=" + Uri.EscapeDataString(pwdId) +
+                    "&stoken=" + Uri.EscapeDataString(stoken) + "&pdir_fid=" + Uri.EscapeDataString(parent) +
+                    "&_page=" + page + "&_size=100&_sort=file_type:asc,file_name:asc";
+                using var listing = await RequestAsync(new Uri(Api + query), null, true, token).ConfigureAwait(false);
+                var list = Data(listing).GetProperty("list");
+                var count = list.GetArrayLength();
+                entries += count;
+                if (count > 100 || entries > 10000) throw new InvalidDataException();
+                foreach (var item in list.EnumerateArray())
+                {
+                    if (!string.Equals(Text(item, "file_name"), parts[depth], StringComparison.Ordinal)) continue;
+                    if (match.HasValue) throw new InvalidDataException();
+                    match = item.Clone();
+                }
+                if (count < 100) break;
+                if (page >= 100 || entries >= 10000) throw new InvalidDataException();
+            }
+            selected = match ?? throw new InvalidDataException();
+            var directory = selected.GetProperty("dir").GetBoolean();
+            if (directory != (depth < parts.Length - 1)) throw new InvalidDataException();
+            parent = Text(selected, "fid");
+        }
+        long size = 0;
+        if (selected.TryGetProperty("size", out var sizeNode) && sizeNode.TryGetInt64(out var parsed) && parsed > 0) size = parsed;
+        return new QuarkShareFile(pwdId, stoken, parent, Text(selected, "share_fid_token"), parts[^1], size);
     }
 
     private static string[] ValidatePath(string path)

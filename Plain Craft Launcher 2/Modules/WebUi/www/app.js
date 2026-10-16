@@ -17,6 +17,13 @@
 
 const SRE_ID = "starrail-harpy-express";
 const SRE_COVER = "sre-cover.png";
+
+// Shipped default MCL catalog source: the repository-hosted index.json, mirrored
+// for the second entry. Kept in sync with PackCatalogSources.DefaultUrls in PCL.Core.
+const DEFAULT_CATALOG_URLS = [
+  "https://raw.githubusercontent.com/catmoon233/MOON-CL/dev/docs/pack-catalog/index.json",
+  "https://cdn.jsdelivr.net/gh/catmoon233/MOON-CL@dev/docs/pack-catalog/index.json"
+];
 const OFFLINE_SRE = {
   id: SRE_ID,
   name: "StarRailHarpyExpress",
@@ -69,6 +76,9 @@ const COPY = {
     quarkAuthOff: "未授权。匿名直链会被拒绝；授权后才转存这一个文件并下载。",
     catalogListInvalid: "每行一个完整 HTTP(S) 目录地址，最多 8 个，每个不超过 2048 字符；不能含账号密码或片段。",
     catalogUsing: "上次成功源：", catalogNoSource: "尚未从目录源成功获取预设。",
+    catalogDefaultUse: "使用 GitHub 默认源",
+    catalogDefaultOff: url => `已配置目录源；清空后回到 GitHub 默认源：${url}`,
+    catalogDefaultOn: url => `未配置目录源，启动器改用 GitHub 默认源：${url}`,
     configOffline: "静态预览不能保存。连接本地启动器后再配置。",
     configWait: "配置已发送，等待启动器确认。",
     configOk: "配置已由启动器确认。",
@@ -124,6 +134,9 @@ const COPY = {
     quarkAuthOff: "Not authorized. Anonymous links are rejected; authorize to save and download that one file.",
     catalogListInvalid: "One absolute HTTP(S) catalog URL per line; up to 8 URLs, 2048 characters each, without credentials or fragments.",
     catalogUsing: "Last successful source: ", catalogNoSource: "No successful catalog fetch yet.",
+    catalogDefaultUse: "Use the GitHub default",
+    catalogDefaultOff: url => `Catalog configured. Clearing it returns to the GitHub default: ${url}`,
+    catalogDefaultOn: url => `No catalog configured. The launcher uses the GitHub default: ${url}`,
     configOffline: "Static preview cannot save. Connect the launcher first.",
     configWait: "Configuration sent. Waiting for the launcher to confirm.",
     configOk: "The launcher confirmed the configuration.",
@@ -170,14 +183,15 @@ const REQUEST_TIMEOUT = 45000;
 const PLATFORM_TIMEOUT = 60000;
 const SEARCH_DEBOUNCE = 350;
 const PLATFORM_PAGE_MAX = 400;
-const browse = { source: "curseforge", sources: new Set(["mcl", "curseforge"]), resourceType: "modpack" };
+const browse = { source: "mcmod", sources: new Set(["mcl", "curseforge", "mcmod"]), resourceType: "modpack" };
 const catalog = {
-  include: false, page: 1, totalPages: 0, sequence: 0, retained: new Map(),
+  include: true, page: 1, totalPages: 0, sequence: 0, retained: new Map(),
   pages: new Map(), listPending: new Map(), listErrors: new Map(),
   requests: new Map(), latest: new Map(),
   details: new Map(), detailPending: new Map(), detailErrors: new Map(),
   downloads: new Map(), viewedId: "", detailId: "", returnFocus: null
 };
+const quark = { shareId: "", url: "", name: "", wikiId: 0, path: "", entries: [], pending: false, error: "", note: "", truncated: false, sequence: 0, requestId: "", downloadRequestId: "", openingDownload: false, returnFocus: null, xyeUrl: "", xyeVersions: [], xyeTruncated: false };
 const platform = {
   page: 1, totalPages: 0, query: "", sequence: 0, searchTimer: 0,
   pages: new Map(), retained: new Map(), listPending: new Map(), listErrors: new Map(),
@@ -217,7 +231,6 @@ function selectResourceType(type) {
 }
 function renderResourceTypes() {
   for (const type of Object.keys(RESOURCE_TYPES)) ui[`type-${type}`].setAttribute("aria-selected", String(type === browse.resourceType));
-  document.querySelector(".stage").hidden = browse.resourceType !== "modpack" || !sourceEnabled("mcl");
   ui["filter-loader"].disabled = browse.resourceType !== "modpack";
   ui["filter-category"].disabled = categoryOptions().length === 0;
   setText("catalog-title", resourceLabel() + "列表");
@@ -300,6 +313,17 @@ function values(value) {
     .filter(Boolean);
 }
 function mcVersions(item) { return values(item?.minecraftVersions?.length ? item.minecraftVersions : item?.minecraft); }
+// A span is a compact summary, not a promise of support for every intermediate release.
+function versionSummary(item) {
+  const versions = [...new Set(mcVersions(item))];
+  const releases = versions.filter(value => /^\d+\.\d+(?:\.\d+)?$/.test(value))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const other = versions.filter(value => !releases.includes(value));
+  const range = releases.length > 1 ? `${releases[0]}–${releases.at(-1)}` : releases[0] || "";
+  const preview = other.length > 2 ? `${other[0]} 等 ${other.length} 个预览/其他版本` : other.join(" / ");
+  return [range, preview].filter(Boolean).join(" · ");
+}
+function versionTitle(item) { return [...new Set(mcVersions(item))].join(" / "); }
 function loaders(item) { return values(item?.loaders?.length ? item.loaders : item?.loader); }
 function authors(item) { return values(item?.authors?.length ? item.authors : item?.author); }
 function displayVersion(item) { return typeof item?.version === "string" && item.version ? item.version : ""; }
@@ -324,6 +348,12 @@ function selectedPack(list = packs()) {
   const id = selectedId();
   return list.find(item => item.id === id) || list[0] || null;
 }
+function featuredPack(items = catalogItems().filter(matchesFilters)) {
+  const remote = items.filter(item => isMcmod(item) || isPlatform(item));
+  if (browse.source !== "mcl" && remote.length) return remote.find(item => item.source === browse.source) || remote[0];
+  const local = items.filter(item => item.source === "mcl" && matchesFilters(item));
+  return selectedPack(local) || remote[0] || null;
+}
 function isSre(item) { return item?.id === SRE_ID; }
 function packArt(item, field) {
   const value = item?.[field];
@@ -342,11 +372,31 @@ function taskOf() { return state.launcher?.task || {}; }
 function busy() { return state.link === "live" && !!taskOf().busy; }
 function gameRunning() { return state.link === "live" && !!taskOf().gameRunning; }
 function mutatingLocked() { return state.link !== "live" || busy() || !!state.pending || gameRunning(); }
+function cleanUrls(value) {
+  return Array.isArray(value) ? value.filter(url => typeof url === "string" && url.trim()).map(url => url.trim()) : [];
+}
 function catalogUrls(config = state.launcher?.config || {}) {
-  return Array.isArray(config.catalogUrls) ? config.catalogUrls.filter(url => typeof url === "string" && url.trim()).map(url => url.trim())
+  return Array.isArray(config.catalogUrls) ? cleanUrls(config.catalogUrls)
     : config.catalogUrl ? [String(config.catalogUrl)] : [];
 }
-function catalogUrl() { return catalogUrls()[0] || ""; }
+function catalogDefaultUrls(config = state.launcher?.config || {}) {
+  const shipped = cleanUrls(config.catalogDefaultUrls);
+  return shipped.length ? shipped : DEFAULT_CATALOG_URLS;
+}
+// The shipped default only applies when the host says so. A snapshot without
+// catalogDefaultActive (static preview, test fixture) still means "not configured".
+function catalogDefaultActive(config = state.launcher?.config || {}) {
+  return config.catalogDefaultActive === true && !catalogUrls(config).length;
+}
+function effectiveCatalogUrls(config = state.launcher?.config || {}) {
+  return catalogDefaultActive(config) ? catalogDefaultUrls(config) : catalogUrls(config);
+}
+function catalogUrl() { return effectiveCatalogUrls()[0] || ""; }
+function renderCatalogDefault() {
+  const defaults = catalogDefaultUrls(), t = text();
+  ui["catalog-default"].textContent = t.catalogDefaultUse;
+  setText("catalog-default-status", catalogDefaultActive() ? t.catalogDefaultOn(defaults[0]) : t.catalogDefaultOff(defaults[0]));
+}
 function parseCatalogUrls(value) {
   const urls = [];
   for (const line of value.split(/\r?\n/).map(url => url.trim()).filter(Boolean)) {
@@ -404,8 +454,9 @@ function syncButtons(parent, items, className, activate) {
     node.setAttribute("aria-pressed", String(selected));
     node.tabIndex = 0;
     node.parts.title.textContent = item.name || id;
-    const version = [mcVersions(item).length ? `MC ${mcVersions(item).join(" / ")}` : "MC 版本未提供", loaders(item).join(" / "), displayVersion(item)].filter(Boolean).join(" · ");
+    const version = [mcVersions(item).length ? `MC ${versionSummary(item)}` : "MC 版本未提供", loaders(item).join(" / "), displayVersion(item)].filter(Boolean).join(" · ");
     node.parts.detail.textContent = version;
+    node.parts.detail.title = versionTitle(item);
     node.parts.summary.textContent = item.description || "暂无简介，点击查看详情。";
     node.parts.pill.textContent = isSre(item) ? text().test : isMcmod(item) ? "MC百科 · 查看详情" : isPlatform(item) ? `${sourceName(item.source)} · 查看详情` : `MCL · ${statusLabel(item)}`;
     node.parts.pill.className = `pill${item.updateAvailable ? " update" : item.installed ? " installed" : item.offline ? " offline" : ""}`;
@@ -470,6 +521,7 @@ function openServices() {
   ui["catalog-url"].value = catalogUrls(config).join("\n");
   ui["quark-url"].value = config.quarkServiceUrl || "";
   ui["catalog-url"].setCustomValidity("");
+  renderCatalogDefault();
   ui["quark-url"].setCustomValidity("");
   state.configNote = state.link === "live" ? text().urlEmpty : text().configOffline;
   updateUrlWarning();
@@ -529,6 +581,7 @@ function render() {
   setText("services-title", t.servicesTitle);
   const source = state.launcher?.config?.catalogSource;
   setText("catalog-source-status", source ? t.catalogUsing + source : t.catalogNoSource);
+  renderCatalogDefault();
   setText("quark-auth-status", state.launcher?.config?.quarkAuthorized ? t.quarkAuthOn : t.quarkAuthOff);
   document.querySelector(".eyebrow").textContent = t.eyebrow;
   document.querySelector(".title-block h1").textContent = t.pageTitle;
@@ -538,8 +591,14 @@ function render() {
   const all = catalogItems();
   syncFilterOptions(all);
   const visible = all.filter(item => isSre(item) || matchesFilters(item));
-  const selected = selectedPack(list);
-  const others = list.filter(item => item.id !== selected?.id && matchesFilters(item)).slice(0, 3);
+  const selected = featuredPack(visible);
+  const detailFeatured = !!selected && (isMcmod(selected) || isPlatform(selected) || selected.id !== selectedPack(list)?.id);
+  const others = visible.filter(item => item.id !== selected?.id && matchesFilters(item)).slice(0, 3);
+  document.querySelector(".stage").hidden = !selected;
+  document.querySelector(".discovery-title").hidden = !selected;
+  setText("discovery-note", selected ? `${sourceName(selected.source)} · 当前来源与筛选中的条目` : "");
+  setText("recommend-title", "继续发现");
+  setText("recommend-note", "来自当前所选来源 · 非广告排名");
   const task = taskOf();
   const isBusy = busy();
   const running = gameRunning();
@@ -547,22 +606,29 @@ function render() {
   const lost = state.link === "lost";
   const nativeOk = connected() && state.link !== "offline" && state.link !== "lost";
 
-  ui["pack-badge"].textContent = selected && !isSre(selected) ? t.catalogBadge : t.test;
+  ui["pack-badge"].textContent = selected && !isSre(selected) ? `${sourceName(selected.source)} · ${resourceLabel(resourceTypeOf(selected))}` : t.test;
   ui["pack-badge"].classList.toggle("catalog", !!(selected && !isSre(selected)));
   setText("pack-state", selected ? statusLabel(selected) : t.offlineState);
   ui["pack-state"].className = `pill${selected?.updateAvailable ? " update" : selected?.installed ? " installed" : !live ? " offline" : ""}`;
   setText("pack-name", selected?.name || "StarRailHarpyExpress");
   setText("pack-description", selected?.description || (isSre(selected) ? OFFLINE_SRE.description : "暂无简介，点击下方卡片查看版本与作者资料。"));
-  setText("meta-mc", mcVersions(selected).join(" / ") || "未提供");
+  setText("meta-mc", versionSummary(selected) || "未提供");
+  ui["meta-mc"].title = versionTitle(selected);
   setText("meta-ver", displayVersion(selected) || "未提供");
+  ui["meta-ver"].previousElementSibling.textContent = resourceLabel() + "版本";
   setText("meta-installed", selected?.installedVersion || "—");
-  setImage(ui["banner-image"], packArt(selected, "background"));
+  setImage(ui["banner-image"], packArt(selected, "background") || packArt(selected, "icon"));
+  ui.banner.classList.toggle("remote-feature", !!selected && (isMcmod(selected) || isPlatform(selected)));
+  ui["meta-installed"].parentElement.hidden = !!selected && (isMcmod(selected) || isPlatform(selected));
+  ui["goto-versions"].hidden = detailFeatured;
+  ui["more-wrap"].hidden = detailFeatured;
+  if (detailFeatured) closeMenu();
   ui.banner.setAttribute("aria-busy", String(isBusy || !!state.pending));
 
   const plan = !selected ? "disabled" : !live ? "disabled" : selected.updateAvailable ? "update" : !selected.installed ? "download" : "games";
   const primaryLabel = plan === "update" ? t.updateAction : plan === "games" ? t.gotoGames : isBusy ? t.busy : t.download;
-  ui.primary.textContent = isBusy && plan !== "games" ? t.busy : primaryLabel;
-  ui.primary.disabled = !selected || selected.offline || !live || lost || ((plan === "download" || plan === "update") && (isBusy || !!state.pending || running));
+  ui.primary.textContent = detailFeatured ? "查看详情" : isBusy && plan !== "games" ? t.busy : primaryLabel;
+  ui.primary.disabled = detailFeatured ? false : !selected || selected.offline || !live || lost || ((plan === "download" || plan === "update") && (isBusy || !!state.pending || running));
   ui.primary.setAttribute("aria-label", `${ui.primary.textContent}：${selected?.name || SRE_ID}`);
 
   const percent = !task.indeterminate && typeof task.progress === "number" && Number.isFinite(task.progress)
@@ -570,7 +636,7 @@ function render() {
   ui["task-progress"].hidden = !(isBusy && percent !== null);
   if (percent !== null) ui["task-progress"].value = percent;
   ui["task-progress"].setAttribute("aria-label", t.busy);
-   const phase = (isBusy && task.phase) || state.localNote || task.phase || (isBusy ? t.sent : !live ? (state.link === "connecting" ? t.phaseWait : t.phaseOffline) : running ? t.gameRunning : selected?.updateAvailable ? t.phaseUpdate : selected?.installed ? t.phaseInstalled : t.phaseReady);
+   const phase = (isBusy && task.phase) || (detailFeatured ? `${sourceName(selected.source)} · 查看资源资料与可用下载来源` : state.localNote || task.phase || (isBusy ? t.sent : !live ? (state.link === "connecting" ? t.phaseWait : t.phaseOffline) : running ? t.gameRunning : selected?.updateAvailable ? t.phaseUpdate : selected?.installed ? t.phaseInstalled : t.phaseReady));
    setText("phase", percent !== null && isBusy ? `${phase} ${Math.round(percent)}%` : phase);
    setText("task-error", live ? task.error || "" : "");
    ui["task-error"].hidden = !ui["task-error"].textContent;
@@ -601,7 +667,7 @@ function render() {
   ui.error.hidden = !state.hostError;
   setText("error", state.hostError);
   const hint = !live ? t.hintOffline : isBusy ? t.hintLive : missingCatalog ? t.hintQuark : t.hintLive;
-  setText("hint", running ? `${t.gameRunning} ${hint}` : isBusy ? `${t.locked} ${hint}` : hint);
+  setText("hint", detailFeatured ? "版本以跨度简写，不代表区间内所有版本均兼容；完整版本与下载方式请查看详情。" : running ? `${t.gameRunning} ${hint}` : isBusy ? `${t.locked} ${hint}` : hint);
 
   setText("recommend-empty", !others.length ? (!live ? t.recommendOffline : query ? t.recommendSearch : t.recommendNone) : "");
   ui["recommend-empty"].hidden = others.length > 0;
@@ -611,8 +677,8 @@ function render() {
   const noPacks = live && list.length === 0;
   const matching = visible.filter(item => !isSre(item));
   const filtersActive = !!(query || ui["filter-mc"].value || ui["filter-loader"].value || ui["filter-category"].value);
-  ui.empty.hidden = matching.length > 0 || !filtersActive;
-  setText("empty-text", "当前页没有其他匹配的资源。可重置筛选或浏览下一页。");
+  ui.empty.hidden = matching.length > 0 || visible.length > 0 && !filtersActive;
+  setText("empty-text", !browse.sources.size ? "尚未选择资源来源，请在上方勾选至少一个来源。" : state.link !== "live" ? "连接启动器后加载所选来源，或勾选 MCL 查看本地预设。" : filtersActive ? "当前页没有匹配的资源。可重置筛选或浏览下一页。" : "当前来源暂无可展示的资源。加载进度、来源限制或错误请查看上方状态。");
   ui["clear-search"].hidden = !query;
   ui["empty-config"].hidden = !(noPacks || missingCatalog) || !live;
   ui["empty-config"].disabled = !live;
@@ -627,6 +693,7 @@ function render() {
   setText("config-status", state.configNote);
   renderCatalogStatus();
   renderDetail();
+  renderQuarkDownload();
 }
 
 function applyBoot(data) {
@@ -703,6 +770,7 @@ function receive(data) {
     else if (data.type === "presentation") applyPresentation(data.visible);
     else if (data.type === "browsePlugins") openPluginBrowser(data.minecraft);
     else if (data.type === "platformCategories" || data.type === "mcmodCategories" || data.operation === "categories" && ["platformError", "mcmodError"].includes(data.type)) receiveCategories(data);
+    else if (data.type === "xyeVersions" || data.type === "quarkVersions" || data.type === "quarkDownload" || (data.type === "mcmodError" && (data.operation === "quarkList" || data.operation === "quarkDownload" || data.operation === "xyeResolve"))) receiveQuark(data);
     else if (["mcmodList", "mcmodDetail", "mcmodLinks", "mcmodError"].includes(data.type)) receiveMcmod(data);
     else if (["platformList", "platformDetail", "platformError"].includes(data.type)) receivePlatform(data);
   } catch { showHostError(text().badSnapshot); }
@@ -894,6 +962,7 @@ function receiveMcmod(data) {
       const id = Number(data.id ?? (catalog.downloads.size === 1 ? catalog.downloads.keys().next().value : 0));
       if (!Number.isSafeInteger(id) || id < 1) return;
       catalog.downloads.set(mcKey(id, data.resourceType || "modpack"), { error: true, message });
+      closeVersionWait();
     }
     render();
   }
@@ -1086,13 +1155,18 @@ function requestPlatformDetail(item, force = false) {
 }
 function downloadPlatform() {
   const item = normalizePlatform(findDetailItem());
-  if (!item || mutatingLocked()) return;
+  if (!item || state.link !== "live") return;
   const key = detailKey(item.source, item.projectId, resourceTypeOf(item));
   const requestId = `platform-download-${++platform.sequence}`;
   platform.downloadLatest.set(key, requestId);
   platform.requests.set(requestId, { kind: "download", source: item.source, projectId: item.projectId, resourceType: resourceTypeOf(item), key });
-  if (post({ type: "platform", operation: "download", source: item.source, id: item.projectId, ...resourcePayload(resourceTypeOf(item)), requestId })) platform.downloads.set(key, { error: false, message: "已请求启动器打开版本列表，请在原生界面选择文件。", requestId });
-  else platform.downloads.set(key, { error: true, message: "无法连接启动器，请重新连接后重试。", requestId });
+  if (post({ type: "platform", operation: "download", source: item.source, id: item.projectId, ...resourcePayload(resourceTypeOf(item)), requestId })) {
+    platform.downloads.set(key, { error: false, message: "已请求启动器打开版本列表，请在原生界面选择文件。", requestId });
+    openVersionWait(item.name);
+  } else {
+    platform.downloads.set(key, { error: true, message: "无法连接启动器，请重新连接后重试。", requestId });
+    closeVersionWait();
+  }
   renderDetail();
 }
 function receivePlatform(data) {
@@ -1143,6 +1217,7 @@ function receivePlatform(data) {
   } else if (request.kind === "download") {
     if (platform.downloadLatest.get(request.key) !== data.requestId || (data.id != null && String(data.id) !== request.projectId)) return;
     platform.downloads.set(request.key, { error: true, message, requestId: data.requestId });
+    closeVersionWait();
   } else return;
   platform.requests.delete(data.requestId);
   render();
@@ -1205,17 +1280,316 @@ function openDetail(id) {
 function externalUrl(value) {
   return typeof value === "string" && value && classifyUrl(value).ok ? value : "";
 }
+function projectUrls(item) {
+  return [item?.curseForgeUrl, item?.modrinthUrl, item?.website, ...(Array.isArray(item?.links) ? item.links.map(link => link?.url) : [])];
+}
 function curseForgeUrl(item) {
-  const value = externalUrl(item?.curseForgeUrl);
-  if (!value) return "";
-  const url = new URL(value);
-  const segments = url.pathname.split("/").filter(Boolean);
   const paths = resourceTypeOf(item) === "datapack" ? ["data-packs", "datapacks"] : ["modpacks"];
-  return /^(?:www\.)?curseforge\.com$/i.test(url.hostname) && segments.length >= 3 && segments[0] === "minecraft" && paths.includes(segments[1]) ? value : "";
+  for (const raw of projectUrls(item)) {
+    const value = externalUrl(raw);
+    if (!value) continue;
+    const url = new URL(value);
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (url.protocol === "https:" && /^(?:www\.)?curseforge\.com$/i.test(url.hostname) && segments.length >= 3 && segments[0] === "minecraft" && paths.includes(segments[1])) return value;
+  }
+  return "";
 }
 function openExternal(value) {
   const url = externalUrl(value);
   if (state.link === "live" && url) post({ type: "openExternal", url });
+}
+function quarkShareId(value) {
+  const url = externalUrl(value);
+  if (!url) return "";
+  let parsed;
+  try { parsed = new URL(url); } catch { return ""; }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "pan.quark.cn" || parsed.hash) return "";
+  const match = parsed.pathname.match(/^\/s\/([A-Za-z0-9]+)$/);
+  if (!match) return "";
+  if (parsed.search) {
+    const pwd = parsed.searchParams.get("pwd");
+    if ([...parsed.searchParams.keys()].length !== 1 || !pwd || !/^[A-Za-z0-9]+$/.test(pwd)) return "";
+  }
+  return match[1];
+}
+function quarkEntry(value) {
+  if (!value || typeof value !== "object") return null;
+  const name = typeof value.name === "string" ? value.name : "";
+  const path = typeof value.path === "string" ? value.path : "";
+  if (!name || !path || name.length > 255 || path.length > 4096 || name.includes("/") || name.includes("\\") || name === "." || name === "..") return null;
+  if (path.split("/").some(part => !part || part === "." || part === "..")) return null;
+  if (!path.endsWith(name)) return null;
+  return { name, path, directory: value.directory === true, size: Number.isFinite(Number(value.size)) && Number(value.size) > 0 ? Number(value.size) : 0 };
+}
+function formatSize(size) {
+  if (!size) return "";
+  if (size >= 1048576) return `${(size / 1048576).toFixed(1)} MiB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KiB`;
+  return `${size} B`;
+}
+function xyeIdentify(value) {
+  const url = externalUrl(value);
+  if (!url) return "";
+  let parsed;
+  try { parsed = new URL(url); } catch { return ""; }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search) return "";
+  const host = parsed.hostname.toLowerCase();
+  if (host !== "www.xyebbs.com" && host !== "xyebbs.com") return "";
+  const match = parsed.pathname.match(/^\/res-id\/([A-Za-z0-9_-]{1,64})(?:\/(?:downloads|releases))?\/?$/);
+  return match ? match[1] : "";
+}
+function xyeJump(value) {
+  const identify = xyeIdentify(value);
+  return identify ? `https://www.xyebbs.com/res-id/${identify}/downloads#resource-download-section` : "";
+}
+function plainField(value, limit) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (!text || text.length > limit || /[\u0000-\u001f]/.test(text)) return "";
+  return text;
+}
+function xyeVersion(value) {
+  if (!value || typeof value !== "object") return null;
+  const shareId = typeof value.shareId === "string" && /^[A-Za-z0-9]{1,64}$/.test(value.shareId) ? value.shareId : "";
+  const label = plainField(value.label, 80);
+  if (!shareId || !label) return null;
+  return { shareId, label, minecraft: plainField(value.minecraft, 32), loader: plainField(value.loader, 32) };
+}
+function quarkMessage(operation, extra) {
+  const message = { type: "mcmod", operation, id: quark.wikiId, shareId: quark.shareId, resourceType: "modpack", ...extra };
+  if (quark.xyeUrl) message.xyeUrl = quark.xyeUrl;
+  return message;
+}
+function openQuarkChoice(link, item) {
+  const shareId = quarkShareId(link?.url);
+  const url = externalUrl(link?.url);
+  const wiki = wikiId(item);
+  if (!shareId || !url || !wiki || state.link !== "live" || resourceTypeOf(item) !== "modpack") return;
+  quark.shareId = shareId;
+  quark.url = url;
+  quark.xyeUrl = "";
+  quark.xyeVersions = [];
+  quark.name = link.name || "夸克网盘";
+  quark.wikiId = wiki;
+  quark.returnFocus = document.activeElement;
+  setText("quark-choice-eyebrow", "夸克网盘");
+  setText("quark-choice-title", quark.name);
+  setText("quark-choice-text", "跳转会打开分享网页。直接下载会进入下载页，由你选择版本；只会转存那一个 .mrpack 或 .zip，不会转存整个分享。");
+  if (!ui["quark-choice"].open) ui["quark-choice"].showModal();
+  ui["quark-direct"].focus();
+}
+function openXyeChoice(link, item) {
+  const source = externalUrl(link?.url);
+  const jump = xyeJump(source);
+  const wiki = wikiId(item);
+  if (!jump || !wiki || state.link !== "live" || resourceTypeOf(item) !== "modpack") return;
+  quark.shareId = "";
+  quark.url = jump;
+  quark.xyeUrl = source;
+  quark.xyeVersions = [];
+  quark.name = link.name || "XyeBBS";
+  quark.wikiId = wiki;
+  quark.returnFocus = document.activeElement;
+  setText("quark-choice-eyebrow", "XyeBBS");
+  setText("quark-choice-title", quark.name);
+  setText("quark-choice-text", "跳转会打开 XyeBBS 下载页。直接下载会读取该页的夸克分享，再进入原来的夸克下载页；只会转存你点中的一个整合包。");
+  if (!ui["quark-choice"].open) ui["quark-choice"].showModal();
+  ui["quark-direct"].focus();
+}
+function resolveXye() {
+  if (!quark.wikiId || !quark.xyeUrl || state.link !== "live") return;
+  quark.openingDownload = true;
+  if (ui["quark-choice"].open) ui["quark-choice"].close();
+  quark.openingDownload = false;
+  quark.shareId = "";
+  quark.path = "";
+  quark.entries = [];
+  quark.xyeVersions = [];
+  quark.error = "";
+  quark.note = "";
+  quark.truncated = false;
+  quark.xyeTruncated = false;
+  if (!ui["quark-download"].open) ui["quark-download"].showModal();
+  const requestId = `xye-${++quark.sequence}`;
+  quark.requestId = requestId;
+  quark.pending = true;
+  renderQuarkDownload();
+  if (!post({ type: "mcmod", operation: "xyeResolve", id: quark.wikiId, url: quark.xyeUrl, requestId, resourceType: "modpack" })) {
+    quark.pending = false;
+    quark.error = "无法连接启动器。";
+    renderQuarkDownload();
+  }
+}
+function pickXyeVersion(version) {
+  if (!version || quark.pending) return;
+  quark.shareId = version.shareId;
+  quark.path = "";
+  quark.entries = [];
+  quark.error = "";
+  quark.note = "";
+  requestQuarkList("");
+}
+function openQuarkDownloadPage() {
+  quark.openingDownload = true;
+  if (ui["quark-choice"].open) ui["quark-choice"].close();
+  quark.openingDownload = false;
+  quark.path = "";
+  quark.entries = [];
+  quark.error = "";
+  quark.note = "";
+  quark.truncated = false;
+  if (!ui["quark-download"].open) ui["quark-download"].showModal();
+  requestQuarkList("");
+}
+function requestQuarkList(path) {
+  if (!quark.wikiId || !quark.shareId || state.link !== "live") return;
+  const requestId = `quark-list-${++quark.sequence}`;
+  quark.requestId = requestId;
+  quark.path = path;
+  quark.entries = [];
+  quark.pending = true;
+  quark.error = "";
+  quark.note = "";
+  renderQuarkDownload();
+  if (!post(quarkMessage("quarkList", { path, requestId }))) {
+    quark.pending = false;
+    quark.error = "无法连接启动器。";
+    renderQuarkDownload();
+  }
+}
+function downloadQuarkVersion(entry) {
+  if (!entry || entry.directory || quark.pending || mutatingLocked()) return;
+  if (!/\.(?:mrpack|zip)$/i.test(entry.name)) return;
+  const requestId = `quark-download-${++quark.sequence}`;
+  quark.downloadRequestId = requestId;
+  quark.pending = true;
+  quark.error = "";
+  quark.note = "正在交给启动器处理这个版本…";
+  renderQuarkDownload();
+  if (!post(quarkMessage("quarkDownload", { path: entry.path, requestId }))) {
+    quark.pending = false;
+    quark.error = "无法连接启动器。";
+    renderQuarkDownload();
+  }
+}
+function quarkParent(path) {
+  const parts = String(path || "").split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+function receiveQuark(data) {
+  if (data.type === "mcmodError") {
+    if (data.requestId && data.requestId !== quark.requestId && data.requestId !== quark.downloadRequestId) return;
+    quark.pending = false;
+    quark.error = String(data.message || "夸克目录读取失败");
+    renderQuarkDownload();
+    return;
+  }
+  if (data.type === "xyeVersions") {
+    if (data.requestId !== quark.requestId) return;
+    quark.pending = false;
+    quark.error = "";
+    quark.xyeTruncated = data.truncated === true;
+    quark.xyeVersions = Array.isArray(data.versions) ? data.versions.map(xyeVersion).filter(Boolean) : [];
+    if (!quark.xyeVersions.length) {
+      quark.error = "这个 XyeBBS 页面没有可用的夸克分享，请改为跳转。";
+      renderQuarkDownload();
+      return;
+    }
+    if (quark.xyeVersions.length === 1) {
+      pickXyeVersion(quark.xyeVersions[0]);
+      return;
+    }
+    renderQuarkDownload();
+    return;
+  }
+  if (data.type === "quarkVersions") {
+    if (data.requestId !== quark.requestId || data.shareId !== quark.shareId) return;
+    quark.pending = false;
+    quark.error = "";
+    quark.path = typeof data.path === "string" ? data.path : "";
+    quark.truncated = data.truncated === true;
+    quark.entries = Array.isArray(data.entries) ? data.entries.map(quarkEntry).filter(Boolean) : [];
+    renderQuarkDownload();
+    return;
+  }
+  if (data.type === "quarkDownload") {
+    if (data.requestId && data.requestId !== quark.downloadRequestId) return;
+    if (data.shareId && data.shareId !== quark.shareId) return;
+    quark.pending = false;
+    quark.note = data.accepted ? "已交给启动器处理这个版本。若弹出授权窗口，请在其中确认；取消则不会转存。" : "已取消，没有转存，也没有打开分享窗口。";
+    renderQuarkDownload();
+  }
+}
+function renderQuarkDownload() {
+  const dialog = ui["quark-download"];
+  if (!dialog) return;
+  const choosing = !!(quark.xyeUrl && !quark.shareId);
+  setText("quark-download-title", choosing ? "选择 XyeBBS 版本" : "选择版本");
+  setText("quark-download-note", choosing ? "先选择 XyeBBS 上的一个版本。随后进入夸克下载页，只会转存你点中的一个整合包。" : "在这个下载页选择要安装的版本。只会转存你点中的一个整合包，不会转存整个分享。");
+  setText("quark-download-path", choosing ? "XyeBBS 下载页" : (quark.path || "分享根目录"));
+  const task = state.launcher?.task || {};
+  const phase = typeof task.phase === "string" && task.phase && task.phase !== "就绪" ? task.phase : "";
+  const pendingText = choosing ? "正在读取 XyeBBS 下载页…" : "正在读取分享目录…";
+  const idle = choosing ? (quark.xyeTruncated ? "版本较多，只列出前若干个。其余请改为跳转。" : "选择一个 XyeBBS 版本，随后进入夸克下载页。") : (quark.truncated ? "目录较长，只显示前 200 项。进入子文件夹，或改为跳转。" : "选择一个版本。文件夹只用于进入，不会整夹转存。");
+  const status = quark.error || quark.note || (quark.pending ? pendingText : phase) || idle;
+  setText("quark-download-message", !choosing && quark.truncated && !quark.error && !quark.pending ? `${status} 只显示前 200 项。` : status);
+  ui["quark-download-status"].dataset.state = quark.error ? "error" : quark.pending ? "loading" : "ready";
+  ui["quark-up"].hidden = choosing || !quark.path;
+  ui["quark-up"].disabled = quark.pending;
+  ui["quark-download-retry"].hidden = !quark.error;
+  ui["quark-download-retry"].disabled = quark.pending;
+  ui["quark-download-jump"].disabled = state.link !== "live" || !(quarkShareId(quark.url) || xyeIdentify(quark.url));
+  const list = ui["quark-versions"];
+  if (choosing) {
+    const versions = quark.xyeVersions;
+    const versionKey = JSON.stringify(["xye", versions, quark.pending, quark.error]);
+    if (list.dataset.key === versionKey) return;
+    list.dataset.key = versionKey;
+    if (!versions.length) {
+      const empty = document.createElement("p");
+      empty.className = "panel-description";
+      empty.textContent = quark.pending ? pendingText : (quark.error || "没有可安装的夸克版本。");
+      list.replaceChildren(empty);
+      return;
+    }
+    list.replaceChildren(...versions.map(version => {
+      const button = document.createElement("button");
+      button.type = "button";
+      const label = document.createElement("span");
+      label.textContent = version.label;
+      const meta = document.createElement("small");
+      meta.textContent = [version.minecraft, version.loader].filter(Boolean).join(" · ") || "进入夸克下载";
+      button.append(label, meta);
+      button.disabled = quark.pending;
+      button.addEventListener("click", () => pickXyeVersion(version));
+      return button;
+    }));
+    return;
+  }
+  const visible = quark.entries.filter(entry => entry.directory || /\.(?:mrpack|zip)$/i.test(entry.name));
+  const key = JSON.stringify([quark.path, visible, quark.pending, mutatingLocked()]);
+  if (list.dataset.key === key) return;
+  list.dataset.key = key;
+  if (!visible.length) {
+    const empty = document.createElement("p");
+    empty.className = "panel-description";
+    empty.textContent = quark.pending ? pendingText : "这个目录里没有可安装的整合包。可以返回上级，或改为跳转。";
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...visible.map(entry => {
+    const button = document.createElement("button");
+    button.type = "button";
+    const label = document.createElement("span");
+    label.textContent = entry.name;
+    const meta = document.createElement("small");
+    meta.textContent = entry.directory ? "进入" : (formatSize(entry.size) || "下载此版本");
+    button.append(label, meta);
+    button.disabled = quark.pending || (entry.directory ? false : mutatingLocked());
+    button.addEventListener("click", () => entry.directory ? requestQuarkList(entry.path) : downloadQuarkVersion(entry));
+    return button;
+  }));
 }
 function renderDetail() {
   const item = findDetailItem();
@@ -1234,7 +1608,10 @@ function renderDetail() {
   setText("detail-english", item.englishName || "");
   setText("detail-description", item.description || "暂无简介。");
   setImage(ui["detail-icon"], packArt(item, "icon"));
-  setText("detail-mc", mcVersions(item).join(" / ") || "未提供");
+  setText("detail-mc", versionSummary(item) || "未提供");
+  ui["detail-mc"].title = versionTitle(item);
+  ui["detail-versions-wrap"].hidden = new Set(mcVersions(item)).size < 2;
+  setText("detail-versions", versionTitle(item));
   setText("detail-version", displayVersion(item) || "未提供");
   ui["detail-version"].previousElementSibling.textContent = resourceLabel(resourceTypeOf(item)) + "版本";
   ui["detail-introduction"].querySelector("summary").textContent = resourceLabel(resourceTypeOf(item)) + "介绍";
@@ -1247,10 +1624,15 @@ function renderDetail() {
   setText("detail-message", pending ? "正在获取完整资料与下载来源…" : error || (!live ? "连接启动器后可获取完整详情。" : "完整资料尚未加载。"));
   ui["detail-retry"].hidden = !needsFetch || pending || (!error && !!loaded);
   ui["detail-retry"].disabled = !live || (remote && !catalog.include);
-  const cf = remote && loaded && curseForgeUrl(item);
-  const mr = remote && loaded && modrinthProjectUrl(item);
-  ui["detail-download"].hidden = platformItem ? false : !(cf || mr);
-  ui["detail-download"].disabled = mutatingLocked();
+  const cf = !!(remote && loaded && curseForgeUrl(item));
+  const mrUrl = modrinthProjectUrl(item);
+  const mr = !!((remote && loaded || platformItem) && mrUrl);
+  ui["detail-download"].hidden = platformItem ? false : !(cf || (remote && loaded && !!mrUrl));
+  ui["detail-download"].disabled = state.link !== "live";
+  ui["detail-download"].title = state.link === "live" ? "打开启动器中的版本列表" : "连接启动器后才能选择版本";
+  ui["detail-modrinth"].hidden = !mr;
+  ui["detail-modrinth"].disabled = state.link !== "live";
+  ui["detail-modrinth"].title = mr ? mrUrl : "";
   ui["detail-native"].hidden = remote || platformItem;
   ui["detail-native"].disabled = !live || busy() || !!item.offline;
   const website = externalUrl(item.website);
@@ -1259,38 +1641,45 @@ function renderDetail() {
   ui["detail-website"].textContent = remote ? "在 MC百科查看 ↗" : "访问项目网站 ↗";
   ui["detail-import"].disabled = mutatingLocked();
   ui["detail-import"].hidden = resourceTypeOf(item) !== "modpack";
-  setText("detail-guidance", platformItem ? "在启动器中选择版本并下载，也可访问项目网站查看说明。" : !remote ? "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。" : !loaded ? "完整详情加载后显示实际下载来源。" : cf || mr ? `在启动器的 ${cf ? "CurseForge" : "Modrinth"} 文件列表中选择实际版本下载。` : resourceTypeOf(item) === "datapack" ? "请从作者链接下载，按说明放入存档的 datapacks 目录。" : "暂无平台下载入口，请从作者链接手动下载后导入。");
-  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 PCL CE 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
   const links = remote && loaded && Array.isArray(item.links) ? item.links.filter(link => externalUrl(link?.url)) : [];
-  const linkKey = JSON.stringify([links, live]);
+  const quarkSource = resourceTypeOf(item) === "modpack" && links.some(link => quarkShareId(link.url));
+  const xyeSource = resourceTypeOf(item) === "modpack" && links.some(link => xyeIdentify(link.url));
+  setText("detail-guidance", platformItem ? (mr ? "在启动器中选择版本并下载，或跳转到 Modrinth。" : "在启动器中选择版本并下载，也可访问项目网站查看说明。") : !remote ? "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。" : !loaded ? "完整详情加载后显示实际下载来源。" : quarkSource && (cf || mr) ? `可进入 ${cf ? "CurseForge" : "Modrinth"} 文件列表${cf && mr ? "，或跳转到 Modrinth" : ""}，或从夸克网盘进入下载页自己选择版本。` : quarkSource ? "夸克网盘不会直接打开网页。点击后可选跳转，或进入下载页自己选择版本。直接下载只会转存选中的一个文件。" : cf && mr ? "在启动器的 CurseForge 文件列表中选择版本下载，或跳转到 Modrinth。" : cf || mr ? `在启动器的 ${cf ? "CurseForge" : "Modrinth"} 文件列表中选择实际版本下载。${mr && !cf ? "也可跳转到 Modrinth。" : ""}` : resourceTypeOf(item) === "datapack" ? "请从作者链接下载，按说明放入存档的 datapacks 目录。" : "暂无平台下载入口，请从作者链接手动下载后导入。");
+  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 PCL CE 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
+  if (xyeSource && resourceTypeOf(item) !== "plugin") setText("detail-guidance", `${ui["detail-guidance"].textContent} XyeBBS 点击后可选跳转，或读取下载页中的夸克分享再选择文件。`);
+  const linkKey = JSON.stringify([links, live, resourceTypeOf(item)]);
   if (ui["detail-links"].dataset.key !== linkKey) {
     ui["detail-links"].dataset.key = linkKey;
     ui["detail-links"].replaceChildren(...links.map(link => {
+      const xye = resourceTypeOf(item) === "modpack" ? xyeIdentify(link.url) : "";
+      const shareId = !xye && resourceTypeOf(item) === "modpack" ? quarkShareId(link.url) : "";
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = `${link.name || "作者提供的地址"} ↗`;
-      button.title = link.url;
+      button.textContent = shareId || xye ? (link.name || (xye ? "XyeBBS" : "夸克网盘")) : `${link.name || "作者提供的地址"} ↗`;
+      button.title = shareId || xye ? "选择跳转或直接下载" : link.url;
       button.disabled = !live;
-      button.addEventListener("click", () => openExternal(link.url));
+      button.addEventListener("click", () => xye ? openXyeChoice(link, item) : shareId ? openQuarkChoice(link, item) : openExternal(link.url));
       return button;
     }));
   }
   const download = platformItem ? platform.downloads.get(key) : remote ? catalog.downloads.get(id) : null;
   setText("download-status", download?.message || "");
   ui["download-retry"].hidden = !download?.error || (remote && !cf && !mr);
-  ui["download-retry"].disabled = mutatingLocked();
+  ui["download-retry"].disabled = state.link !== "live";
 }
 function downloadMcmod() {
   const item = findDetailItem();
   const wiki = wikiId(item), id = mcKey(item);
-  if (!item || !isMcmod(item) || !catalog.details.has(id) || !(curseForgeUrl(item) || modrinthProjectUrl(item)) || mutatingLocked()) return;
+  if (!item || !isMcmod(item) || !catalog.details.has(id) || !(curseForgeUrl(item) || modrinthProjectUrl(item)) || state.link !== "live") return;
   if (post({ type: "mcmod", operation: "download", id: wiki, ...resourcePayload(resourceTypeOf(item)) })) {
     // The contract has no success acknowledgement. Report only the hand-off,
     // never a completed download or invented launcher progress.
     catalog.downloads.set(id, { error: false, message: "已请求启动器打开版本列表，请在原生界面选择文件。" });
+    openVersionWait(item.name);
     renderDetail();
   } else {
     catalog.downloads.set(id, { error: true, message: "无法连接启动器，请重新连接后重试。" });
+    closeVersionWait();
     renderDetail();
   }
 }
@@ -1336,6 +1725,7 @@ ui["pack-detail"].addEventListener("cancel", event => {
   if (state.composing || event.isComposing || event.keyCode === 229) event.preventDefault();
 });
 ui["pack-detail"].addEventListener("close", () => {
+  closeVersionWait();
   catalog.detailId = "";
   if (catalog.returnFocus?.isConnected) catalog.returnFocus.focus();
   else ui.search.focus();
@@ -1347,7 +1737,36 @@ ui["detail-retry"].addEventListener("click", () => {
 });
 ui["detail-website"].addEventListener("click", () => openExternal(findDetailItem()?.website));
 ui["detail-download"].addEventListener("click", downloadCurrent);
+ui["version-wait"].addEventListener("cancel", event => {
+  if (state.composing || event.isComposing || event.keyCode === 229) {
+    event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+  closeVersionWait();
+  if (ui["pack-detail"].open) ui["pack-detail"].close();
+});
+ui["detail-modrinth"].addEventListener("click", () => openExternal(modrinthProjectUrl(findDetailItem())));
 ui["download-retry"].addEventListener("click", downloadCurrent);
+ui["close-quark-choice"].addEventListener("click", () => ui["quark-choice"].close());
+ui["quark-choice-cancel"].addEventListener("click", () => ui["quark-choice"].close());
+ui["quark-jump"].addEventListener("click", () => { const url = quark.url; ui["quark-choice"].close(); openExternal(url); });
+ui["quark-direct"].addEventListener("click", () => quark.xyeUrl ? resolveXye() : openQuarkDownloadPage());
+ui["quark-choice"].addEventListener("cancel", event => {
+  if (state.composing || event.isComposing || event.keyCode === 229) event.preventDefault();
+});
+ui["quark-choice"].addEventListener("close", () => {
+  if (quark.openingDownload) return;
+  if (!ui["quark-download"].open && quark.returnFocus?.isConnected) quark.returnFocus.focus();
+});
+ui["close-quark-download"].addEventListener("click", () => ui["quark-download"].close());
+ui["quark-up"].addEventListener("click", () => { if (!ui["quark-up"].disabled) requestQuarkList(quarkParent(quark.path)); });
+ui["quark-download-retry"].addEventListener("click", () => quark.xyeUrl && !quark.shareId ? resolveXye() : requestQuarkList(quark.path));
+ui["quark-download-jump"].addEventListener("click", () => openExternal(quark.url));
+ui["quark-download"].addEventListener("cancel", event => {
+  if (state.composing || event.isComposing || event.keyCode === 229) event.preventDefault();
+});
+ui["quark-download"].addEventListener("close", () => { quark.requestId = ""; quark.downloadRequestId = ""; });
 ui["detail-import"].addEventListener("click", () => { if (!mutatingLocked()) postLauncher("import"); });
 ui["detail-native"].addEventListener("click", () => {
   const item = findDetailItem();
@@ -1419,6 +1838,8 @@ ui["clear-search"].addEventListener("click", () => {
 });
 ui.primary.addEventListener("click", () => {
   if (ui.primary.disabled) return;
+  const featured = featuredPack();
+  if (featured && (isMcmod(featured) || isPlatform(featured) || featured.id !== selectedPack()?.id)) { openDetail(featured.id); return; }
   const pack = selectedPack();
   if (!pack || pack.offline) return;
   if (pack.updateAvailable || !pack.installed) enqueue("primary");
@@ -1473,6 +1894,11 @@ ui["launch-installed"].addEventListener("click", () => { closeMenu(); enqueue("p
 for (const id of ["close-services", "dismiss-services"]) ui[id].addEventListener("click", () => ui.services.close());
 ui.services.addEventListener("close", () => ui["open-services"].focus());
 for (const id of ["catalog-url", "quark-url"]) ui[id].addEventListener("input", () => { ui[id].setCustomValidity(""); updateUrlWarning(); });
+ui["catalog-default"].addEventListener("click", () => {
+  ui["catalog-url"].value = catalogDefaultUrls().join("\n");
+  ui["catalog-url"].setCustomValidity("");
+  updateUrlWarning();
+});
 ui["services-form"].addEventListener("submit", event => {
   event.preventDefault();
   if (ui["save-services"].disabled) return;
@@ -1502,23 +1928,23 @@ if (connected()) {
 
 function ensureMcl() {
   if (!sourceEnabled("mcl") || browse.resourceType !== "modpack" || state.link !== "live" || busy() || taskOf().error) return;
-  const urls = catalogUrls(), key = JSON.stringify(urls);
+  const urls = effectiveCatalogUrls(), key = JSON.stringify(urls);
   if (!urls.length || urls.includes(state.launcher?.config?.catalogSource) || mcl.requestedKey === key) return;
   mcl.requestedKey = key;
   postLauncher("refresh");
 }
 function refreshMcl() {
   if (state.link !== "live" || busy()) return;
-  mcl.requestedKey = JSON.stringify(catalogUrls());
+  mcl.requestedKey = JSON.stringify(effectiveCatalogUrls());
   markPending("refresh"); render(); postLauncher("refresh");
 }
 function renderMclExplorer() {
   const shown = sourceEnabled("mcl") && browse.resourceType === "modpack";
   ui["mcl-status"].hidden = !shown;
   if (!shown) return;
-  const urls = catalogUrls(), source = state.launcher?.config?.catalogSource || "";
+  const urls = effectiveCatalogUrls(), source = state.launcher?.config?.catalogSource || "";
   const live = state.link === "live";
-  setText("mcl-message", !live ? "MCL · 未连接启动器，目录状态未知" : source ? `MCL · ${packs().length} 个条目 · 上次成功目录：${source}` : urls.length ? "MCL · 已配置远端 index.json，等待启动器返回目录；内置测试包仍可用。" : "MCL · 请在目录配置中填写远端 index.json；当前仅有内置测试包。");
+  setText("mcl-message", !live ? "MCL · 未连接启动器，目录状态未知" : source ? `MCL · ${packs().length} 个条目 · 上次成功目录：${source}` : urls.length ? (catalogDefaultActive() ? "MCL · 未配置目录源，正在使用 GitHub 默认源；内置测试包仍可用。" : "MCL · 已配置远端 index.json，等待启动器返回目录；内置测试包仍可用。") : "MCL · 请在目录配置中填写远端 index.json；当前仅有内置测试包。");
   ui["mcl-refresh"].disabled = !live || busy();
   ui["mcl-config"].disabled = !live;
 }
@@ -1566,6 +1992,7 @@ function applyPresentation(visible) {
   if (typeof visible !== "boolean") return;
   state.presented = visible;
   if (!visible) {
+    closeVersionWait();
     clearTimeout(association.timer); association.timer = 0;
     if (association.active) { clearTimeout(association.active.timeout); association.active = null; }
   }
@@ -1573,9 +2000,22 @@ function applyPresentation(visible) {
   if (visible) ensureBrowse();
 }
 
+function openVersionWait(name) {
+  const label = typeof name === "string" && name ? name : "";
+  setText("version-wait-title", "正在打开版本列表");
+  setText("version-wait-text", "已请求启动器打开版本列表，请在原生界面选择文件。");
+  setText("version-wait-note", label ? `正在解析「${label}」，完成后会自动跳转。` : "正在解析项目，完成后会自动跳转。");
+  const dialog = ui["version-wait"];
+  if (dialog && !dialog.open) dialog.showModal();
+}
+function closeVersionWait() {
+  const dialog = ui["version-wait"];
+  if (dialog?.open) dialog.close();
+}
+
 function modrinthProjectUrl(item) {
   const type = resourceTypeOf(item);
-  for (const value of [item?.modrinthUrl, ...(Array.isArray(item?.links) ? item.links.map(link => link?.url) : [])]) {
+  for (const value of projectUrls(item)) {
     const key = ExplorerIdentity.projectLink(value, type);
     if (key && key.startsWith(`${type}:modrinth:`) && new URL(value).protocol === "https:") return value;
   }
@@ -1655,7 +2095,7 @@ function renderSourceSummary() {
     if (state.link !== "live") { segments.push(`${name}：未连接`); continue; }
     if (source === "mcl") {
       segments.push(`MCL ${packs().length}`);
-      if (!catalogUrls().length) segments.push("MCL 目录未配置");
+      if (!effectiveCatalogUrls().length) segments.push("MCL 目录未配置");
       if (sourceEnabled("mcl") && taskOf().busy) loading.push("MCL");
       if (taskOf().error) errors.push(`MCL：${taskOf().error}`);
       continue;

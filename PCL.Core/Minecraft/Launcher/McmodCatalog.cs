@@ -86,6 +86,53 @@ public sealed class McmodCatalog(HttpClient http)
             html => ParseDetail(html, id, resourceType), token).ConfigureAwait(false);
     }
 
+    public static Uri SearchAddress(string query)
+    {
+        var text = query.Trim();
+        if (text.Length is < 1 or > 80 || text.Any(char.IsControl)) throw new ArgumentException("无效的百科搜索词。");
+        return new Uri("https://search.mcmod.cn/s?key=" + Uri.EscapeDataString(text));
+    }
+
+    public async Task<IReadOnlyList<McmodPack>> SearchModpacksAsync(string query, CancellationToken token = default)
+    {
+        var address = SearchAddress(query);
+        return (IReadOnlyList<McmodPack>)await CachedAsync("search:" + address.AbsoluteUri, address.AbsoluteUri, ParseSearch, token).ConfigureAwait(false);
+    }
+
+    public static IReadOnlyList<McmodPack> ParseSearch(string html)
+    {
+        var root = Document(html);
+        var nodes = ByClass(root, "result-item").ToArray();
+        if (nodes.Length == 0)
+            nodes = root.Descendants("a").Where(a => ModpackId(a) > 0).Select(a => a.ParentNode).Where(n => n is not null).Distinct().Cast<HtmlNode>().ToArray();
+        var items = new List<McmodPack>();
+        foreach (var node in nodes)
+        {
+            var anchor = node.Descendants("a").FirstOrDefault(a => ModpackId(a) > 0);
+            if (anchor is null) continue;
+            var id = ModpackId(anchor);
+            var name = Text(anchor);
+            if (name.Length == 0 || items.Any(p => p.WikiId == id)) continue;
+            var body = ByClass(node, "body").FirstOrDefault();
+            var desc = Text(body);
+            if (desc == name) desc = "";
+            items.Add(new McmodPack { WikiId = id, ResourceType = "modpack", Name = name, Description = desc });
+            if (items.Count >= 12) break;
+        }
+        if (items.Count == 0 && !html.Contains("没有找到", StringComparison.Ordinal) && !html.Contains("search-result", StringComparison.Ordinal) && !html.Contains("result-item", StringComparison.Ordinal))
+            throw new InvalidDataException("未识别到百科搜索结果，页面可能暂不可用。");
+        return items;
+    }
+
+    private static int ModpackId(HtmlNode anchor)
+    {
+        var url = HttpUrl(anchor.GetAttributeValue("href", ""));
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
+            !(uri.Host.Equals("www.mcmod.cn", StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("mcmod.cn", StringComparison.OrdinalIgnoreCase))) return 0;
+        var match = Regex.Match(uri.AbsolutePath, @"^/modpack/(\d+)\.html$");
+        return match.Success && int.TryParse(match.Groups[1].Value, out var id) && id > 0 ? id : 0;
+    }
+
     private async Task<object> CachedAsync(string key, string path, Func<string, object> parse, CancellationToken token)
     {
         // Serialize/coalesce identical requests and keep site load bounded even on rapid clicks.
@@ -101,7 +148,8 @@ public sealed class McmodCatalog(HttpClient http)
             var wait = _nextRequestAt - DateTimeOffset.UtcNow;
             if (wait > TimeSpan.Zero) await Task.Delay(wait, timeout.Token).ConfigureAwait(false);
             _nextRequestAt = DateTimeOffset.UtcNow.AddSeconds(1.5);
-            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(Origin, path));
+            var address = key.StartsWith("search:", StringComparison.Ordinal) ? new Uri(key[7..]) : new Uri(Origin, path);
+            using var request = new HttpRequestMessage(HttpMethod.Get, address);
             request.Headers.UserAgent.ParseAdd("MOONCL/1.0 (+https://www.mcmod.cn/modpack.html)");
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)

@@ -155,4 +155,35 @@ public sealed class PackCatalogClientTest
         StringAssert.Contains(exception.Message, "全部 2 个目录源");
         Assert.AreEqual(1, old.Packs.Count);
     }
+
+    [TestMethod]
+    public void EmptyConfigurationFallsBackToTheShippedDefaultSources()
+    {
+        CollectionAssert.AreEqual(PackCatalogSources.DefaultUrls, PackCatalogSources.Effective([]));
+        CollectionAssert.AreEqual(PackCatalogSources.DefaultUrls, PackCatalogSources.Effective(null));
+        CollectionAssert.AreEqual(new[] { Primary }, PackCatalogSources.Effective([Primary]));
+        CollectionAssert.AreEqual(PackCatalogSources.DefaultUrls, PackCatalogSources.Normalize(PackCatalogSources.DefaultUrls));
+    }
+
+    // Verifies the shipped index.json through the real parser: the default source must
+    // resolve to a committed file that carries the SRE pack for a fresh install.
+    [TestMethod]
+    public void ShippedDefaultSourceCarriesTheStarRailPack()
+    {
+        Assert.IsTrue(File.Exists(ShippedCatalog()), ShippedCatalog());
+        Assert.AreEqual(2, PackCatalogSources.DefaultUrls.Length);
+        foreach (var url in PackCatalogSources.DefaultUrls) StringAssert.Contains(url, "pack-catalog/index.json");
+        var packs = PackCatalog.Parse(File.ReadAllText(ShippedCatalog()), new Uri(PackCatalogSources.DefaultUrls[0]));
+        var sre = packs.Single(p => p.Id == PackCatalog.StarRailId);
+        Assert.AreEqual("StarRailHarpyExpress", sre.Name);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(sre.Version));
+        Assert.AreEqual("1.21.1", sre.Minecraft);
+        Assert.IsTrue(sre.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        StringAssert.StartsWith(sre.DownloadUrl, "https://gitee.com/starrailexpress/starrailexpress/releases/download/modpack/");
+        StringAssert.StartsWith(sre.ShareUrl, "https://pan.quark.cn/s/");
+    }
+
+    private static string ShippedCatalog(
+        [System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", "..", "docs", "pack-catalog", "index.json"));
 }

@@ -35,7 +35,8 @@ public static class ModInstanceList
             if (value is null)
                 return;
             // 重置缓存的 Mod 文件夹
-            PageDownloadCompDetail.cachedFolder.Clear();
+             PageDownloadCompDetail.cachedFolder.Clear();
+             PackReleaseWatcher.Queue(value);
         }
     }
 

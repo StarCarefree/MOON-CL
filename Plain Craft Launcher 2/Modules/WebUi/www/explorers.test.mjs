@@ -19,7 +19,7 @@ try {
  const snapshot=(presets=[index],config={})=>({type:'browse',launcher:{presets,selected:index.id,task:{},config}});
  const reply=(req,items,totalPages=3)=>send({type:'platformList',source:req.source,page:req.page,resourceType:req.resourceType||'modpack',requestId:req.requestId,totalPages,items});
  assert.equal(await page.locator('#source-mcl').isChecked(),true); assert.equal(await page.locator('#source-curseforge').isChecked(),true);
- assert.equal(await page.locator('#source-modrinth').isChecked(),false); assert.equal(await page.locator('#include-mcmod').isChecked(),false);
+ assert.equal(await page.locator('#source-modrinth').isChecked(),false); assert.equal(await page.locator('#include-mcmod').isChecked(),true);
  assert.equal(await page.locator('.explorer-option input').first().getAttribute('id'),'source-mcl');
  await send(snapshot()); let cfReq=await last('curseforge'); await reply(cfReq,[cf]);
  assert.equal(await page.locator('#cards [data-pack-id]').nth(1).getAttribute('data-pack-id'),index.id);
@@ -84,7 +84,7 @@ try {
  await page.locator('#include-mcmod').uncheck(); await page.locator('#source-modrinth').uncheck();
  await page.locator('#type-world').click(); cfReq=await last('curseforge'); assert.equal(cfReq.resourceType,'world');
  await reply(cfReq,[{...cf,id:'curseforge-999',projectId:'999',resourceType:'world',name:'DEMO map'}]);
- assert.equal(await card(index.id).count(),0); assert.equal(await page.locator('.stage').isVisible(),false);
+ assert.equal(await card(index.id).count(),0); assert.equal(await page.locator('.stage').isVisible(),true); assert.equal(await page.locator('#pack-name').textContent(),'DEMO map');
  await page.locator('#type-modpack').click(); assert.equal(await card(index.id).count(),1);
  assert.equal(await page.locator('#platform-next-page').isDisabled(),false);
  console.log('PASS MCL stays modpack-only and cached resource/source page totals restore');

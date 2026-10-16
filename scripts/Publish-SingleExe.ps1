@@ -32,7 +32,12 @@ param(
 
     [string]$FixedRuntimeDirectory = '',
 
-    [switch]$ReadyToRun
+    [switch]$ReadyToRun,
+
+    # Troubleshooting: restore the old transient build output / server behavior.
+    [switch]$NoBuildCache,
+
+    [switch]$DisableBuildServers
 )
 
 Set-StrictMode -Version Latest
@@ -48,6 +53,12 @@ $script:StubDir = Join-Path $PSScriptRoot 'single-exe'
 . (Join-Path $PSScriptRoot 'single-exe\PackageLayout.ps1')
 function Write-Step([string]$Message) { Write-Host "[single-exe] $Message" }
 function Throw-Single([string]$Message) { throw "Publish-SingleExe: $Message" }
+
+function Invoke-TimedStep([string]$Name, [scriptblock]$Action) {
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    try { & $Action }
+    finally { Write-Step ("{0}: {1:N2} 秒" -f $Name, $watch.Elapsed.TotalSeconds) }
+}
 
 function Get-ScratchRoot {
     if (-not [string]::IsNullOrWhiteSpace($env:PI_SCRATCH_DIR)) {
@@ -149,6 +160,19 @@ function Resolve-OutputFile {
     return (Join-Path $dir 'MOONCL.exe')
 }
 
+function Get-BuildOutputDirectory {
+    if ($NoBuildCache) { return (Join-Path $script:WorkRoot 'build\') }
+    # Keep build output across invocations; PID-based output invalidates WPF/C#
+    # incremental checks even when no source changed. Never cache the publish
+    # directory: a fresh publish/stage prevents deleted files leaking into a pack.
+    $repoBytes = [System.Text.Encoding]::UTF8.GetBytes($script:RepoRoot.ToLowerInvariant())
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $repoKey = ([System.BitConverter]::ToString($sha.ComputeHash($repoBytes))).Replace('-', '').Substring(0, 16) }
+    finally { $sha.Dispose() }
+    $mode = if ($ReadyToRun) { 'r2r' } else { 'il' }
+    return (Join-Path $script:ScratchRoot "pcl-cy-single-exe-cache\$repoKey\$Architecture\$Configuration\$mode\build\")
+}
+
 function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
     $rid = "win-$Architecture"
     $platform = Get-MsbuildPlatform $Architecture
@@ -178,11 +202,11 @@ function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
         '-p:DebuggerSupport=false',
         "-p:RuntimeIdentifier=$rid",
         "-p:Platform=$platform",
-        ('-p:OutputPath=' + (Join-Path $script:WorkRoot 'build\')),
+        ('-p:OutputPath=' + (Get-BuildOutputDirectory)),
         '-o', $OutDir,
-        '--nologo',
-        '--disable-build-servers'
+        '--nologo'
     )
+    if ($DisableBuildServers) { $publishArgs += '--disable-build-servers' }
     Write-Step ("dotnet " + ($publishArgs -join ' '))
     & $DotNetExe @publishArgs
     Assert-LastExitCode 'dotnet publish'
@@ -302,27 +326,16 @@ internal static class BuildInfo
 }
 
 function Find-RoslynCsc([string]$DotNetExe) {
-    $roots = New-Object System.Collections.Generic.List[string]
-    $beside = Join-Path (Split-Path -Parent $DotNetExe) 'sdk'
-    if (Test-Path -LiteralPath $beside -PathType Container) { $roots.Add($beside) }
-    foreach ($name in @('DOTNET_ROOT', 'DOTNET_ROOT_X64', 'DOTNET_ROOT_ARM64')) {
-        foreach ($scope in @('Process', 'User', 'Machine')) {
-            $value = [Environment]::GetEnvironmentVariable($name, $scope)
-            if ([string]::IsNullOrWhiteSpace($value)) { continue }
-            $sdk = Join-Path $value.Trim() 'sdk'
-            if ((Test-Path -LiteralPath $sdk -PathType Container) -and -not $roots.Contains($sdk)) { $roots.Add($sdk) }
-        }
+    # Ask the host which SDK it selected (including global.json), rather than
+    # recursively walking all SDK files and lexically sorting version strings.
+    $version = ((& $DotNetExe --version) -join '').Trim()
+    Assert-LastExitCode 'dotnet --version'
+    if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+        Throw-Single "无法确定 SDK 版本: $version"
     }
-    $hits = New-Object System.Collections.Generic.List[string]
-    foreach ($sdkRoot in $roots) {
-        foreach ($file in @(Get-ChildItem -LiteralPath $sdkRoot -Filter 'csc.dll' -Recurse -ErrorAction SilentlyContinue)) {
-            if ($file.FullName -match '\\Roslyn\\bincore\\csc\.dll$' -and -not $hits.Contains($file.FullName)) {
-                $hits.Add($file.FullName)
-            }
-        }
-    }
-    if ($hits.Count -eq 0) { Throw-Single "找不到 SDK Roslyn csc.dll。已查: $($roots -join '; ')" }
-    return @($hits | Sort-Object -Descending)[0]
+    $csc = Join-Path (Split-Path -Parent $DotNetExe) "sdk\$version\Roslyn\bincore\csc.dll"
+    if (-not (Test-Path -LiteralPath $csc -PathType Leaf)) { Throw-Single "找不到所选 SDK 的 Roslyn: $csc" }
+    return $csc
 }
 
 function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe, [string]$ZipPath, [string]$Hash, [bool]$WebViewBundled) {
@@ -411,6 +424,7 @@ function Invoke-SingleExeSelfCheck {
 }
 
 function Main {
+    $totalWatch = [System.Diagnostics.Stopwatch]::StartNew()
     if ($Architecture -ne 'x64' -and $Architecture -ne 'arm64') {
         Throw-Single '必须指定 -Architecture x64 或 arm64'
     }
@@ -426,14 +440,17 @@ function Main {
     New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
     Write-Step "dotnet=$dotnet"
     Write-Step '框架依赖单文件：不自包含、不修剪、原生库打进启动器。外层不再压缩，也不把数据接到 exe 尾部。'
-    Invoke-DotNetPublish $dotnet $publishDir
+    Write-Step ("构建输出: {0}" -f (Get-BuildOutputDirectory))
+    Invoke-TimedStep 'dotnet publish' { Invoke-DotNetPublish $dotnet $publishDir }
     $launcher = Join-Path $publishDir 'Plain Craft Launcher 2.exe'
-    Assert-NoMissingLibraries $publishDir $launcher
-    Copy-PublishPayload $publishDir $stage
-    Copy-FixedRuntime $stage
-    New-PayloadZip $stage $zip
+    Invoke-TimedStep '校验原生库' { Assert-NoMissingLibraries $publishDir $launcher }
+    Invoke-TimedStep '暂存与 ZIP' {
+        Copy-PublishPayload $publishDir $stage
+        Copy-FixedRuntime $stage
+        New-PayloadZip $stage $zip
+    }
     $webview = Test-Path -LiteralPath (Join-Path $stage 'WebView2Runtime\msedgewebview2.exe') -PathType Leaf
-    Compile-Bootstrapper $dotnet $stub $zip (Get-FileSha256 $zip) ([bool]$webview)
+    Invoke-TimedStep '编译外层 exe 与 PE 校验' { Compile-Bootstrapper $dotnet $stub $zip (Get-FileSha256 $zip) ([bool]$webview) }
     $outFile = Resolve-OutputFile
     if (Test-Path -LiteralPath $outFile) { Remove-Item -LiteralPath $outFile -Force }
     Copy-Item -LiteralPath $stub -Destination $outFile -Force
@@ -447,6 +464,7 @@ function Main {
     Write-Host '  runtime: not bundled; missing libraries are listed before launch'
     Write-Host '  consent: download only after 同意并下载'
     Write-Host '  trim   : false; native libraries required'
+    Write-Host ("  time   : {0:N2} 秒" -f $totalWatch.Elapsed.TotalSeconds)
 }
 
 function Clear-SingleExeWork {

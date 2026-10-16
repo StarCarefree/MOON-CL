@@ -26,7 +26,9 @@ public partial class PageLaunchRight : IRefreshable
         };
         Loaded += (_, _) => Init();
         Loaded += (_, _) => Refresh();
-        Loaded += (_, _) => PlayHybridEntrance();
+        Loaded += (_, _) => PlayPageSwitch();
+        PageEnter += PlayPageSwitch;
+        PageExit += PlayPageExit;
         Unloaded += (_, _) => _DisposeHomepageLiveWatcher();
     }
 

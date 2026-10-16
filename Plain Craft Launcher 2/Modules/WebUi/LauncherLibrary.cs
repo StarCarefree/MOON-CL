@@ -15,6 +15,7 @@ internal sealed class LauncherLibrary : IDisposable
     private sealed record Settings(string CatalogUrl = "", string QuarkServiceUrl = "", string[]? CatalogUrls = null);
     private sealed record Installed(string Id, string Version);
     private readonly string _settingsPath = Path.Combine(AppContext.BaseDirectory, "PCL", "launcher-library.json");
+    private readonly string _quarkSessionPath = Path.Combine(AppContext.BaseDirectory, "PCL", "quark-open-session.bin");
     private readonly HttpClient _http = new(new HttpClientHandler { UseCookies = false }) { Timeout = TimeSpan.FromMinutes(30) };
     private readonly PackTransfer _transfer;
     private readonly HttpClient _catalogHttp = new(new HttpClientHandler
@@ -62,6 +63,7 @@ internal sealed class LauncherLibrary : IDisposable
     private string _selected = PackCatalog.StarRailId;
     private string _phase = "就绪";
     private string _error = "";
+    private bool _selectCreatedInstance;
     private double _progress;
     private DateTime _nextScan;
     private string _lastDirectory = "";
@@ -141,7 +143,10 @@ internal sealed class LauncherLibrary : IDisposable
                 ["progress"] = ModLaunch.isLaunching ? ModLaunch.mcLaunchLoader.Progress : _installer is not null ? .25 + .75 * _installer.Progress : _progress, ["error"] = _error },
             ["config"] = new JsonObject { ["catalogUrl"] = _settings.CatalogUrl,
                 ["catalogUrls"] = new JsonArray(_settings.CatalogUrls!.Select(url => (JsonNode?)JsonValue.Create(url)).ToArray()),
-                ["catalogSource"] = _catalogSource, ["quarkServiceUrl"] = _settings.QuarkServiceUrl }
+                ["catalogSource"] = _catalogSource, ["quarkServiceUrl"] = _settings.QuarkServiceUrl,
+                ["catalogDefaultActive"] = _settings.CatalogUrls!.Length == 0,
+                ["catalogDefaultUrls"] = new JsonArray(PackCatalogSources.DefaultUrls.Select(url => (JsonNode?)JsonValue.Create(url)).ToArray()),
+                ["quarkAuthorized"] = QuarkOpenSessionFile.TryLoad(_quarkSessionPath)?.HasRefreshableToken == true }
         };
     }
 
@@ -374,10 +379,12 @@ internal sealed class LauncherLibrary : IDisposable
         {
             await RunAsync(async token =>
             {
-                if (operation != "checkUpdates" && _settings.CatalogUrls!.Length > 0)
+                if (operation != "checkUpdates")
                 {
+                    // No configured source means the shipped GitHub default, never "no catalog".
+                    var sources = PackCatalogSources.Effective(_settings.CatalogUrls);
                     _phase = "获取预设目录";
-                    var result = await _catalogClient.FetchAsync(_settings.CatalogUrls, token,
+                    var result = await _catalogClient.FetchAsync(sources, token,
                         (index, count, _) => _phase = $"获取预设目录源 {index}/{count}");
                     var packs = result.Packs.ToList();
                     if (packs.All(p => p.Id != PackCatalog.StarRailId)) packs.Insert(0, PackCatalog.BuiltIn);
@@ -388,6 +395,13 @@ internal sealed class LauncherLibrary : IDisposable
                 }
                 await CheckInstalledAsync(token, operation == "checkUpdates");
             });
+            return;
+        }
+        if (operation == "authorizeQuark")
+        {
+            if (ModMain.MyMsgBox("将打开夸克官方授权页。完成后，通过夸克下载只会把目标整合包转存到你的网盘目录 MOONCL，不会转存整个分享，也不会读取浏览器 Cookie。",
+                "授权夸克网盘", "打开授权页", "取消") != 1) return;
+            await RunAsync(AuthorizeQuarkAsync);
             return;
         }
         if (operation is not ("primary" or "installQuark")) return;
@@ -425,7 +439,23 @@ internal sealed class LauncherLibrary : IDisposable
             else { SelectInstance(existing.Instance); Launch(form); }
             return;
         }
-        await RunAsync(token => InstallAsync(pack, operation == "installQuark", token));
+        var useQuark = operation == "installQuark";
+        if (!string.IsNullOrEmpty(pack.ShareUrl) && !HasQuarkSession())
+        {
+            var ordinary = !useQuark && !string.IsNullOrEmpty(pack.DownloadUrl);
+            if (ModMain.MyMsgBox("尚未授权夸克网盘。是否现在授权，以便只转存这一个整合包后再下载？不会转存整个分享，也不会读取浏览器 Cookie。",
+                "使用夸克网盘下载", "授权并下载", ordinary ? "继续普通下载" : "取消") != 1)
+            {
+                if (!ordinary) { _phase = "已取消"; return; }
+            }
+            else
+            {
+                await RunAsync(AuthorizeQuarkAsync);
+                if (!HasQuarkSession()) return;
+                useQuark = true;
+            }
+        }
+        await RunAsync(token => InstallAsync(pack, useQuark, token));
     }
 
     internal static void SelectInstance(McInstance instance)
@@ -455,6 +485,102 @@ internal sealed class LauncherLibrary : IDisposable
         finally { _installer = null; _work = null; PackWorkInProgress = false; _nextScan = DateTime.MinValue; PublishWork(); }
     }
 
+    private bool HasQuarkSession() =>
+        QuarkOpenSessionFile.TryLoad(_quarkSessionPath)?.HasRefreshableToken == true;
+
+    private async Task AuthorizeQuarkAsync(CancellationToken token)
+    {
+        _phase = "正在请求夸克授权页";
+        var client = new QuarkOpenClient(_http);
+        var start = await client.BeginAuthorizeAsync(token).ConfigureAwait(false);
+        if (!QuarkClientLaunch.TryOpenAuthorizePage(start.PageUrl))
+            throw new InvalidOperationException("无法打开夸克授权页。未保存令牌。");
+        _phase = "请在浏览器中完成夸克授权";
+        var deadline = DateTime.UtcNow.AddMinutes(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            token.ThrowIfCancellationRequested();
+            var session = await client.PollAsync(start, token).ConfigureAwait(false);
+            if (session is not null)
+            {
+                QuarkOpenSessionFile.Save(_quarkSessionPath, session);
+                _phase = "夸克网盘已授权。下载时只会转存目标整合包。";
+                return;
+            }
+            await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(false);
+        }
+        throw new TimeoutException("夸克授权未完成。未保存令牌，也未下载文件。");
+    }
+
+    private async Task<bool> TryOwnedDownloadAsync(PackDefinition pack, string temp, CancellationToken token, Action<string> setArchive)
+    {
+        var session = QuarkOpenSessionFile.TryLoad(_quarkSessionPath);
+        if (session is null || !session.HasRefreshableToken) return false;
+        _phase = "转存单个整合包到已授权网盘";
+        var owned = await new QuarkOpenClient(_http).ResolveOwnedAsync(session, pack.ShareUrl, pack.SharePath, token).ConfigureAwait(false);
+        QuarkOpenSessionFile.Save(_quarkSessionPath, owned.Session);
+        var archive = PackCatalog.SafePath(temp, owned.Download.FileName);
+        _phase = "下载已转存的整合包";
+        try
+        {
+            await _transfer.DownloadAsync(owned.Download.Url, archive, "", HashAlgorithmName.SHA256,
+                new Progress<double>(p => _progress = p * .25), token, owned.Download.Headers).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            throw new QuarkOpenException("目标整合包已转存到网盘目录 MOONCL，但下载仍被拒绝。请在夸克网盘中下载该文件后再导入。没有转存整个分享。", true);
+        }
+        setArchive(archive);
+        return true;
+    }
+
+    private static string OpenShareFallback(string shareUrl, bool authorized)
+    {
+        var openedDrive = QuarkClientLaunch.TryOpenDriveShare(shareUrl);
+        var openedBrowser = !openedDrive && QuarkClientLaunch.TryOpenShare(shareUrl);
+        if (authorized)
+            return openedDrive || openedBrowser
+                ? "已授权网盘，但转存或下载目标文件失败，没有转存整个分享。已打开分享窗口，请手动下载后再导入。"
+                : "已授权网盘，但转存或下载目标文件失败，没有转存整个分享。";
+        if (openedDrive)
+            return "夸克 CDN 拒绝了匿名直链。尚未授权夸克开放平台，因此没有转存或下载。已唤起分享窗口，但该窗口没有下载接口。请在服务配置中授权后重试，或手动下载后再导入。";
+        if (openedBrowser)
+            return "夸克 CDN 拒绝了匿名直链。尚未授权夸克开放平台，因此没有转存或下载。已打开分享窗口，请手动下载后再导入。也可先在服务配置中授权夸克网盘。";
+        return "夸克 CDN 拒绝了匿名直链（HTTP 412）。该文件超过访客通道大小限制，不能直接下载。";
+    }
+
+    private static string PackDownloadTemp()
+    {
+        const long needed = 256L * 1024 * 1024;
+        var system = Path.GetTempPath();
+        if (HasRoom(system, needed)) return system;
+        foreach (var candidate in new[] { @"I:\tmp-pcl", @"D:\pcl-cy\tmp", @"G:\download" })
+        {
+            try
+            {
+                var root = Path.GetPathRoot(candidate);
+                if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+                Directory.CreateDirectory(candidate);
+                if (HasRoom(candidate, needed)) return candidate;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        throw new IOException("临时盘空间不足，已停止下载，没有写入整合包。");
+    }
+
+    private static bool HasRoom(string path, long bytes)
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(path));
+            return !string.IsNullOrEmpty(root) && new DriveInfo(root).AvailableFreeSpace >= bytes;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
     private async Task InstallAsync(PackDefinition pack, bool quark, CancellationToken token)
     {
         var folder = ModFolder.mcFolderSelected;
@@ -463,7 +589,7 @@ internal sealed class LauncherLibrary : IDisposable
         var target = Path.Combine(folder, "versions", instanceName);
         var archive = pack.LocalArchive;
         var version = pack.Version;
-        var temp = Path.Combine(Path.GetTempPath(), "PCL-PackDownloads", Guid.NewGuid().ToString("N"));
+        var temp = Path.Combine(PackDownloadTemp(), "PCL-PackDownloads", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
         {
@@ -481,28 +607,37 @@ internal sealed class LauncherLibrary : IDisposable
                 }
                 archive = PackCatalog.SafePath(temp, fileName);
                 _phase = "下载整合包";
-                 try
-                 {
-                     await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, HashAlgorithmName.SHA256,
-                         new Progress<double>(p => _progress = p * .25), token, headers);
-                 }
-                 catch (HttpRequestException ex) when (quark && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
-                 {
-                     var openedDrive = QuarkClientLaunch.TryOpenDriveShare(pack.ShareUrl);
-                     var openedBrowser = !openedDrive && QuarkClientLaunch.TryOpenShare(pack.ShareUrl);
-                     throw new InvalidOperationException(openedDrive
-                         ? "夸克 CDN 拒绝了匿名直链。已唤起夸克网盘客户端分享窗口，但该窗口没有下载接口，也没有保存目标文件。请在窗口中手动下载后再导入。"
-                         : openedBrowser
-                         ? "夸克 CDN 拒绝了匿名直链。已打开夸克分享窗口，请在窗口中进入目标文件后下载，再手动导入。"
-                         : ex.Message, ex);
-                 }
+                try
+                {
+                    await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, HashAlgorithmName.SHA256,
+                        new Progress<double>(p => _progress = p * .25), token, headers);
+                }
+                catch (HttpRequestException ex) when (quark && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+                {
+                    string? ownedArchive = null;
+                    try
+                    {
+                        if (!await TryOwnedDownloadAsync(pack, temp, token, path => ownedArchive = path).ConfigureAwait(false))
+                            throw new InvalidOperationException(OpenShareFallback(pack.ShareUrl, false));
+                    }
+                    catch (QuarkOpenException owned) when (owned.SavedToDrive)
+                    {
+                        throw new InvalidOperationException(owned.Message);
+                    }
+                    catch (QuarkOpenException owned)
+                    {
+                        throw new InvalidOperationException(OpenShareFallback(pack.ShareUrl, true) + owned.Message);
+                    }
+                    archive = ownedArchive ?? throw new InvalidOperationException("夸克下载没有产生目标文件。");
+                }
             }
             token.ThrowIfCancellationRequested();
             if (ModFolder.mcFolderSelected != folder) throw new InvalidOperationException("游戏目录已改变，请重新安装。");
             var metadata = await Task.Run(() => PackArchive.ReadMetadata(archive), token);
             if (!string.IsNullOrWhiteSpace(metadata?.Version)) version = metadata.Version;
             _phase = "调用启动器导入整合包";
-            _installer = await Task.Run(() => ModModpack.ModpackInstall(archive, instanceName), token);
+             var mcmodId = pack.Id.StartsWith("mcmod-", StringComparison.Ordinal) && int.TryParse(pack.Id.AsSpan(6), out var wikiId) && wikiId > 0 ? wikiId.ToString() : null;
+             _installer = await Task.Run(() => ModModpack.ModpackInstall(archive, instanceName, mcmodId: mcmodId), token);
             if (_installer is null) throw new InvalidOperationException("此包的原生安装器未返回任务，请使用手动导入。");
             using var registration = token.Register(() => _installer?.Abort());
             await Task.Run(() => _installer.WaitForExit());
@@ -514,9 +649,47 @@ internal sealed class LauncherLibrary : IDisposable
             WriteMarker(instance, pack.Id, version);
             ModInstanceList.mcInstanceListForceRefresh = true;
             await Task.Run(() => ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, folder, ModLoader.LoaderFolderRunType.ForceRun, 1, @"versions\", true));
-            SelectInstance(instance); _selected = pack.Id; _progress = 1; _phase = "安装完成";
+            SelectInstance(instance); _selected = _selectCreatedInstance ? "instance:" + instance.Name : pack.Id; _progress = 1; _phase = "安装完成";
         }
         finally { try { Directory.Delete(temp, true); } catch (IOException) { } }
+    }
+
+    internal async Task<bool> InstallBrowseQuarkAsync(int wikiId, string name, string shareUrl, string sharePath)
+    {
+        if (_disposed || _work is not null) throw new InvalidOperationException("已有任务在进行，请稍候。");
+        if (ModWatcher.hasRunningMinecraft || ModLaunch.isLaunching) throw new InvalidOperationException("请先关闭游戏，再下载整合包。");
+        if (wikiId is < 1 or > 10000000 || !QuarkClientLaunch.IsShareUrl(shareUrl)) throw new InvalidDataException("夸克分享无效，没有转存。");
+        var file = sharePath.Split('/')[^1];
+        if (file.Length == 0 || !(file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("请选择一个 .mrpack 或 .zip。没有转存。");
+        var pack = new PackDefinition
+        {
+            Id = "mcmod-" + wikiId, Name = BrowsePackName(name), ShareUrl = shareUrl, SharePath = sharePath, FileName = file
+        };
+        if (!HasQuarkSession())
+        {
+            if (ModMain.MyMsgBox("尚未授权夸克网盘。是否现在授权，以便只转存你选中的这一个整合包后再下载？不会转存整个分享，也不会读取浏览器 Cookie。",
+                "使用夸克网盘下载", "授权并下载", "取消") != 1)
+            {
+                _phase = "已取消";
+                return false;
+            }
+            await RunAsync(AuthorizeQuarkAsync);
+            if (_error.Length > 0) throw new InvalidOperationException(_error);
+            if (!HasQuarkSession()) return false;
+        }
+        _selectCreatedInstance = true;
+        try { await RunAsync(token => InstallAsync(pack, true, token)); }
+        finally { _selectCreatedInstance = false; }
+        if (_error.Length > 0) throw new InvalidOperationException(_error);
+        return _phase != "已取消";
+    }
+
+    private static string BrowsePackName(string name)
+    {
+        var cleaned = new string((name ?? "").Where(ch => !char.IsControl(ch)).ToArray()).Trim();
+        if (cleaned.Length == 0) return "整合包";
+        return cleaned.Length <= 80 ? cleaned : cleaned[..80];
     }
 
     private static void WriteMarker(McInstance instance, string id, string version)

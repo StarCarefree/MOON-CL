@@ -4,7 +4,8 @@ using System.IO.Compression;
 using System.Text.RegularExpressions;
 using PCL.Core.App;
 using PCL.Core.App.Localization;
-using PCL.Core.Utils;
+ using PCL.Core.Utils;
+ using PCL.Core.Minecraft.Launcher;
 
 namespace PCL;
 
@@ -885,12 +886,15 @@ public class McInstance
                 {
                     Desc = Desc;
                 }
-                else
-                {
-                    Desc = States.Instance.CustomInfo[PathInstance];
-                    if ((Desc ?? "") == (GetDefaultDescription() ?? ""))
-                        Desc = "";
-                }
+                 else
+                 {
+                     Desc = States.Instance.CustomInfo[PathInstance];
+                     var intro = PackIdentityStore.TryRead(PathInstance)?.SidebarLine;
+                     if (!string.IsNullOrWhiteSpace(intro))
+                         Desc = intro;
+                     else if ((Desc ?? "") == (GetDefaultDescription() ?? ""))
+                         Desc = "";
+                 }
 
                 // 确定实例收藏状态
                 IsStar = States.Instance.Starred[PathInstance];

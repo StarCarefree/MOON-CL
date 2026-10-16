@@ -277,6 +277,8 @@ internal sealed partial class WebUiController : IDisposable
         _disposed = true;
         _mcmodLifetime.Cancel();
         _mcmodHttp.Dispose();
+        _quarkListHttp.Dispose();
+        _xyeHttp.Dispose();
         ReleaseView();
         _library?.Dispose();
         _library = null;

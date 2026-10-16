@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using PCL;
 using PCL.Core.App.Localization;
@@ -134,6 +136,14 @@ namespace PCL
         /// </summary>
         internal static List<McAssetsToken> McAssetsListGet(McInstance mcInstance)
         {
+            // 正常索引走精确查找；非标准大小写仍与通用 JsonNode 解析器兼容。
+            static JsonElement Property(JsonElement value, string name)
+            {
+                if (value.TryGetProperty(name, out var property)) return property;
+                foreach (var item in value.EnumerateObject())
+                    if (item.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return item.Value;
+                return default;
+            }
             var indexName = McAssetsGetIndexName(mcInstance);
             try
             {
@@ -141,32 +151,42 @@ namespace PCL
                 if (!File.Exists($@"{ModFolder.mcFolderSelected}assets\indexes\{indexName}.json"))
                     throw new FileNotFoundException(Lang.Text("Minecraft.Error.AssetIndexNotFound"),
                         Path.Combine(ModFolder.mcFolderSelected, "assets", "indexes", indexName + ".json"));
-                var result = new List<McAssetsToken>();
-                var json = (JsonObject)ModBase.GetJson(
-                    ModBase.ReadFile($@"{ModFolder.mcFolderSelected}assets\indexes\{indexName}.json"));
+                // 索引只读，无需为每个资源构建可变 JsonNode 树或将数字转成字符串再解析。
+                using var document = JsonDocument.Parse(
+                    ModBase.ReadFile($@"{ModFolder.mcFolderSelected}assets\indexes\{indexName}.json"),
+                    JsonCompat.DocumentOptions);
+                var json = document.RootElement;
+                var remapValue = Property(json, "map_to_resources");
+                var remap = remapValue.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null) &&
+                            remapValue.Deserialize<bool>(JsonCompat.SerializerOptions);
+                var virtualValue = Property(json, "virtual");
+                var virtualFiles = virtualValue.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null) &&
+                                   virtualValue.Deserialize<bool>(JsonCompat.SerializerOptions);
+                var objects = Property(json, "objects");
+                var result = new List<McAssetsToken>(objects.GetPropertyCount());
+                // 同一对象可能对应多个逻辑资源名，只检查/下载一次。旧版按逻辑路径保存，不能按哈希去重。
+                // 大小有冲突的条目仍分别校验，不能因为去重隐藏损坏的索引。
+                var seen = remap || virtualFiles ? null : new HashSet<(string Hash, long Size)>();
+                var assetsRoot = Path.Combine(ModFolder.mcFolderSelected, "assets");
+                var targetRoot = remap ? Path.Combine(mcInstance.PathIndie, "resources") :
+                    virtualFiles ? Path.Combine(assetsRoot, "virtual", "legacy") : Path.Combine(assetsRoot, "objects");
 
-                // 读取列表
-                foreach (var file in json["objects"].AsObject())
+                foreach (var file in objects.EnumerateObject())
                 {
-                    string localPath;
-                    var hash = file.Value["hash"].ToString();
-                    if (json["map_to_resources"] is not null && json["map_to_resources"].ToObject<bool>())
-                        // Remap
-                        localPath = Path.Combine(mcInstance.PathIndie, "resources", file.Key.Replace("/", @"\"));
-                    else if (json["virtual"] is not null && json["virtual"].ToObject<bool>())
-                        // Virtual
-                        localPath = Path.Combine(ModFolder.mcFolderSelected, "assets", "virtual", "legacy", file.Key.Replace("/", @"\"));
-                    else
-                    {
-                        // 正常
-                        localPath = Path.Combine(ModFolder.mcFolderSelected, "assets", "objects", McAssetsHashPrefix(hash), hash);
-                    }
+                    var hash = Property(file.Value, "hash").GetString();
+                    var sizeValue = Property(file.Value, "size");
+                    var size = sizeValue.ValueKind == JsonValueKind.String
+                        ? long.Parse(sizeValue.GetString(), CultureInfo.InvariantCulture) : sizeValue.GetInt64();
+                    if (seen is not null && !seen.Add((hash, size))) continue;
+                    var localPath = remap || virtualFiles
+                        ? Path.Combine(targetRoot, file.Name.Replace("/", @"\"))
+                        : Path.Combine(targetRoot, McAssetsHashPrefix(hash), hash);
                     result.Add(new McAssetsToken
                     {
                         localPath = localPath,
-                        sourcePath = file.Key,
+                        sourcePath = file.Name,
                         hash = hash,
-                        size = long.Parse(file.Value["size"].ToString())
+                        size = size
                     });
                 }
 

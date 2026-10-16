@@ -18,10 +18,6 @@
           <span id="connection-text">静态预览 · 未连接本地启动器</span>
         </p>
       </div>
-      <form id="search-form" class="search" role="search">
-        <label for="search">搜索</label>
-        <input id="search" type="search" placeholder="名称、版本或描述" autocomplete="off" spellcheck="false" enterkeyhint="search" />
-      </form>
       <div class="toolbar-actions">
         <button id="refresh" type="button" disabled>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.4-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/><path d="M13.6 2.2v3.2H10.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/></svg>
@@ -42,7 +38,44 @@
     <p id="selection-live" class="visually-hidden" aria-live="polite"></p>
 
     <main>
-      <section class="stage" aria-label="精选整合包">
+      <section class="discover-controls" aria-label="搜索与筛选">
+        <div class="discover-heading">
+          <div><p class="eyebrow">EXPLORE YOUR NEXT WORLD</p><h2>发现你的下一个世界</h2></div>
+          <form id="search-form" class="search" role="search">
+            <label for="search" class="visually-hidden">搜索</label>
+            <div class="search-entry"><input id="search" type="search" placeholder="名称、版本或描述" autocomplete="off" spellcheck="false" enterkeyhint="search" /><button type="submit" class="search-submit">搜索</button></div>
+          </form>
+        </div>
+        <div class="source-tabs resource-types" role="tablist" aria-label="资源类型">
+          <button id="type-modpack" type="button" role="tab" aria-selected="true" aria-controls="cards">整合包</button>
+          <button id="type-datapack" type="button" role="tab" aria-selected="false" aria-controls="cards">数据包</button>
+          <button id="type-world" type="button" role="tab" aria-selected="false" aria-controls="cards">地图</button>
+          <button id="type-shader" type="button" role="tab" aria-selected="false" aria-controls="cards">光影包</button>
+          <button id="type-resourcepack" type="button" role="tab" aria-selected="false" aria-controls="cards">材质包</button>
+          <button id="type-plugin" type="button" role="tab" aria-selected="false" aria-controls="cards">服务器插件</button>
+        </div>
+        <div class="source-row"><span class="control-label">资源来源</span>
+          <div class="explorer-picker" role="group" aria-label="平台资源源（可多选）">
+            <label class="explorer-option" title="MCL 整合包 · 远端 index.json"><input id="source-mcl" type="checkbox" checked /> <span>MCL 整合包</span></label>
+            <label class="explorer-option" title="CurseForge 平台源"><input id="source-curseforge" type="checkbox" checked /> <span>CurseForge</span></label>
+            <label class="explorer-option" title="Modrinth 平台源"><input id="source-modrinth" type="checkbox" /> <span>Modrinth</span></label>
+            <label id="source-mcmod" class="explorer-option" title="MC百科平台源"><input id="include-mcmod" type="checkbox" checked /> <span>MC百科</span></label>
+          </div>
+        </div>
+        <form id="filters" class="filters" aria-label="筛选资源">
+          <label for="filter-mc">MC 版本<select id="filter-mc"><option value="">全部版本</option></select></label>
+          <label for="filter-loader">加载器<select id="filter-loader"><option value="">全部加载器</option></select></label>
+          <label id="filter-sort-label" for="filter-sort">排序<select id="filter-sort">
+            <option value="relevance">相关度</option><option value="downloads">下载量</option><option value="updated">最近更新</option><option value="newest">最新发布</option>
+          </select></label>
+          <label for="filter-category">分类<select id="filter-category"><option value="">全部分类</option></select></label>
+          <button id="reset-filters" type="button" class="ghost">重置筛选</button>
+        </form>
+        <div class="filter-help"><small id="category-help" role="status"></small><button id="category-retry" type="button" hidden>重试分类</button></div>
+        <div class="catalog-caption"><p id="catalog-caption-main"></p><p id="catalog-caption-note"></p></div>
+      </section>
+      <div class="section-head discovery-title"><h2 id="discovery-title">来源发现</h2><p id="discovery-note">根据当前来源与筛选展示</p></div>
+      <section class="stage" aria-labelledby="discovery-title">
         <article class="banner" id="banner" aria-labelledby="pack-name">
           <div class="depth" aria-hidden="true">
             <span class="sun"></span>
@@ -105,33 +138,6 @@
           <h2 id="catalog-title">全部条目</h2>
           <p id="result-count" aria-live="polite">1 个条目</p>
         </div>
-        <div class="source-tabs resource-types" role="tablist" aria-label="资源类型">
-          <button id="type-modpack" type="button" role="tab" aria-selected="true" aria-controls="cards">整合包</button>
-          <button id="type-datapack" type="button" role="tab" aria-selected="false" aria-controls="cards">数据包</button>
-          <button id="type-world" type="button" role="tab" aria-selected="false" aria-controls="cards">地图</button>
-          <button id="type-shader" type="button" role="tab" aria-selected="false" aria-controls="cards">光影包</button>
-          <button id="type-resourcepack" type="button" role="tab" aria-selected="false" aria-controls="cards">材质包</button>
-          <button id="type-plugin" type="button" role="tab" aria-selected="false" aria-controls="cards">服务器插件</button>
-        </div>
-        <div class="explorer-picker" role="group" aria-label="探索器（可多选）">
-          <label class="explorer-option"><input id="source-mcl" type="checkbox" checked /> <span>MCL 整合包<small>远端 index.json</small></span></label>
-          <label class="explorer-option"><input id="source-curseforge" type="checkbox" checked /> <span>CurseForge</span></label>
-          <label class="explorer-option"><input id="source-modrinth" type="checkbox" /> <span>Modrinth</span></label>
-          <label id="source-mcmod" class="explorer-option"><input id="include-mcmod" type="checkbox" /> <span>MC百科</span></label>
-        </div>
-        <form id="filters" class="filters" aria-label="筛选资源">
-          <label for="filter-mc">MC 版本<select id="filter-mc"><option value="">全部版本</option></select></label>
-          <label for="filter-loader">加载器<select id="filter-loader"><option value="">全部加载器</option></select></label>
-          <label id="filter-sort-label" for="filter-sort">排序<select id="filter-sort">
-            <option value="relevance">相关度</option>
-            <option value="downloads">下载量</option>
-            <option value="updated">最近更新</option>
-            <option value="newest">最新发布</option>
-          </select></label>
-          <label for="filter-category">分类<select id="filter-category"><option value="">全部分类</option></select><small id="category-help" role="status"></small><button id="category-retry" type="button" hidden>重试分类</button></label>
-          <button id="reset-filters" type="button" class="ghost">重置筛选</button>
-        </form>
-        <div class="catalog-caption"><p id="catalog-caption-main">CurseForge 搜索、版本、加载器与排序由平台处理 · 每页 24 个</p><p id="catalog-caption-note">本地预设按搜索框即时筛选 · 未连接时不请求网络 · 分类仅用于 MC百科</p></div>
         <div id="sources-summary" class="source-status" role="status" aria-live="polite"><p id="sources-summary-message"></p><div id="sources-summary-actions"></div></div>
         <div id="mcl-status" class="source-status" role="status"><p id="mcl-message">MCL 远端整合包目录</p><button id="mcl-refresh" type="button" disabled>刷新 MCL 目录</button><button id="mcl-config" type="button">目录配置</button></div>
         <div id="platform-status" class="source-status" role="status" aria-live="polite">
@@ -179,6 +185,7 @@
     </header>
     <dl class="detail-meta">
       <div><dt>MC 版本</dt><dd id="detail-mc"></dd></div>
+      <div id="detail-versions-wrap" class="detail-versions" hidden><dt>完整版本</dt><dd><details><summary>查看已列出的版本（跨度不代表连续兼容）</summary><p id="detail-versions"></p></details></dd></div>
       <div><dt>整合包版本</dt><dd id="detail-version"></dd></div>
       <div><dt>加载器</dt><dd id="detail-loader"></dd></div>
       <div><dt>作者</dt><dd id="detail-authors"></dd></div>
@@ -191,6 +198,7 @@
       <div id="detail-links" class="detail-links" aria-label="作者提供的下载地址"></div>
       <div class="detail-actions">
         <button id="detail-download" type="button" class="primary" hidden>选择版本并下载</button>
+        <button id="detail-modrinth" type="button" hidden>跳转到 Modrinth</button>
         <button id="detail-import" type="button">导入已下载的整合包</button>
         <button id="detail-native" type="button" hidden>在启动器中查看</button>
         <button id="detail-website" type="button" hidden>在 MC百科查看</button>
@@ -204,10 +212,19 @@
     </details>
   </dialog>
 
+  <dialog id="version-wait" aria-labelledby="version-wait-title" aria-busy="true">
+    <div class="version-wait">
+      <span class="wait-spin" aria-hidden="true"></span>
+      <h2 id="version-wait-title">正在打开版本列表</h2>
+      <p id="version-wait-text" class="panel-description">已请求启动器打开版本列表，请在原生界面选择文件。</p>
+      <p id="version-wait-note" class="panel-description">正在解析项目，完成后会自动跳转。</p>
+    </div>
+  </dialog>
+
   <dialog id="quark-choice" aria-labelledby="quark-choice-title">
     <div class="panel-heading">
       <div>
-        <p class="eyebrow">夸克网盘</p>
+        <p id="quark-choice-eyebrow" class="eyebrow">夸克网盘</p>
         <h2 id="quark-choice-title">下载来源</h2>
       </div>
       <button id="close-quark-choice" type="button" aria-label="关闭夸克选项">×</button>
@@ -227,7 +244,7 @@
       </div>
       <button id="close-quark-download" type="button" aria-label="关闭下载页">×</button>
     </div>
-    <p class="panel-description">在这个下载页选择要安装的版本。只会转存你点中的一个整合包，不会转存整个分享。</p>
+    <p id="quark-download-note" class="panel-description">在这个下载页选择要安装的版本。只会转存你点中的一个整合包，不会转存整个分享。</p>
     <p id="quark-download-path" class="panel-description"></p>
     <div id="quark-download-status" class="source-status" role="status"><p id="quark-download-message"></p></div>
     <div id="quark-versions" class="quark-versions" aria-label="夸克分享中的版本"></div>
@@ -249,9 +266,13 @@
       </div>
       <p class="panel-description">地址只交给本地启动器保存和访问，此页不会直接请求网络，也不会读取或显示账号令牌。留空可清除已保存的地址。夸克地址留空时，启动器使用官方匿名解析。授权按钮会让启动器打开夸克官方授权页；令牌只保存在本机。</p>
       <label class="field" for="catalog-url">MCL 远端目录源 · index.json
-        <textarea id="catalog-url" rows="5" maxlength="16400" placeholder="https://primary.example/index.json&#10;https://backup.example/index.json" autocomplete="off" spellcheck="false" aria-describedby="catalog-help catalog-source-status"></textarea>
+        <textarea id="catalog-url" rows="5" maxlength="16400" placeholder="https://primary.example/index.json&#10;https://backup.example/index.json" autocomplete="off" spellcheck="false" aria-describedby="catalog-help catalog-source-status catalog-default-status"></textarea>
         <small id="catalog-help">每行一个，最多 8 个。第一行为主源，其余按顺序备用；读取失败自动尝试下一个。填写的是目录 JSON，不是 ZIP/MRPACK 下载地址。</small>
       </label>
+      <div class="field-actions">
+        <button id="catalog-default" type="button" class="ghost">使用 GitHub 默认源</button>
+      </div>
+      <p id="catalog-default-status" class="panel-description" role="status"></p>
       <p id="catalog-source-status" class="panel-description" role="status"></p>
       <label class="field" for="quark-url">夸克解析服务
         <input id="quark-url" type="url" inputmode="url" placeholder="可选：http://127.0.0.1:5000/" autocomplete="off" spellcheck="false" />

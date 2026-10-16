@@ -1096,6 +1096,23 @@ public static partial class ModAnimation
         };
     }
 
+    /// <summary>
+    ///     悬停时从中心隐隐放大，离开时收回。时长和曲线比 100ms 线性变色慢，避免闪一下。
+    /// </summary>
+    public static void HoverScale(FrameworkElement element, bool expand, string name)
+    {
+        if (element is null) return;
+        element.RenderTransformOrigin = new Point(0.5d, 0.5d);
+        if (element.RenderTransform is not ScaleTransform)
+            element.RenderTransform = new ScaleTransform(1d, 1d);
+        var current = ((ScaleTransform)element.RenderTransform).ScaleX;
+        var target = expand ? 1.032d : 1d;
+        var delta = target - current;
+        if (Math.Abs(delta) < 0.0001d) return;
+        AniStart(AaScaleTransform(element, delta, expand ? 360 : 280, ease: new AniEaseHover()), name);
+    }
+
+
     // RotateTransform
 
     /// <summary>
@@ -1304,6 +1321,27 @@ public static partial class ModAnimation
             return 1d - Math.Pow(ModBase.MathClamp(1d - t, 0d, 1d), (double)p);
         }
     }
+
+    /// <summary>
+    ///     悬停放大。前段接近线性以便马上有反馈，后段减速停住，不会在前几十毫秒里走完。
+    /// </summary>
+    public class AniEaseHover : AniEase
+    {
+        public override double GetValue(double t)
+        {
+            return HoverProgress(t);
+        }
+
+        /// <summary>0 到 1。smoothstep 与 ease-out quad 各半，保证单调且终点斜率为 0。</summary>
+        public static double HoverProgress(double t)
+        {
+            t = ModBase.MathClamp(t, 0d, 1d);
+            var smooth = t * t * (3d - 2d * t);
+            var settle = 1d - (1d - t) * (1d - t);
+            return 0.5d * smooth + 0.5d * settle;
+        }
+    }
+
 
     /// <summary>
     ///     平滑开始与结束。

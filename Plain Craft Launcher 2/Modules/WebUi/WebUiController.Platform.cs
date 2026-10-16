@@ -85,7 +85,11 @@ internal sealed partial class WebUiController
                 if (resourceType == "plugin")
                 {
                     var selected = ServerPluginDownloads.Pick(pack.MinecraftVersions);
-                    if (selected is null) return;
+                    if (selected is null)
+                    {
+                        Send(new JsonObject { ["type"] = "platformError", ["operation"] = "download", ["message"] = "未选择插件服务器，没有打开版本列表。" });
+                        return;
+                    }
                     ServerPluginDownloads.PreferredServerId = selected.Id;
                     Hide();
                     form.PageChange(new FormMain.PageStackData

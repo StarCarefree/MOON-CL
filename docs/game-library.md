@@ -76,7 +76,7 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 
 ## 夸克下载适配与当前阻碍
 
-`G:\Quark` 是官方浏览器安装目录，并非 HTTP 下载服务。夸克网盘客户端由 `qkclouddrive:` 协议唤起，同样不是下载服务。实现没有扫描用户登录态或修改网盘，默认走官方匿名 token → 分页 detail → `file/download?pr=ucpro&fr=win`，保留目标 `share_fid_token`。不使用会触发目标文件大小限制的 `fr=pc`，也不默认转存分享。
+`G:\Quark` 是官方浏览器安装目录，并非 HTTP 下载服务。夸克网盘客户端由 `qkclouddrive:` 协议唤起，同样不是下载服务。默认仍走官方匿名 token → 分页 detail → `file/download?pr=ucpro&fr=win`，保留目标 `share_fid_token`。不使用会触发目标文件大小限制的 `fr=pc`，也不读取浏览器 Cookie。
 
 可选自建服务：`POST <服务地址>/resolve`，请求与返回结构如下：
 
@@ -90,7 +90,9 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 
 响应头只接受 Cookie、Referer、User-Agent；令牌和签名 URL 不发往 WebUI。元数据响应限制为 4 MiB，解析超时 30 秒，取消可传播。自建服务应仅提供给可信客户端。
 
-实测（本机直接调用官方接口，未使用自建解析服务）：分享目录和目标 `.mrpack` 都存在，约 93,571,003 字节，匿名 `fr=win` 能解析出签名 URL，但 CDN GET 仍返回 **HTTP 412**。改用 `fr=pc` 时官方直接拒绝，业务码 `23018`，提示 `download file size limit`。已按官方协议唤起夸克网盘客户端 `qkclouddrive://openShareModal?pwdid=e3f623dd58d6&source=13&pwd_id=e3f623dd58d6&share_dn=e3f623dd58d6`（不带 user_token）。窗口标题为「分享链接」，监听的下载目录没有新的 `.mrpack`。浏览器本地接口 `127.0.0.1:9128` 只有 `desktop_info`、`desktop_share_visiting`、`desktop_caller` 等通知路由，没有下载路由；当时 `desktop_info.isLogin` 为 false。因此夸克启动器只能打开分享窗口，不能自动保存这个嵌套文件。412 时优先唤起该协议；未注册网盘客户端时才回退到浏览器分享页。不会把已有同名文件当作下载成功。
+实测（本机直接调用官方接口，未使用自建解析服务）：分享目录和目标 `.mrpack` 都存在，约 93,571,003 字节，匿名 `fr=win` 能解析出签名 URL，但 CDN GET 仍返回 **HTTP 412**。改用 `fr=pc` 时官方直接拒绝，业务码 `23018`，提示 `download file size limit`。已按官方协议唤起夸克网盘客户端 `qkclouddrive://openShareModal?pwdid=e3f623dd58d6&source=13&pwd_id=e3f623dd58d6&share_dn=e3f623dd58d6`（不带 user_token）。窗口标题为「分享链接」，监听的下载目录没有新的 `.mrpack`。浏览器本地接口 `127.0.0.1:9128` 只有通知路由，没有下载路由。因此未授权时，夸克客户端只能打开分享窗口。
+
+已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 整理的开放平台契约，网关 `https://open-api-drive.quark.cn`）：下载时如果还没有夸克授权，会先弹出窗口询问是否授权并下载。同意后才打开 `https://pan.quark.cn` 授权页；服务配置里的「授权夸克网盘」仍可单独授权。令牌用 DPAPI 存在 `PCL/quark-open-session.bin`，不进入 WebUI，也不从浏览器 Cookie 读取。授权后若匿名直链返回 412，只把路径指向的那一个 `.mrpack`/`.zip` 转存到用户网盘目录 `MOONCL`（不传 `save_all`，大于 512 MiB 直接拒绝），再调用 `get_download_url`，下载时只带该会话自己的 `x_pan_client_id` / `x_pan_access_token`。拒绝授权且没有普通下载地址时不会转存，也不会打开分享窗口。浏览页整合包的夸克来源同样使用这条路径：点击后可选跳转或直接下载，直接下载先进入版本页，玩家选定一个文件后才转存那一个文件。开放平台签名探测已返回 HTTP 200、`status=0`、授权页主机为 `pan.quark.cn`；本次没有完成用户授权，因此没有实测这个 `.mrpack` 的转存或下载。匿名 412 仍然成立，不能把已有同名文件当作成功。
 
 ## 验证命令
 
@@ -99,7 +101,7 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 & 'I:\dev\dotnet\dotnet.exe' build '.\Plain Craft Launcher 2\Plain Craft Launcher 2.csproj' `
   --no-restore -c Release -p:Platform=x64 -p:OutputPath=bin\LibraryCheck\
 & 'I:\dev\dotnet\dotnet.exe' test '.\PCL.Core.Test\PCL.Core.Test.csproj' --no-restore `
-  --filter 'FullyQualifiedName~PackCatalogTest|FullyQualifiedName~PackTransferTest|FullyQualifiedName~ExternalPackUpdaterTest|FullyQualifiedName~QuarkPackClientTest|FullyQualifiedName~QuarkClientLaunchTest'
+  --filter 'FullyQualifiedName~PackCatalogTest|FullyQualifiedName~PackTransferTest|FullyQualifiedName~ExternalPackUpdaterTest|FullyQualifiedName~QuarkPackClientTest|FullyQualifiedName~QuarkClientLaunchTest|FullyQualifiedName~QuarkOpenClientTest'
 node --check '.\Plain Craft Launcher 2\Modules\WebUi\www\app.js'
 python .\scripts\tests\test_pack_catalog_server.py
 ```

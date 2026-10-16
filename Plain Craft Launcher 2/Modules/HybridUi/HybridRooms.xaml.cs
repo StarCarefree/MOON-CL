@@ -33,7 +33,7 @@ public partial class HybridRooms : UserControl, IDisposable
     private DateTime? _presenceDue;
     private string? _verifiedRouteId;
     private string _profileName = "";
-    private bool _busy, _refreshing, _closed, _initialized, _inRoom, _sessionOfficial = true;
+    private bool _busy, _refreshing, _closed, _initialized, _inRoom, _roomView, _sessionOfficial = true;
     private readonly string _settingsPath;
     private string SettingsPath => _settingsPath;
     private bool IsOfficial => Coordinator.SelectedIndex != 1;
@@ -94,6 +94,9 @@ public partial class HybridRooms : UserControl, IDisposable
         var joined = room is not null;
         if (!joined) _inRoom = false;
         HallPanel.Visibility = Show(!_inRoom); RoomPanel.Visibility = Show(_inRoom && joined);
+        var roomView = RoomPanel.Visibility == Visibility.Visible;
+        var viewChanged = roomView != _roomView;
+        _roomView = roomView;
         IdentityPanel.IsEnabled = !_busy && !joined;
         CustomUrl.Visibility = Show(!IsOfficial);
         SecurityHint.Text = IsOfficial && RoomServiceDirectory.OfficialUsesPlaintext
@@ -114,6 +117,7 @@ public partial class HybridRooms : UserControl, IDisposable
         if (room is null)
         {
             ClearLeases(); _members.Clear(); _routes.Clear(); Endpoint.Text = ""; RefreshPages();
+            if (viewChanged && IsVisible) PlayPageSwitch();
             return;
         }
         ReconcileLeases(room);
@@ -141,6 +145,37 @@ public partial class HybridRooms : UserControl, IDisposable
         RefreshPages();
         var target = GetLaunchTarget();
         Endpoint.Text = target is null ? "" : RoomConnection.FormatEndpoint(target.Host, target.Port);
+        if (viewChanged && IsVisible) PlayPageSwitch();
+    }
+
+    internal void PlayPageSwitch()
+    {
+        if (Visibility != Visibility.Visible) return;
+        if (Overlay.Visibility == Visibility.Visible)
+        {
+            HybridMotion.Enter("Hybrid Rooms Enter", OverlayFrame);
+            return;
+        }
+        var sections = new List<FrameworkElement?>();
+        if (LobbyContent.Children.Count > 0)
+            sections.Add(LobbyContent.Children[0] as FrameworkElement);
+        if (HallPanel.Visibility == Visibility.Visible)
+        {
+            foreach (var child in HallPanel.Children.OfType<FrameworkElement>())
+            {
+                if (!ReferenceEquals(child, EntryForms)) { sections.Add(child); continue; }
+                if (EntryForms.Visibility != Visibility.Visible) continue;
+                foreach (var card in EntryForms.Children.OfType<FrameworkElement>())
+                    sections.Add(card);
+            }
+        }
+        if (RoomPanel.Visibility == Visibility.Visible)
+            foreach (var child in RoomPanel.Children.OfType<FrameworkElement>())
+                sections.Add(child);
+        var status = LobbyContent.Children.OfType<FrameworkElement>().LastOrDefault();
+        if (status is not null && !ReferenceEquals(status, HallPanel) && !ReferenceEquals(status, RoomPanel))
+            sections.Add(status);
+        HybridMotion.Enter("Hybrid Rooms Enter", sections.ToArray());
     }
     private void Mode_Changed(object sender, SelectionChangedEventArgs e)
     {

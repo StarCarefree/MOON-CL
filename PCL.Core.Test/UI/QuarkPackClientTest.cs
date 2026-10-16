@@ -309,4 +309,58 @@ public sealed class QuarkPackClientTest
         Assert.IsFalse(File.Exists(target));
         Assert.IsFalse(File.Exists(target + ".partial"));
     }
+
+    [TestMethod]
+    public async Task ListReturnsFoldersAndPacksWithoutTokensOrDownload()
+    {
+        using var handler = new Handler((request, _) =>
+        {
+            Assert.AreEqual("drive-pc.quark.cn", request.RequestUri!.Host);
+            Assert.AreEqual("win", Query(request.RequestUri)["fr"]);
+            Assert.IsFalse(request.Headers.Contains("Cookie"));
+            Assert.IsFalse(request.RequestUri.AbsolutePath.Contains("file/download", StringComparison.Ordinal));
+            Assert.IsFalse(request.RequestUri.AbsolutePath.Contains("save", StringComparison.OrdinalIgnoreCase));
+            if (request.Method == HttpMethod.Post) return Task.FromResult(Json(new { code = 0, data = new { stoken = Secret } }));
+            return Task.FromResult(Json(new { data = new { list = new object[] { Item("1.20.1", "folder", true), Item("pack.mrpack", "file"), Item("readme.txt", "note"), Item("..", "bad") } } }));
+        });
+        using var http = new HttpClient(handler);
+        var listing = await new QuarkPackClient(http).ListAsync(Share, " ", CancellationToken.None);
+        var json = JsonSerializer.Serialize(listing);
+        Assert.IsFalse(json.Contains(Secret, StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("file-token", StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("stoken", StringComparison.Ordinal));
+        Assert.AreEqual("", listing.ToString());
+        Assert.AreEqual(3, listing.Entries.Count);
+        Assert.IsTrue(listing.Entries[0].Directory);
+        Assert.AreEqual("pack.mrpack", listing.Entries[1].ToString());
+        Assert.AreEqual(123, listing.Entries[1].Size);
+        Assert.AreEqual(2, handler.Calls);
+    }
+
+    [TestMethod]
+    public async Task ListRefusesTraversalWithoutRequest()
+    {
+        using var handler = new Handler((_, _) => throw new InvalidOperationException("must not request"));
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<InvalidDataException>(() => new QuarkPackClient(http).ListAsync(Share, "folder/../pack.mrpack", CancellationToken.None));
+        Assert.IsFalse(ex.ToString().Contains(Secret, StringComparison.Ordinal));
+        Assert.AreEqual(0, handler.Calls);
+    }
+
+    [TestMethod]
+    public async Task ListStopsAtMaxEntries()
+    {
+        using var handler = new Handler((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post) return Task.FromResult(Json(new { code = 0, data = new { stoken = Secret } }));
+            var page = int.Parse(Query(request.RequestUri!)["_page"]);
+            return Task.FromResult(Json(new { data = new { list = Enumerable.Range(0, 100).Select(i => Item($"pack-{page}-{i}.mrpack", "f")).ToArray() } }));
+        });
+        using var http = new HttpClient(handler);
+        var listing = await new QuarkPackClient(http).ListAsync(Share, null, CancellationToken.None);
+        Assert.IsTrue(listing.Truncated);
+        Assert.AreEqual(QuarkShareListing.MaxEntries, listing.Entries.Count);
+        Assert.AreEqual(3, handler.Calls);
+        Assert.IsFalse(JsonSerializer.Serialize(listing).Contains(Secret, StringComparison.Ordinal));
+    }
 }

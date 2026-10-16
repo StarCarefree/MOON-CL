@@ -42,6 +42,9 @@ public partial class MyButton
 
     // 自定义属性
     public int Uuid = ModBase.GetUuid();
+    /// <summary>悬停改为轻微放大，不再把背景闪到半透明再弹回。</summary>
+    public bool UseHoverScale { get; set; }
+
 
     public MyButton()
     {
@@ -50,7 +53,12 @@ public partial class MyButton
         MouseEnter += RefreshColor;
         MouseLeave += RefreshColor;
         Loaded += RefreshColor;
-        IsEnabledChanged += (_, _) => RefreshColor();
+        IsEnabledChanged += (_, _) =>
+        {
+            RefreshColor();
+            if (UseHoverScale && !IsEnabled)
+                ModAnimation.HoverScale(PanFore, false, "MyButton Scale " + Uuid);
+        };
         MouseLeftButtonUp += Button_MouseUp;
         MouseLeftButtonDown += Button_MouseDown;
         MouseEnter += (_, _) => Button_MouseEnter();
@@ -121,6 +129,16 @@ public partial class MyButton
     {
         try
         {
+            if (UseHoverScale)
+            {
+                ModAnimation.AniStop("MyButton Color " + Uuid);
+                if (IsEnabled)
+                    PanFore.SetResourceReference(BorderBrushProperty, GetBorderBrushResourceKey());
+                else
+                    PanFore.BorderBrush = ThemeManager.colorGray4;
+                return;
+            }
+
             if (ControlVisualHelpers.ShouldAnimate(this)) // 防止默认属性变更触发动画
             {
                 if (IsEnabled)
@@ -175,6 +193,13 @@ public partial class MyButton
 
     private void Button_MouseEnter()
     {
+        if (UseHoverScale)
+        {
+            if (IsEnabled)
+                ModAnimation.HoverScale(PanFore, true, "MyButton Scale " + Uuid);
+            return;
+        }
+
         ModAnimation.AniStart(
             ModAnimation.AaColor(PanFore, BackgroundProperty,
                 _ColorType == ColorState.Red ? "ColorBrushRedBack" : "ColorBrush7", animationColorIn),
@@ -186,6 +211,12 @@ public partial class MyButton
         if (!isMouseDown)
             return;
         isMouseDown = false;
+        if (UseHoverScale && IsMouseOver && IsEnabled)
+        {
+            ModAnimation.HoverScale(PanFore, true, "MyButton Scale " + Uuid);
+            return;
+        }
+
         ModAnimation.AniStart(
             new[]
             {
@@ -196,6 +227,13 @@ public partial class MyButton
 
     private void Button_MouseLeave()
     {
+        if (UseHoverScale)
+        {
+            ModAnimation.HoverScale(PanFore, false, "MyButton Scale " + Uuid);
+            isMouseDown = false;
+            return;
+        }
+
         ModAnimation.AniStart(
             ModAnimation.AaColor(PanFore, BackgroundProperty, "ColorBrushHalfWhite", animationColorOut),
             "MyButton Background " + Uuid);

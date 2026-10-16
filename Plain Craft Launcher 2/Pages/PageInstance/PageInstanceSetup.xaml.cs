@@ -13,6 +13,7 @@ using PCL.Core.UI;
 using PCL.Core.Utils.OS;
 using PCL.Core.App.Localization;
 using PCL.Core.Utils;
+using PCL.Core.Minecraft.Launcher;
 
 namespace PCL;
 
@@ -99,6 +100,7 @@ public partial class PageInstanceSetup
             CheckArgumentTitleEmpty.Checked = Config.Instance.UseGlobalTitle[PageInstanceLeft.McInstance.PathInstance];
             TextArgumentInfo.Text = Config.Instance.TypeInfo[PageInstanceLeft.McInstance.PathInstance];
             var _unused = PageInstanceLeft.McInstance.PathIndie; // 触发自动判定
+            ShowPackIdentity();
             ComboArgumentIndieV2.SelectedIndex = Config.Instance.IndieV2[PageInstanceLeft.McInstance.PathInstance] ? 0 : 1;
             CheckArgumentTitleEmpty.Visibility = TextArgumentTitle.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
             TextArgumentTitle.HintText = CheckArgumentTitleEmpty.Checked == true ? Lang.Text("Common.Option.Default") : Lang.Text("Instance.Setup.FollowGlobal");
@@ -1082,6 +1084,82 @@ public partial class PageInstanceSetup
             CheckBoxChange(sender, e);
         }
     }
-
     #endregion
+
+    private string _packWebsite = "";
+
+    private void ShowPackIdentity()
+    {
+        var identity = PackIdentityStore.TryRead(PageInstanceLeft.McInstance.PathInstance);
+        _packWebsite = identity?.Website ?? "";
+        LabPackSource.Text = identity is null
+            ? "还没有整合包介绍。下载或导入后会按 MC百科、CurseForge、Modrinth 的顺序查找。"
+            : identity.SourceLabel + (string.IsNullOrWhiteSpace(identity.Name) ? "" : " · " + identity.Name) +
+              (string.IsNullOrWhiteSpace(identity.Version) ? "" : " · " + identity.Version);
+        LabPackIntro.Text = identity?.Description ?? "";
+         BtnPackSite.Visibility = string.IsNullOrWhiteSpace(_packWebsite) ? Visibility.Collapsed : Visibility.Visible;
+         ShowPackRelease();
+     }
+ 
+     public void ShowPackRelease()
+     {
+         var text = PackReleaseWatcher.NoticeText(PageInstanceLeft.McInstance?.PathInstance);
+         LabPackUpdate.Text = text;
+         LabPackUpdate.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void PackSite_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(_packWebsite)) ModBase.OpenWebsite(_packWebsite);
+    }
+
+    private void PackRefresh_Click(object sender, MouseButtonEventArgs e)
+    {
+        var instance = PageInstanceLeft.McInstance;
+        var path = instance.PathInstance;
+        BtnPackRefresh.IsEnabled = false;
+        ModBase.RunInThread(() =>
+        {
+            try
+            {
+                var existing = PackIdentityStore.TryRead(path);
+                var source = existing?.Source ?? "";
+                if (source == "MC百科") source = "mcmod";
+                var clues = new PackClues
+                {
+                    Name = existing?.Name.Length > 0 ? existing.Name : instance.Name,
+                    FileName = instance.Name,
+                    Version = existing?.Version ?? "",
+                    MinecraftVersion = existing?.MinecraftVersion ?? "",
+                    CurseForgeId = existing?.CurseForgeId ?? "",
+                    ModrinthId = existing?.ModrinthId ?? "",
+                    McmodId = existing?.McmodId ?? ""
+                };
+                if (clues.CurseForgeId.Length == 0 && source.Contains("Curse", StringComparison.OrdinalIgnoreCase))
+                    clues = clues with { CurseForgeId = States.Instance.ModpackId[path] };
+                if (clues.ModrinthId.Length == 0 && source.Contains("Modrinth", StringComparison.OrdinalIgnoreCase))
+                    clues = clues with { ModrinthId = States.Instance.ModpackId[path] };
+                var identity = PackIdentityLookup.Resolve(clues);
+                PackIdentityStore.Save(path, identity);
+                ModBase.RunInUi(() => { ShowPackIdentity(); BtnPackRefresh.IsEnabled = true; });
+            }
+            catch (Exception ex)
+            {
+                ModBase.Log(ex, "重新查找整合包介绍失败", ModBase.LogLevel.Debug);
+                ModBase.RunInUi(() => BtnPackRefresh.IsEnabled = true);
+            }
+        });
+    }
+
+     private void UpdateOption_Change(object sender, bool user)
+     {
+         if (!user) return;
+         if (ReferenceEquals(sender, CheckUpdateDeleteOld) && CheckUpdateDeleteOld.Checked == true)
+             CheckUpdateKeepOld.Checked = false;
+         else if (ReferenceEquals(sender, CheckUpdateKeepOld) && CheckUpdateKeepOld.Checked == true)
+             CheckUpdateDeleteOld.Checked = false;
+     }
+ 
+     private void ClientUpdate_Click(object sender, MouseButtonEventArgs e) =>
+         InstanceClientUpdate.Start(PageInstanceLeft.McInstance, CheckUpdateDeleteOld.Checked == true, CheckUpdateKeepOld.Checked == true);
 }

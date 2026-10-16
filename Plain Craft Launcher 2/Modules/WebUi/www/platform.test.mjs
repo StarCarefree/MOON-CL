@@ -25,15 +25,15 @@ try{
  page=await setup(); await page.clock.install();
  assert.deepEqual(await messages(),[{type:'bootstrap'}]);
  assert.equal(await page.locator('#source-curseforge').isChecked(),true);
- assert.equal(await page.locator('#include-mcmod').isChecked(),false);
+ assert.equal(await page.locator('#include-mcmod').isChecked(),true);
  await send(state); let req=await last();
  assert.equal(req.source,'curseforge'); assert.equal(req.page,1); assert.equal(req.query,'');
- assert.equal((await messages()).some(m=>m.type==='mcmod'),false);
+ assert.equal((await messages()).some(m=>m.type==='mcmod'&&m.operation==='list'),true);
  await reply(req,[cf]); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),0);
  assert.equal(await page.locator('#cards >button').first().getAttribute('data-pack-id'),'starrail-harpy-express');
- assert.equal(await page.locator('#filter-category').isDisabled(),true);
+ assert.equal(await page.locator('#filter-category').isDisabled(),false);
  await send(state); assert.equal((await messages()).filter(m=>m.type==='platform'&&m.operation==='list').length,1);
- console.log('PASS default CurseForge only; no MCmod requests; source labels and native SRE retained');
+ console.log('PASS default MCL/CurseForge/MCmod selection and native SRE retained');
 
  await onlyExplorer(page,'modrinth'); let mrReq=await last();
  assert.equal(mrReq.source,'modrinth'); assert.equal(await card(cf.id).count(),0);

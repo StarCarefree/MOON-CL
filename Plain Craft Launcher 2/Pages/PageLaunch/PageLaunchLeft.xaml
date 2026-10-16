@@ -46,15 +46,17 @@
                     <TranslateTransform x:Name="AprilPosTrans" />
                 </TransformGroup>
             </Grid.RenderTransform>
-            <Border CornerRadius="6" ClipToBounds="True">
+            <Border CornerRadius="6">
                 <Grid>
                     <local:MyButton x:Name="BtnLaunch" Height="70" HorizontalAlignment="Stretch" Text="{DynamicResource Launch.Home.Button.Loading}" ColorType="Highlight" AutomationProperties.AutomationId="Native.StartGame"
-                                    Click="BtnLaunch_Click"
+                                    Click="BtnLaunch_Click" UseHoverScale="True"
                                     Padding="30,0,30,15" IsEnabled="False" />
-                    <Border x:Name="LaunchUpdateFill" Height="70" Width="72" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#8A5A10" Opacity="0.42" IsHitTestVisible="False" Visibility="Collapsed">
-                        <Border.RenderTransform>
-                            <TranslateTransform />
-                        </Border.RenderTransform>
+                    <Border CornerRadius="6" ClipToBounds="True" IsHitTestVisible="False">
+                        <Border x:Name="LaunchUpdateFill" Height="70" Width="72" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#8A5A10" Opacity="0.42" IsHitTestVisible="False" Visibility="Collapsed">
+                            <Border.RenderTransform>
+                                <TranslateTransform />
+                            </Border.RenderTransform>
+                        </Border>
                     </Border>
                     <TextBlock x:Name="LabVersion" Text="{DynamicResource Launch.Home.VersionList.Loading}" Margin="16,0,16,10" IsHitTestVisible="False"
                                VerticalAlignment="Bottom" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"

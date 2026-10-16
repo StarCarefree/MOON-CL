@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -17,6 +18,24 @@ public static class QuarkClientLaunch
         if (!IsShareUrl(shareUrl) || string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return false;
         return start(exe, shareUrl);
     }
+
+    public static bool IsAuthorizePage(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url.Length > 2048 || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+            && uri.Host.Equals("pan.quark.cn", StringComparison.OrdinalIgnoreCase)
+            && uri.UserInfo.Length == 0;
+    }
+
+    public static bool TryOpenAuthorizePage(string url) =>
+        TryOpenAuthorizePage(url, static page =>
+        {
+            Process.Start(new ProcessStartInfo(page) { UseShellExecute = true });
+            return true;
+        });
+
+    public static bool TryOpenAuthorizePage(string url, Func<string, bool> start) =>
+        IsAuthorizePage(url) && start(url);
 
     /// <summary>Opens the official cloud-drive share window. It does not pass a login token and does not download.</summary>
     public static bool TryOpenDriveShare(string shareUrl)
@@ -45,6 +64,23 @@ public static class QuarkClientLaunch
 
     public static bool IsShareUrl(string? shareUrl) =>
         Regex.IsMatch(shareUrl ?? "", @"\Ahttps://pan\.quark\.cn/s/[A-Za-z0-9]+(?:\?pwd=[A-Za-z0-9]+)?\z", RegexOptions.CultureInvariant);
+
+    public static string? ShareId(string? shareUrl)
+    {
+        var match = Regex.Match(shareUrl ?? "", @"\Ahttps://pan\.quark\.cn/s/([A-Za-z0-9]+)(?:\?pwd=[A-Za-z0-9]+)?\z", RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    public static string? MatchShare(IEnumerable<string>? urls, string? shareId)
+    {
+        if (string.IsNullOrEmpty(shareId) || shareId.Length > 64) return null;
+        foreach (var ch in shareId)
+            if (!char.IsAsciiLetterOrDigit(ch)) return null;
+        if (urls is null) return null;
+        foreach (var url in urls)
+            if (ShareId(url) == shareId) return url;
+        return null;
+    }
 
     public static string? ExeFromCommand(string? command)
     {

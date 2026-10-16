@@ -11,6 +11,7 @@ using PCL.Network;
 using PCL.Network.Loaders;
 using static PCL.ModLoader;
 using PCL.Core.Utils;
+using PCL.Core.Minecraft.Launcher;
 
 namespace PCL;
 
@@ -51,8 +52,8 @@ public static class ModModpack
     ///     必须在工作线程执行。
     /// </summary>
     /// <exception cref="ModBase.CancelledException" />
-    public static LoaderCombo<string> ModpackInstall(string file, string instanceName = null, string logo = null,
-        string resourceId = null, bool isOnlineInstall = false)
+     public static LoaderCombo<string> ModpackInstall(string file, string instanceName = null, string logo = null,
+         string resourceId = null, bool isOnlineInstall = false, string mcmodId = null)
     {
         ModBase.Log("[ModPack] 整合包安装请求：" + (file ?? "null"));
         ZipArchive archive = null;
@@ -199,48 +200,31 @@ public static class ModModpack
                 }
             } while (false);
 
-            // 执行对应的安装方法
-            switch (packType)
+            // 介绍查找失败不阻止安装。
+            PackIdentity? identity = null;
+            try
             {
-                case 0:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：CurseForge");
-                    return InstallPackCurseForge(file, archive, archiveBaseFolder, instanceName, logo, resourceId,
-                        isOnlineInstall);
-                }
-                case 1:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：HMCL");
-                    return InstallPackHMCL(file, archive, archiveBaseFolder);
-                }
-                case 2:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：MMC");
-                    return InstallPackMMC(file, archive, archiveBaseFolder);
-                }
-                case 3:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：MCBBS");
-                    return InstallPackMCBBS(file, archive, archiveBaseFolder, instanceName);
-                }
-                case 4:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：Modrinth");
-                    return InstallPackModrinth(file, archive, archiveBaseFolder, instanceName, logo, resourceId,
-                        isOnlineInstall);
-                }
-                case 9:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：带启动器的压缩包");
-                    return InstallPackLauncherPack(file, archive, archiveBaseFolder);
-                }
-
-                default:
-                {
-                    ModBase.Log("[ModPack] 整合包种类：未能识别，假定为压缩包");
-                    return InstallPackCompress(file, archive);
-                }
+                 var source = packType switch { 0 => "curseforge", 4 => "modrinth", _ => "" };
+                 var clues = PackCluesReader.Read(archive, Path.GetFileName(file), resourceId, source);
+                 if (int.TryParse(mcmodId, out var wikiId) && wikiId > 0) clues = clues with { McmodId = wikiId.ToString() };
+                 identity = PackIdentityLookup.Resolve(clues);
             }
+            catch (Exception ex)
+            {
+                ModBase.Log(ex, "[ModPack] 查找整合包介绍失败", ModBase.LogLevel.Debug);
+            }
+            LoaderCombo<string> loader = packType switch
+            {
+                0 => InstallPackCurseForge(file, archive, archiveBaseFolder, instanceName, logo, resourceId, isOnlineInstall),
+                1 => InstallPackHMCL(file, archive, archiveBaseFolder),
+                2 => InstallPackMMC(file, archive, archiveBaseFolder),
+                3 => InstallPackMCBBS(file, archive, archiveBaseFolder, instanceName),
+                4 => InstallPackModrinth(file, archive, archiveBaseFolder, instanceName, logo, resourceId, isOnlineInstall),
+                9 => InstallPackLauncherPack(file, archive, archiveBaseFolder),
+                _ => InstallPackCompress(file, archive)
+            };
+            if (loader is not null && identity is not null) PackIdentityInstall.Attach(loader, identity);
+            return loader;
         }
         finally
         {

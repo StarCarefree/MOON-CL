@@ -71,6 +71,7 @@ public partial class HybridRooms
     private void OpenOverlay(FrameworkElement form, string title, Control? focus = null)
     {
         if (!_initialized || _closed) return;
+        var opening = Overlay.Visibility != Visibility.Visible;
         if (Overlay.Visibility != Visibility.Visible) _overlayFocus = Keyboard.FocusedElement;
         foreach (var panel in new FrameworkElement[] { CreateForm, JoinForm, SettingsForm, RouteEditor, ToolsForm })
             panel.Visibility = Show(ReferenceEquals(panel, form));
@@ -78,6 +79,8 @@ public partial class HybridRooms
         Overlay.Visibility = Visibility.Visible;
         LobbyContent.IsEnabled = false;
         if (focus is null || !focus.Focus()) form.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        if (opening) HybridMotion.Enter("Hybrid Rooms Overlay", OverlayFrame);
+        else HybridMotion.Enter("Hybrid Rooms Form", form);
     }
     private void CloseOverlay()
     {

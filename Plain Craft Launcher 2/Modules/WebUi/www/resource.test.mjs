@@ -11,6 +11,7 @@ try {
  page.on('pageerror',e=>errors.push(e.message)); await page.route(/^https?:\/\//,r=>r.abort());
  await page.addInitScript(()=>{const listeners=[];window.__messages=[];window.__receive=data=>listeners.forEach(f=>f({data}));window.chrome={webview:{postMessage:m=>window.__messages.push(m),addEventListener:(_,f)=>listeners.push(f)}}});
  await page.goto(new URL('./index.html',import.meta.url).href);
+ await onlyExplorer(page,'curseforge'); // This suite isolates typed CF requests; defaults are covered separately.
  const send=m=>page.evaluate(m=>window.__receive(m),m);
  const messages=()=>page.evaluate(()=>window.__messages);
  const last=async(type='platform',op='list')=>(await messages()).filter(m=>m.type===type&&m.operation===op).at(-1);
@@ -30,6 +31,8 @@ try {
   assert.equal(await card('curseforge-123').count(),0);
   await listReply(request,[item(kind),item('modpack','curseforge','999')]);
   assert.equal(await card('curseforge-999').count(),0); assert.equal(await card('curseforge-123').count(),1);
+  assert.equal(await page.locator('.stage').isVisible(),true); assert.equal(await page.locator('#pack-name').textContent(),`DEMO ${kind}`);
+  assert.equal(await page.locator('#meta-ver').evaluate(n=>n.previousElementSibling.textContent),{datapack:'数据包',world:'地图',shader:'光影包',resourcepack:'材质包'}[kind]+'版本');
   await card('curseforge-123').click(); let detail=await last('platform','detail');
   assert.equal(detail.resourceType,kind); assert.equal(detail.id,'123');
   await send({type:'platformDetail',source:'curseforge',resourceType:kind,id:'123',requestId:detail.requestId,item:item(kind)});

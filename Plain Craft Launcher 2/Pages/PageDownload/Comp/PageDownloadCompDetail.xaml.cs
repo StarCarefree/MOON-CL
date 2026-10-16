@@ -89,9 +89,9 @@ public partial class PageDownloadCompDetail
                     new List<DownloadFile> { file.ToNetFile(target, ModComp.DownloadReason.ModPack) })
                 { ProgressWeight = 10d, block = true });
             loaders.Add(new ModLoader.LoaderTask<int, int>(Lang.Text("Download.Comp.Detail.PrepareModpackInstall"),
-                _ => ModModpack.ModpackInstall(target, instanceName,
-                    System.IO.File.Exists(logoFileAddress) ? logoFileAddress : null, file.ProjectId,
-                    true)) { ProgressWeight = 0.1d });
+                 _ => ModModpack.ModpackInstall(target, instanceName,
+                     System.IO.File.Exists(logoFileAddress) ? logoFileAddress : null, file.ProjectId,
+                     true, _project.WikiId > 0 ? _project.WikiId.ToString() : null)) { ProgressWeight = 0.1d });
 
             // 启动
             var loader = new ModLoader.LoaderCombo<string>(loaderName, loaders)

@@ -95,10 +95,12 @@ public partial class FormMain
 
     internal void SetRoomsVisible(bool visible)
     {
+        var show = visible && HybridRoomsView.Visibility != Visibility.Visible;
         HybridRoomsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         var covered = visible || _webUi.IsPresented;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
+        if (show) HybridRoomsView.PlayPageSwitch();
         UpdateHybridShell();
     }
 
@@ -230,7 +232,12 @@ public partial class FormMain
         switch (route)
         {
             case "rooms": _webUi.Hide(); SetRoomsVisible(true); break;
-            case "games": _webUi.Hide(); PageChange(PageType.Launch); break;
+            case "games":
+                _webUi.Hide();
+                var replayGames = (PageType)pageCurrent == PageType.Launch;
+                PageChange(PageType.Launch);
+                if (replayGames) ModMain.frmLaunchRight?.PlayPageSwitch();
+                break;
             case "settings": _webUi.Hide(); PageChange(PageType.Setup, PageSubType.SetupLaunch); break;
             case "download": _webUi.Hide(); PageChange(PageType.Download, PageSubType.DownloadInstall); break;
             case "tools": _webUi.Hide(); PageChange(PageType.Tools, PageSubType.ToolsTest); break;

@@ -16,6 +16,14 @@ public static class PackCatalogSources
 {
     public const int MaxSources = 8;
 
+    /// <summary>Shipped fallback used when the user configured no source: the repository-hosted catalog.
+    /// The jsDelivr mirror is listed second so a blocked GitHub raw host still resolves.</summary>
+    public static readonly string[] DefaultUrls =
+    [
+        "https://raw.githubusercontent.com/catmoon233/MOON-CL/dev/docs/pack-catalog/index.json",
+        "https://cdn.jsdelivr.net/gh/catmoon233/MOON-CL@dev/docs/pack-catalog/index.json"
+    ];
+
     // null means legacy settings; an explicit empty list clears the configuration.
     public static string[] Normalize(IEnumerable<string>? sources, string legacyUrl = "")
     {
@@ -37,6 +45,9 @@ public static class PackCatalogSources
         }
         return result.ToArray();
     }
+
+    /// <summary>Configured sources, or the shipped default when the user cleared them.</summary>
+    public static string[] Effective(string[]? configured) => configured is { Length: > 0 } ? configured : DefaultUrls;
 }
 
 public sealed record PackCatalogResult(string SourceUrl, IReadOnlyList<PackDefinition> Packs, bool NotModified);

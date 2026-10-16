@@ -25,6 +25,44 @@ internal static class HybridMotion
             ModAnimation.AniStart(animations, "Hybrid Rise " + animations[0].GetHashCode());
     }
 
+    /// <summary>Staggered rise used by settings, download and tools right pages.</summary>
+    public static void Enter(string group, params FrameworkElement?[] elements)
+    {
+        var animations = new List<ModAnimation.AniData>();
+        var delay = 0;
+        foreach (var element in elements)
+        {
+            if (element is null || element.Visibility != Visibility.Visible) continue;
+            element.IsHitTestVisible = true;
+            element.Opacity = 0;
+            element.RenderTransform = new TranslateTransform(0, -16);
+            animations.Add(ModAnimation.AaOpacity(element, 1, 100, delay,
+                new ModAnimation.AniEaseOutFluent(ModAnimation.AniEasePower.Weak)));
+            animations.Add(ModAnimation.AaTranslateY(element, 5, 250, delay, new ModAnimation.AniEaseOutFluent()));
+            animations.Add(ModAnimation.AaTranslateY(element, 11, 350, delay, new ModAnimation.AniEaseOutBack()));
+            delay += 25;
+        }
+        if (animations.Count > 0)
+            ModAnimation.AniStart(animations, group, true);
+    }
+
+    /// <summary>Staggered exit used when leaving a settings, download or tools page.</summary>
+    public static void Leave(string group, params FrameworkElement?[] elements)
+    {
+        var animations = new List<ModAnimation.AniData>();
+        var delay = 0;
+        foreach (var element in elements)
+        {
+            if (element is null || element.Visibility != Visibility.Visible) continue;
+            element.IsHitTestVisible = false;
+            animations.Add(ModAnimation.AaOpacity(element, -1, 70, delay));
+            animations.Add(ModAnimation.AaTranslateY(element, -6, 70, delay));
+            delay += 15;
+        }
+        if (animations.Count > 0)
+            ModAnimation.AniStart(animations, group);
+    }
+
     public static void SlideIn(params FrameworkElement?[] elements)
     {
         var animations = new List<ModAnimation.AniData>();

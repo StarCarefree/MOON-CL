@@ -18,13 +18,15 @@ internal sealed partial class WebUiController
     }) { Timeout = TimeSpan.FromSeconds(30) };
     private McmodCatalog? _mcmodCatalog;
     private readonly HttpClient _quarkListHttp = new(new HttpClientHandler { UseCookies = false }) { Timeout = TimeSpan.FromSeconds(30) };
+    private readonly HttpClient _xyeHttp = new(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = DecompressionMethods.All, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(30) };
+    private XyeBbsCatalog? _xyeCatalog;
     private bool _openingMcmodDownload;
     private static readonly JsonSerializerOptions McmodJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private async Task HandleMcmodAsync(CoreWebView2 core, JsonObject message, FormMain form)
     {
         var operation = ReadString(message, "operation") ?? "";
-        if (operation is not ("list" or "detail" or "download" or "links" or "categories" or "quarkList" or "quarkDownload")) return;
+        if (operation is not ("list" or "detail" or "download" or "links" or "categories" or "quarkList" or "quarkDownload" or "xyeResolve")) return;
         var page = message["page"] is JsonValue p && p.TryGetValue<int>(out var pageValue) ? pageValue : 1;
         var id = message["id"] is JsonValue i && i.TryGetValue<int>(out var idValue) ? idValue : 0;
         var minecraft = ReadString(message, "minecraft") ?? "";
@@ -63,9 +65,10 @@ internal sealed partial class WebUiController
                 Send(new JsonObject { ["type"] = operation == "links" ? "mcmodLinks" : "mcmodDetail", ["id"] = id, ["item"] = JsonSerializer.SerializeToNode(detail, McmodJson) });
                 return;
             }
-            if (operation is "quarkList" or "quarkDownload")
+            if (operation is "quarkList" or "quarkDownload" or "xyeResolve")
             {
-                await HandleQuarkShareAsync(message, operation, id, resourceType, detail, Current, Send);
+                if (operation == "xyeResolve") await HandleXyeResolveAsync(message, id, resourceType, detail, Current, Send);
+                else await HandleQuarkShareAsync(message, operation, id, resourceType, detail, Current, Send);
                 return;
             }
             if (_openingMcmodDownload) throw new InvalidOperationException("正在获取关联项目的下载信息，请稍候。");
@@ -99,16 +102,48 @@ internal sealed partial class WebUiController
             ModBase.Log(ex, "获取 MC 百科整合包信息失败", ModBase.LogLevel.Debug);
             Send(new JsonObject { ["type"] = "mcmodError", ["operation"] = operation, ["page"] = page, ["id"] = id,
                 ["requestId"] = requestId,
-                ["message"] = ex is OperationCanceledException ? "百科请求超时，请重试或打开百科页面。" : ex.Message });
+                ["message"] = ex is OperationCanceledException ? (operation == "xyeResolve" ? "XyeBBS 请求超时，请重试或改为跳转。" : "百科请求超时，请重试或打开百科页面。") : ex.Message });
         }
+    }
+
+    private XyeBbsCatalog XyeCatalog() => _xyeCatalog ??= new XyeBbsCatalog(_xyeHttp);
+
+    private async Task HandleXyeResolveAsync(JsonObject message, int id, string resourceType, McmodPack detail, Func<bool> current, Action<JsonObject> send)
+    {
+        if (resourceType != "modpack") throw new InvalidDataException("只有整合包可以从 XyeBBS 进入夸克下载。没有转存。");
+        var page = XyeBbsCatalog.MatchPage(detail.Links.Select(link => link.Url), ReadString(message, "url"));
+        if (page is null) throw new InvalidDataException("这个整合包没有对应的 XyeBBS 下载页，没有读取社区。");
+        var listing = await XyeCatalog().ListAsync(page, _mcmodLifetime.Token);
+        if (!current()) return;
+        var versions = new JsonArray();
+        foreach (var version in listing.Versions)
+        {
+            var shareId = version.ShareId;
+            if (string.IsNullOrEmpty(shareId)) continue;
+            versions.Add(new JsonObject { ["label"] = version.Label, ["minecraft"] = version.Minecraft, ["loader"] = version.Loader, ["shareId"] = shareId });
+        }
+        send(new JsonObject { ["type"] = "xyeVersions", ["id"] = id, ["pageUrl"] = listing.PageUrl, ["truncated"] = listing.Truncated, ["versions"] = versions });
     }
 
     private async Task HandleQuarkShareAsync(JsonObject message, string operation, int id, string resourceType, McmodPack detail, Func<bool> current, Action<JsonObject> send)
     {
         if (resourceType != "modpack") throw new InvalidDataException("只有整合包可以在启动器里选择夸克版本。没有转存。");
         var shareId = ReadString(message, "shareId") ?? "";
-        var shareUrl = QuarkClientLaunch.MatchShare(detail.Links.Select(link => link.Url), shareId);
-        if (shareUrl is null) throw new InvalidDataException("这个整合包没有对应的夸克分享，没有读取网盘。");
+        var xyeUrl = ReadString(message, "xyeUrl");
+        string? shareUrl;
+        if (!string.IsNullOrEmpty(xyeUrl))
+        {
+            var page = XyeBbsCatalog.MatchPage(detail.Links.Select(link => link.Url), xyeUrl);
+            if (page is null) throw new InvalidDataException("这个整合包没有对应的 XyeBBS 下载页，没有读取网盘。");
+            var listing = await XyeCatalog().ListAsync(page, _mcmodLifetime.Token);
+            shareUrl = QuarkClientLaunch.MatchShare(listing.Versions.Select(version => version.ShareUrl), shareId);
+            if (shareUrl is null) throw new InvalidDataException("这个 XyeBBS 版本没有对应的夸克分享，没有读取网盘。");
+        }
+        else
+        {
+            shareUrl = QuarkClientLaunch.MatchShare(detail.Links.Select(link => link.Url), shareId);
+            if (shareUrl is null) throw new InvalidDataException("这个整合包没有对应的夸克分享，没有读取网盘。");
+        }
         var path = ReadString(message, "path") ?? "";
         if (path.Length > 4096) throw new InvalidDataException("夸克目录无效，没有读取网盘。");
         if (operation == "quarkList")

@@ -179,3 +179,24 @@ Fixed Version **不会**像 Evergreen 那样随系统自动升级。分发者/�
 启动前会列出缺少的组件。必要项是对应架构的 .NET 10 Desktop Runtime，以及 `vcruntime140.dll`、`vcruntime140_1.dll`、`msvcp140.dll`。未随包 Fixed Version、且系统也没有 WebView2 时，浏览页组件也会列出来。只有点「同意并下载」才会从微软官方地址下载安装。取消不会下载。只缺浏览页组件时可以跳过并启动。已装齐则不弹窗。
 
 外层 zip 不再二次压缩。二次启动跳过解压，并把 .NET 单文件原生库解到固定目录，避免每次冷启动再解一遍。默认不把 WebView2 Fixed Version 打进去，以免单 exe 变成几百 MB。需要浏览页随包时再传 `-FixedRuntimeDirectory`。`WebView2Loader.dll` 和 `e_sqlite3.dll` 仍然必须在包里。
+
+### single exe 构建速度与缓存
+
+命令和双击入口不变。脚本默认复用 .NET 构建服务器，并将编译输出保留在仓库外：
+
+```text
+<PI_SCRATCH_DIR 或 TEMP>/pcl-cy-single-exe-cache/<仓库路径哈希>/<架构>/<Configuration>/<il 或 r2r>/build/
+```
+
+同一仓库、架构和配置连续发布时，MSBuild 可以跳过未变化的 C#/WPF 编译；源码变化仍会正常编译和还原依赖，并非 `--no-build`。首次构建、切换配置或清除缓存后仍需完整编译。`publish`、暂存目录和 ZIP 每次重新生成并清理，不复用旧发布目录，避免已删除的文件混入新包。不要同时运行多个 build/publish，工程的 `obj` 仍共享。
+
+脚本会显示发布、原生库校验、暂存/ZIP、外层 exe 编译/PE 校验及总耗时。遇到缓存或构建服务器问题时：
+
+```powershell
+# 不复用持久编译输出（仍由 MSBuild 检查 obj；不等同于 dotnet clean）
+.\scripts\Publish-SingleExe.ps1 -Architecture x64 -NoBuildCache
+# 不使用构建服务器
+.\scripts\Publish-SingleExe.ps1 -Architecture x64 -DisableBuildServers
+```
+
+原生库、资源哈希、PE checksum 和 overlay 检查不变。新增快速回归测试：`pwsh -File scripts/Test-SingleExeBuildCache.ps1`；原有打包规则测试仍使用 `scripts/Test-Publish-SingleExe.ps1`。

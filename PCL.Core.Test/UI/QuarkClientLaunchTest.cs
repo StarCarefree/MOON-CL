@@ -77,4 +77,27 @@ public sealed class QuarkClientLaunchTest
         }));
         Assert.IsTrue(started);
     }
+
+    [TestMethod]
+    public void AuthorizePageIsOfficialHttpsOnly()
+    {
+        Assert.IsTrue(QuarkClientLaunch.IsAuthorizePage("https://pan.quark.cn/open/v1/oauth/authorize?client_id=third_party_agent"));
+        Assert.IsFalse(QuarkClientLaunch.IsAuthorizePage("http://pan.quark.cn/open/v1/oauth/authorize"));
+        Assert.IsFalse(QuarkClientLaunch.IsAuthorizePage("https://user:secret@pan.quark.cn/open"));
+        Assert.IsFalse(QuarkClientLaunch.IsAuthorizePage("qkclouddrive://openShareModal?pwdid=e3f623dd58d6"));
+        var started = false;
+        Assert.IsFalse(QuarkClientLaunch.TryOpenAuthorizePage("https://evil.example/auth?page_code=secret-page", _ => started = true));
+        Assert.IsFalse(started);
+    }
+
+    [TestMethod]
+    public void MatchShareUsesOnlyParsedShareId()
+    {
+        const string owned = "https://pan.quark.cn/s/ff96d10800cd?pwd=ab12";
+        Assert.AreEqual("ff96d10800cd", QuarkClientLaunch.ShareId(owned));
+        Assert.AreEqual(owned, QuarkClientLaunch.MatchShare([owned, "https://example.org/demo.zip"], "ff96d10800cd"));
+        Assert.IsNull(QuarkClientLaunch.MatchShare([owned], "other"));
+        Assert.IsNull(QuarkClientLaunch.MatchShare(["https://pan.quark.cn/s/ff96d10800cd?token=secret"], "ff96d10800cd"));
+        Assert.IsNull(QuarkClientLaunch.ShareId("https://pan.quark.cn.evil/s/ff96d10800cd"));
+    }
 }
