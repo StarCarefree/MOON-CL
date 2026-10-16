@@ -19,23 +19,21 @@ internal static class PackIdentityLookup
         var existing = PackIdentityStore.TryRead(path);
         var source = States.Instance.ModpackSource[path] ?? existing?.Source ?? "";
         var id = States.Instance.ModpackId[path] ?? "";
-        var clues = new PackClues
-        {
-            Name = !string.IsNullOrWhiteSpace(existing?.Name) ? existing.Name : instance.Name,
-            FileName = instance.Name,
-            Version = existing?.Version ?? States.Instance.ModpackVersion[path] ?? "",
-            MinecraftVersion = existing?.MinecraftVersion ?? "",
-            CurseForgeId = existing?.CurseForgeId ?? "",
-            ModrinthId = existing?.ModrinthId ?? "",
-            McmodId = existing?.McmodId ?? ""
-        };
+        var actualMinecraft = instance.Info.VanillaName;
+        var manifest = PackCluesReader.ReadInstalled(path) ?? PackCluesReader.ReadInstalled(instance.PathIndie);
+        var clues = PackIdentityResolver.InstalledClues(existing, instance.Name, actualMinecraft, manifest);
+        if (clues.Version.Length == 0 && existing is null)
+            clues = clues with { Version = States.Instance.ModpackVersion[path] ?? "" };
         if (clues.CurseForgeId.Length == 0 && source.Contains("curse", StringComparison.OrdinalIgnoreCase))
             clues = clues with { CurseForgeId = id };
         if (clues.ModrinthId.Length == 0 && source.Contains("modrinth", StringComparison.OrdinalIgnoreCase))
             clues = clues with { ModrinthId = id };
         if (clues.McmodId.Length == 0 && (source == "mcmod" || source == "MC百科"))
             clues = clues with { McmodId = id };
-        return Resolve(clues);
+        var resolved = Resolve(clues);
+        if (existing is not null && existing.Version != resolved.Version)
+            States.Instance.ModpackVersion[path] = resolved.Version;
+        return resolved;
     }
 
     public static PackIdentity Resolve(PackClues clues)
@@ -97,13 +95,13 @@ internal static class PackIdentityLookup
     private static PackCandidate FromMcmod(McmodPack pack) => new()
     {
         Source = "mcmod", Name = pack.Name, EnglishName = pack.EnglishName, Description = pack.Description,
-        Website = pack.Website, MinecraftVersion = pack.MinecraftVersions.FirstOrDefault() ?? "", McmodId = pack.WikiId.ToString()
+        Website = pack.Website, MinecraftVersion = string.Join(", ", pack.MinecraftVersions), McmodId = pack.WikiId.ToString()
     };
 
     private static PackCandidate FromPlatform(PlatformPack pack) => new()
     {
         Source = pack.Source, Name = pack.Name, Description = pack.Description, Website = pack.Website, Version = pack.Version,
-        Slug = pack.Slug, MinecraftVersion = pack.MinecraftVersions.FirstOrDefault(version => Regex.IsMatch(version, @"^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$")) ?? "",
+        Slug = pack.Slug, MinecraftVersion = string.Join(", ", pack.MinecraftVersions.Where(version => Regex.IsMatch(version, @"^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$"))),
         CurseForgeId = pack.Source == "curseforge" ? pack.ProjectId : "", ModrinthId = pack.Source == "modrinth" ? pack.ProjectId : ""
     };
 }

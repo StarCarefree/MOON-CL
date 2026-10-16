@@ -1095,7 +1095,8 @@ public partial class PageInstanceSetup
         LabPackSource.Text = identity is null
             ? "还没有整合包介绍。下载或导入后会按 MC百科、CurseForge、Modrinth 的顺序查找。"
             : identity.SourceLabel + (string.IsNullOrWhiteSpace(identity.Name) ? "" : " · " + identity.Name) +
-              (string.IsNullOrWhiteSpace(identity.Version) ? "" : " · " + identity.Version);
+              (string.IsNullOrWhiteSpace(identity.Version) ? "" : " · " + identity.Version) +
+              (string.IsNullOrWhiteSpace(identity.MinecraftVersion) ? "" : " · MC " + identity.MinecraftVersion);
         LabPackIntro.Text = identity?.Description ?? "";
          BtnPackSite.Visibility = string.IsNullOrWhiteSpace(_packWebsite) ? Visibility.Collapsed : Visibility.Visible;
          ShowPackRelease();

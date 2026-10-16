@@ -92,6 +92,27 @@ public sealed record PackIdentity
 
 public static class PackCluesReader
 {
+    public static PackClues? ReadInstalled(string folder)
+    {
+        foreach (var name in new[] { "modrinth.index.json", "manifest.json", "mcbbs.packmeta", "modpack.json" })
+        {
+            var path = Path.Combine(folder, name);
+            if (!File.Exists(path) || new FileInfo(path).Length > 1_048_576) continue;
+            try
+            {
+                var json = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
+                if (json is null) continue;
+                return new PackClues
+                {
+                    Name = Text(json, "name"), Version = Text(json, "version", Text(json, "versionId")),
+                    MinecraftVersion = Minecraft(Text(json["dependencies"] as JsonObject, "minecraft", Text(json["minecraft"] as JsonObject, "version")))
+                };
+            }
+            catch (JsonException) { }
+        }
+        return null;
+    }
+
     public static PackClues Read(string archivePath, string? projectId = null, string? projectSource = null)
     {
         using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Read);
@@ -182,13 +203,34 @@ public static class PackIdentityResolver
             Name = FirstText(winner.Item?.Name, clues.Name, PackClues.Stem(clues.FileName)),
             Description = description.Length > 18000 ? description[..18000] : description,
             Website = SafeUrl(winner.Item?.Website ?? ""),
-            Version = FirstText(clues.Version, winner.Item?.Version),
-            MinecraftVersion = FirstText(clues.MinecraftVersion, winner.Item?.MinecraftVersion),
+            Version = clues.Version,
+            MinecraftVersion = clues.MinecraftVersion,
             CurseForgeId = FirstText(clues.CurseForgeId, ids.Select(i => i.CurseForgeId).FirstOrDefault(s => s.Length > 0)),
             ModrinthId = FirstText(clues.ModrinthId, ids.Select(i => i.ModrinthId).FirstOrDefault(s => s.Length > 0)),
             McmodId = FirstText(clues.McmodId, ids.Select(i => i.McmodId).FirstOrDefault(s => s.Length > 0))
         };
     }
+
+    // Project metadata describes available releases, never the release installed on disk.
+    public static PackClues InstalledClues(PackIdentity? existing, string instanceName, string actualMinecraft, PackClues? manifest = null)
+    {
+        const string loaderMinecraft = @"(?<![\d.])(?<mc>1\.\d+(?:\.\d+)?)(?=\s*[-_ ]*(?:neoforge|fabric|forge|quilt))";
+        var namedMinecraft = Regex.Match(instanceName, loaderMinecraft, RegexOptions.IgnoreCase);
+        var minecraft = Regex.IsMatch(actualMinecraft, @"^\d+\.\d+(?:\.\d+)?$") ? actualMinecraft
+            : FirstText(manifest?.MinecraftVersion, namedMinecraft.Groups["mc"].Value, existing?.MinecraftVersion);
+        var cachedMinecraft = Regex.Match(existing?.Version ?? "", loaderMinecraft, RegexOptions.IgnoreCase).Groups["mc"].Value;
+        var stale = minecraft.Length > 0 &&
+            (existing?.MinecraftVersion.Length > 0 && !MinecraftMatches(existing.MinecraftVersion, minecraft) || cachedMinecraft.Length > 0 && cachedMinecraft != minecraft);
+        return new PackClues
+        {
+            Name = FirstText(manifest?.Name, existing?.Name, PackClues.Stem(instanceName)), FileName = instanceName,
+            Version = FirstText(manifest?.Version, stale ? "" : existing?.Version), MinecraftVersion = minecraft,
+            CurseForgeId = existing?.CurseForgeId ?? "", ModrinthId = existing?.ModrinthId ?? "", McmodId = existing?.McmodId ?? ""
+        };
+    }
+
+    public static bool MinecraftMatches(string supported, string minecraft) =>
+        Regex.Matches(supported, @"(?<![\d.])\d+\.\d+(?:\.\d+)?(?![\d.])").Any(m => m.Value == minecraft);
 
     public static PackIdentity Local(PackClues clues) => Choose(clues);
     public static int Score(PackClues clues, PackCandidate candidate)
@@ -197,7 +239,7 @@ public static class PackIdentityResolver
         var names = new[] { candidate.Name, candidate.EnglishName, candidate.Slug.Replace('-', ' ') };
         var score = names.Select(name => NameScore(clues.Name, name)).Concat(names.Select(name => NameScore(PackClues.Stem(clues.FileName), name))).DefaultIfEmpty(0).Max();
         if (clues.MinecraftVersion.Length > 0 && candidate.MinecraftVersion.Length > 0 &&
-            !candidate.MinecraftVersion.Contains(clues.MinecraftVersion, StringComparison.Ordinal)) score -= 40;
+            !MinecraftMatches(candidate.MinecraftVersion, clues.MinecraftVersion)) score -= 40;
         return Math.Max(0, score);
     }
 

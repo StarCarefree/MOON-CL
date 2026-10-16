@@ -17,7 +17,14 @@ internal sealed class PackUpdateDownloadWindow : Window
 {
     private readonly McInstance _instance;
     private readonly ComboBox _sources;
-    private readonly ListBox _versions;
+    private readonly TreeView _versions;
+    private readonly TextBox _search;
+    private readonly ComboBox _sort;
+    private readonly CheckBox _onlyCurrent;
+    private readonly TextBlock _summary;
+    private readonly List<PackDownloadVersion> _allVersions = [];
+    private readonly Dictionary<string, bool> _expandedGroups = new(StringComparer.Ordinal);
+    private PackDownloadVersion? SelectedVersion => (_versions.SelectedItem as TreeViewItem)?.Tag as PackDownloadVersion;
     private readonly TextBlock _project, _details, _status;
     private readonly ProgressBar _progress;
     private readonly Button _refresh, _more, _download, _update, _cancel, _website;
@@ -34,7 +41,7 @@ internal sealed class PackUpdateDownloadWindow : Window
         _instance = instance;
         ServerUi.ApplyTheme(this);
         Title = "MOONCL · 下载整合包更新";
-        Width = 780; Height = Math.Min(650, SystemParameters.WorkArea.Height - 50);
+        Width = 820; Height = Math.Min(750, SystemParameters.WorkArea.Height - 50);
         MinWidth = 620; MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(24) };
@@ -48,6 +55,22 @@ internal sealed class PackUpdateDownloadWindow : Window
         DockPanel.SetDock(_refresh, Dock.Right); sources.Children.Add(_refresh);
         _sources = new ComboBox { MinHeight = 35, Margin = new Thickness(0, 0, 12, 8) };
         sources.Children.Add(_sources); header.Children.Add(sources);
+        header.Children.Add(ServerUi.Text("搜索版本 / 文件名 / MC / 加载器，例如：1.21.11 Fabric", 11, muted: true));
+        var filters = new Grid();
+        filters.ColumnDefinitions.Add(new ColumnDefinition());
+        filters.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
+        _search = new TextBox { MinHeight = 35, MaxLength = 160, Margin = new Thickness(0, 0, 10, 8), ToolTip = "空格分隔多个关键词；MC 版本精确匹配" };
+        _sort = new ComboBox { MinHeight = 35, Margin = new Thickness(0, 0, 0, 8) };
+        foreach (var label in new[] { "最新发布", "最早发布", "名称 A–Z", "MC 版本（高→低）" }) _sort.Items.Add(label);
+        _sort.SelectedIndex = 0; Grid.SetColumn(_sort, 1);
+        filters.Children.Add(_search); filters.Children.Add(_sort); header.Children.Add(filters);
+        var grouping = new WrapPanel();
+        _onlyCurrent = new CheckBox { Content = "仅显示当前 MC", IsChecked = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 8) };
+        grouping.Children.Add(_onlyCurrent);
+        grouping.Children.Add(ServerUi.Button("全部展开", (_, _) => SetGroupsExpanded(true)));
+        grouping.Children.Add(ServerUi.Button("全部折叠", (_, _) => SetGroupsExpanded(false)));
+        header.Children.Add(grouping);
+        _summary = ServerUi.Text("版本将按 Minecraft 版本分组。", 11, muted: true); header.Children.Add(_summary);
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
 
         var footer = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
@@ -63,17 +86,21 @@ internal sealed class PackUpdateDownloadWindow : Window
         _cancel = ServerUi.Button("取消", (_, _) => _work?.Cancel());
         foreach (var button in new[] { _website, _more, _download, _update, _cancel }) actions.Children.Add(button);
         footer.Children.Add(actions); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
-        _versions = new ListBox { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        _versions = new TreeView { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         _versions.SetResourceReference(Control.BackgroundProperty, "Hybrid.Surface");
         _versions.SetResourceReference(Control.ForegroundProperty, "Hybrid.Text");
         _versions.SetResourceReference(Control.BorderBrushProperty, "Hybrid.Line");
         root.Children.Add(_versions); Content = root;
-        _versions.SelectionChanged += (_, _) =>
+        _versions.SelectedItemChanged += (_, _) =>
         {
-            _details.Text = _versions.SelectedItem is PackDownloadVersion version ? "文件：" + version.FileName + "\n" + version : "请选择客户端版本。";
+            _details.Text = SelectedVersion is { } version ? "文件：" + version.FileName + "\n" + version : "请选择客户端版本（展开 MC 分组）。";
             UpdateControls();
         };
         _sources.SelectionChanged += async (_, _) => { if (!_initializing && _work is null) await LoadAsync(false); };
+        _search.TextChanged += (_, _) => ApplyFilters();
+        _sort.SelectionChanged += (_, _) => ApplyFilters();
+        _onlyCurrent.Checked += (_, _) => ApplyFilters();
+        _onlyCurrent.Unchecked += (_, _) => ApplyFilters();
         Loaded += async (_, _) => await LoadAsync(false);
         Closing += OnClosing;
         UpdateControls();
@@ -91,12 +118,15 @@ internal sealed class PackUpdateDownloadWindow : Window
         {
             if (!more)
             {
-                _versions.Items.Clear(); _hasMore = false; SelectedArchive = null; DownloadedIdentity = null; _downloadedVersion = null;
+                _allVersions.Clear(); _versions.Items.Clear(); _expandedGroups.Clear(); _hasMore = false;
+                SelectedArchive = null; DownloadedIdentity = null; _downloadedVersion = null;
                 if (_identity is null || _sources.Items.Count == 0)
                 {
                     _identity = await Task.Run(() => PackIdentityLookup.ResolveInstalled(_instance), token).WaitAsync(token);
                     PackIdentityStore.Save(_instance.PathInstance, _identity);
-                    _project.Text = _identity.Name + "  ·  当前版本 " + _identity.Version;
+                    _project.Text = _identity.Name + "  ·  MC " + (_identity.MinecraftVersion.Length > 0 ? _identity.MinecraftVersion : "未知") +
+                        "  ·  整合包版本 " + (_identity.Version.Length > 0 ? _identity.Version : "未知（不使用远端版本替代）");
+                    _onlyCurrent.Content = "仅显示当前 MC " + _identity.MinecraftVersion;
                     _initializing = true;
                     try
                     {
@@ -118,12 +148,12 @@ internal sealed class PackUpdateDownloadWindow : Window
             var json = await Task.Run(() => ModDownload.DlModRequest(address.AbsoluteUri), token).WaitAsync(token);
             var versions = PackUpdateDownloads.Parse(target, json);
             foreach (var version in versions)
-                if (!_versions.Items.Cast<PackDownloadVersion>().Any(v => v.Id == version.Id)) _versions.Items.Add(version);
+                if (!_allVersions.Any(v => v.Id == version.Id)) _allVersions.Add(version);
             _page = page; _hasMore = PackUpdateDownloads.HasMore(target, json, page);
-            if (_versions.SelectedIndex < 0 && _versions.Items.Count > 0) _versions.SelectedIndex = 0;
-            _status.Text = _versions.Items.Count == 0
-                ? "当前列表没有可直接下载且带校验值的客户端包。可加载更多版本、切换来源或选择打开网站。"
-                : $"已找到 {_versions.Items.Count} 个客户端版本。请选择需要的版本；测试版 / 预览版请谨慎使用。";
+            ApplyFilters();
+            _status.Text = _allVersions.Count == 0
+                ? "当前页没有可直接下载且带校验值的客户端包，可加载更多版本或切换来源。"
+                : $"已加载 {_allVersions.Count} 个客户端版本。搜索和排序作用于已加载版本；测试版 / 预览版请谨慎使用。";
         }
         catch (OperationCanceledException) { _status.Text = "查找已取消或超时，可以重试。"; }
         catch (Exception ex) { Failed("获取版本列表失败", ex); }
@@ -132,7 +162,7 @@ internal sealed class PackUpdateDownloadWindow : Window
 
     private async void Download_Click(object sender, RoutedEventArgs e)
     {
-        if (_work is not null || _versions.SelectedItem is not PackDownloadVersion version) return;
+        if (_work is not null || SelectedVersion is not { } version) return;
         var extension = Path.GetExtension(version.FileName);
         var save = new SaveFileDialog
         {
@@ -204,7 +234,7 @@ internal sealed class PackUpdateDownloadWindow : Window
 
     private async void Update_Click(object sender, RoutedEventArgs e)
     {
-        if (_work is not null || SelectedArchive is null || _downloadedVersion is null) return;
+        if (_work is not null || SelectedArchive is null || _downloadedVersion is null || SelectedVersion != _downloadedVersion) return;
         _work = new CancellationTokenSource();
         var token = _work.Token;
         UpdateControls();
@@ -237,13 +267,59 @@ internal sealed class PackUpdateDownloadWindow : Window
         if (url.Length > 0) ModBase.OpenWebsite(url);
     }
 
+    private void ApplyFilters()
+    {
+        var selected = SelectedVersion;
+        var current = _identity?.MinecraftVersion ?? "";
+        var groups = PackDownloadBrowser.Browse(_allVersions, _search.Text, _onlyCurrent.IsChecked == true ? current : "",
+            (PackDownloadSort)Math.Max(0, _sort.SelectedIndex));
+        _versions.Items.Clear();
+        TreeViewItem? selection = null;
+        foreach (var group in groups)
+        {
+            var expanded = _search.Text.Trim().Length > 0 || (_expandedGroups.TryGetValue(group.Minecraft, out var saved) ? saved
+                : group.Minecraft == current || current.Length == 0 && _versions.Items.Count == 0);
+            var node = new TreeViewItem
+            {
+                Header = $"Minecraft {group.Minecraft}" + (group.Minecraft == current ? " · 当前版本" : "") + $"（{group.Versions.Count}）",
+                Tag = group.Minecraft, IsExpanded = expanded, Padding = new Thickness(5, 8, 5, 8)
+            };
+            node.Expanded += (_, e) => { if (e.OriginalSource == node) _expandedGroups[group.Minecraft] = true; };
+            node.Collapsed += (_, e) => { if (e.OriginalSource == node) _expandedGroups[group.Minecraft] = false; };
+            foreach (var version in group.Versions)
+            {
+                var row = new TreeViewItem { Header = new TextBlock { Text = version.ToString(), TextWrapping = TextWrapping.Wrap, MaxWidth = 660 },
+                    Tag = version, ToolTip = version.FileName, Padding = new Thickness(6, 8, 6, 8) };
+                node.Items.Add(row);
+                if (Equals(version, selected)) selection = row;
+                else if (selection is null && node.IsExpanded) selection = row;
+            }
+            _versions.Items.Add(node);
+        }
+        if (selection is not null) selection.IsSelected = true;
+        var count = groups.SelectMany(g => g.Versions).Select(v => v.Id).Distinct().Count();
+        _summary.Text = count == 0 ? $"没有匹配版本（已加载 {_allVersions.Count} 个）。可清空搜索、取消“仅当前 MC”或加载更多。"
+            : $"显示 {count} / {_allVersions.Count} 个版本，{groups.Count} 个 MC 分组。点击分组箭头展开或折叠。";
+        UpdateControls();
+    }
+
+    private void SetGroupsExpanded(bool expanded)
+    {
+        foreach (TreeViewItem node in _versions.Items)
+        {
+            _expandedGroups[(string)node.Tag] = expanded;
+            node.IsExpanded = expanded;
+        }
+    }
+
     private void UpdateControls()
     {
         var idle = _work is null;
-        _sources.IsEnabled = _versions.IsEnabled = _refresh.IsEnabled = idle;
+        _sources.IsEnabled = _versions.IsEnabled = _refresh.IsEnabled = _search.IsEnabled = _sort.IsEnabled = idle;
+        _onlyCurrent.IsEnabled = idle && !string.IsNullOrEmpty(_identity?.MinecraftVersion);
         _more.IsEnabled = idle && _hasMore;
-        _download.IsEnabled = idle && _versions.SelectedItem is PackDownloadVersion;
-        _update.IsEnabled = idle && SelectedArchive is not null && Equals(_versions.SelectedItem, _downloadedVersion);
+        _download.IsEnabled = idle && SelectedVersion is not null;
+        _update.IsEnabled = idle && SelectedArchive is not null && Equals(SelectedVersion, _downloadedVersion);
         _cancel.IsEnabled = !idle;
         _website.IsEnabled = _identity is not null && PackUpdateProject.DownloadPage(_identity).Length > 0;
     }

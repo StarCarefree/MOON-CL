@@ -17,7 +17,8 @@ public sealed record PackDownloadVersion(string Source, string ProjectId, string
     string FileName, string Url, string Hash, HashAlgorithmName Algorithm, string ReleaseType, string Minecraft,
     DateTimeOffset Published)
 {
-    public override string ToString() => $"{Name}  ·  {ReleaseType}  ·  MC {Minecraft}  ·  {Published:yyyy-MM-dd}";
+    public string Loader { get; init; } = "";
+    public override string ToString() => $"{Name}  ·  {ReleaseType}  ·  MC {Minecraft}  ·  {Loader}  ·  {Published:yyyy-MM-dd}";
 }
 
 /// <summary>Only downloadable client archives belonging to the requested project are offered for updates.</summary>
@@ -93,7 +94,12 @@ public static class PackUpdateDownloads
                 var title = Text(item, mr ? "name" : "displayName");
                 var version = mr ? Text(item, "version_number") : title;
                 result.Add(new(project.Source, project.Id, Text(item, "id"), title.Length > 0 ? title : name,
-                    version, name, uri.AbsoluteUri, hash, algorithm, type, string.Join(", ", games), published));
+                    version, name, uri.AbsoluteUri, hash, algorithm, type, string.Join(", ", games), published)
+                {
+                    Loader = string.Join(", ", (item[mr ? "loaders" : "gameVersions"] as JsonArray)?.Select(n => n?.ToString() ?? "")
+                        .Where(s => s.Equals("fabric", StringComparison.OrdinalIgnoreCase) || s.Equals("forge", StringComparison.OrdinalIgnoreCase) ||
+                                    s.Equals("neoforge", StringComparison.OrdinalIgnoreCase) || s.Equals("quilt", StringComparison.OrdinalIgnoreCase)) ?? [])
+                });
                 break;
             }
         }
