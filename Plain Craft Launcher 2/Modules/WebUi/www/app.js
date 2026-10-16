@@ -1,15 +1,19 @@
 "use strict";
 /* Browse bridge. Host owns the native shell. This page never draws it and never
    posts projection/navigate/window/action messages.
-   Uplink: {type:'launcher', operation, ...params} and {type:'native', page}.
+   Uplink: {type:'launcher', operation, ...params}, {type:'native', page},
+   {type:'mcmod', operation, ...} and {type:'platform', operation, source, requestId, ...}.
+   Platform list is page 1..400 with the debounced committed query, not an IME partial.
+   Detail and download use item.projectId, never the prefixed card id.
    Real HandleAsync ops used here: select(id), refresh, primary, installQuark,
    cancel, configure(catalogUrls, catalogUrl, quarkServiceUrl), authorizeQuark, checkUpdates, import.
    primary = download if not installed, Packwiz update if updateAvailable,
    launch only from the more-menu when installed and no update is pending.
    Do not send install/launch/update/login/directory — those names are not the
    browse contract (login/directory exist in C# but navigation goes through native).
-   Downlink: bootstrap, browse {launcher}, error {message}. A legacy page
-   snapshot is accepted only to read launcher; its control tree is ignored. */
+   Downlink: bootstrap, browse {launcher}, error {message}, mcmod*, platformList,
+   platformDetail, platformError. A legacy page snapshot is accepted only to read
+   launcher; its control tree is ignored. Every platform reply must echo requestId. */
 
 const SRE_ID = "starrail-harpy-express";
 const SRE_COVER = "sre-cover.png";
@@ -27,7 +31,7 @@ const COPY = {
     connection: { offline: "静态预览 · 未连接本地启动器", connecting: "正在连接启动器", live: "已连接本地启动器", lost: "连接失效" },
     search: "搜索", placeholder: "名称、作者、版本或关键词", refresh: "刷新资源", services: "服务配置",
     recommend: "本地预设", recommendNote: "来自启动器的整合包目录", catalog: "探索整合包",
-    test: "SRE · 置顶测试包", catalogBadge: "目录整合包", offlineState: "离线 · 安装状态未知",
+    test: "SRE · 测试整合包", catalogBadge: "目录整合包", offlineState: "离线 · 安装状态未知",
     notInstalled: "未安装", installed: "已安装", update: "可更新", missing: "无下载来源信息",
     download: "下载整合包", updateAction: "更新整合包", gotoGames: "返回我的游戏", busy: "任务进行中",
     cancel: "取消", more: "更多", versions: "查看版本",
@@ -45,12 +49,12 @@ const COPY = {
     badSnapshot: "浏览数据无法显示。",
     gameRunning: "游戏运行中。下载、更新和夸克安装已禁用，请先在原生界面关闭游戏。",
     locked: "任务进行中，条目选择已暂时锁定。",
-    catalogMissing: "尚未配置额外预设源。你仍可浏览 MC百科，或配置自己的目录。",
+    catalogMissing: "尚未配置额外预设源。你仍可浏览平台整合包，或配置自己的目录。",
     catalogReady: "",
     emptyHost: "启动器没有返回整合包条目。",
     emptySearch: "没有匹配的整合包。",
     recommendOffline: "连接启动器后浏览更多预设。",
-    recommendNone: "暂无其他预设，可在下方浏览 MC百科。",
+    recommendNone: "暂无其他预设，可在下方浏览整合包。",
     recommendSearch: "没有匹配的本地预设。",
     hintOffline: "连接启动器后可下载和导入整合包。",
     hintLive: "下载与游戏管理由本地启动器完成。",
@@ -82,7 +86,7 @@ const COPY = {
     connection: { offline: "Static preview · launcher not connected", connecting: "Connecting to launcher", live: "Launcher connected", lost: "Connection lost" },
     search: "Search", placeholder: "Name, version, or description", refresh: "Refresh", services: "Services",
     recommend: "Launcher presets", recommendNote: "From your launcher catalog", catalog: "Discover packs",
-    test: "SRE · Pinned test pack", catalogBadge: "Catalog pack", offlineState: "Offline · install state unknown",
+    test: "SRE · Test pack", catalogBadge: "Catalog pack", offlineState: "Offline · install state unknown",
     notInstalled: "Not installed", installed: "Installed", update: "Update available", missing: "No source metadata",
     download: "Download pack", updateAction: "Update pack", gotoGames: "Back to my games", busy: "Task in progress",
     cancel: "Cancel", more: "More", versions: "Versions",
@@ -100,7 +104,7 @@ const COPY = {
     badSnapshot: "Browse data could not be shown.",
     gameRunning: "The game is running. Download, update, and Quark install are disabled.",
     locked: "A task is running, so selection is locked.",
-    catalogMissing: "No extra preset source configured. Browse MC百科 below, or add your own catalog.",
+    catalogMissing: "No extra preset source configured. Browse platform modpacks below, or add your own catalog.",
     catalogReady: "",
     emptyHost: "The launcher returned no packs.",
     emptySearch: "No matching packs.",
@@ -155,16 +159,30 @@ const state = {
 };
 // List caches are isolated by site filters + page, with requestId guarding retries
 // and same-page races. Detail caches remain wiki-id scoped, never launcher state.
+// Platform caches are keyed by source/query/version/loader/sort/page.
 const COMMON_MC = ["1.21.1", "1.20.1", "1.19.2", "1.18.2", "1.16.5", "1.12.2"];
 const SITE_LOADERS = ["Forge", "Fabric", "Quilt", "NeoForge", "LiteLoader", "Rift", "数据包", "行为包"];
+const PLATFORM_LOADERS = ["Forge", "Fabric", "Quilt", "NeoForge"];
+const PLATFORM_SORTS = ["relevance", "downloads", "updated", "newest"];
 const SITE_CATEGORIES = ["科技", "魔法", "冒险", "建筑", "地图", "任务", "硬核", "休闲", "大型", "轻量", "剧情", "水槽", "空岛", "PvP", "国创"];
 const REQUEST_TIMEOUT = 45000;
+const PLATFORM_TIMEOUT = 60000;
+const SEARCH_DEBOUNCE = 350;
+const PLATFORM_PAGE_MAX = 400;
+const browse = { source: "curseforge" };
 const catalog = {
-  include: true, page: 1, totalPages: 0, sequence: 0, retained: new Map(),
+  include: false, page: 1, totalPages: 0, sequence: 0, retained: new Map(),
   pages: new Map(), listPending: new Map(), listErrors: new Map(),
   requests: new Map(), latest: new Map(),
   details: new Map(), detailPending: new Map(), detailErrors: new Map(),
   downloads: new Map(), viewedId: "", detailId: "", returnFocus: null
+};
+const platform = {
+  page: 1, totalPages: 0, query: "", sequence: 0, searchTimer: 0,
+  pages: new Map(), retained: new Map(), listPending: new Map(), listErrors: new Map(),
+  requests: new Map(), latest: new Map(), details: new Map(),
+  detailPending: new Map(), detailErrors: new Map(), detailLatest: new Map(),
+  downloads: new Map(), downloadLatest: new Map()
 };
 const ui = Object.fromEntries([...document.querySelectorAll("[id]")].map(node => [node.id, node]));
 const text = () => COPY[state.language] || COPY.en;
@@ -224,7 +242,7 @@ function classifyUrl(value) {
 function packs() {
   if (state.link !== "live" || !state.launcher) return [{ ...OFFLINE_SRE, offline: true }];
   const list = (Array.isArray(state.launcher.presets) ? state.launcher.presets : [])
-    .filter(item => item && typeof item.id === "string" && item.id.length > 0 && !isMcmod(item));
+    .filter(item => item && typeof item.id === "string" && item.id.length > 0 && !isMcmod(item) && !isPlatform(item));
   // Keep the built-in identity visible even when a host snapshot omits it. Its
   // release/loader/author metadata is intentionally unknown, not guessed.
   const sre = list.find(isSre) || { ...OFFLINE_SRE, offline: true };
@@ -239,12 +257,14 @@ function values(value) {
 function mcVersions(item) { return values(item?.minecraftVersions?.length ? item.minecraftVersions : item?.minecraft); }
 function loaders(item) { return values(item?.loaders?.length ? item.loaders : item?.loader); }
 function authors(item) { return values(item?.authors?.length ? item.authors : item?.author); }
+function displayVersion(item) { return typeof item?.version === "string" && item.version ? item.version : ""; }
 function matches(item, query) {
-  return !query || [item.name, item.englishName, item.id, item.description, item.version, ...mcVersions(item), ...loaders(item), ...authors(item), ...values(item.categories), item.installedVersion, item.updateVersion]
+  return !query || [item.name, item.englishName, item.id, item.description, displayVersion(item), ...mcVersions(item), ...loaders(item), ...authors(item), ...values(item.categories), item.installedVersion, item.updateVersion]
     .some(part => String(part || "").toLocaleLowerCase().includes(query));
 }
 function matchesFilters(item) {
-  // The site already applied structured filters, even if list metadata is absent.
+  // Platform and MC百科 already applied their own filters. Missing list metadata must still render.
+  if (isPlatform(item)) return true;
   if (isMcmod(item)) return matches(item, queryText());
   const category = SITE_CATEGORIES[Number(ui["filter-category"].value) - 1];
   return matches(item, queryText()) && (!ui["filter-mc"].value || mcVersions(item).includes(ui["filter-mc"].value))
@@ -266,6 +286,7 @@ function packArt(item, field) {
 }
 function statusLabel(item) {
   if (isMcmod(item)) return "MC百科";
+  if (isPlatform(item)) return sourceName(item.source);
   const t = text();
   if (!item || item.offline || state.link !== "live") return t.offlineState;
   if (item.updateAvailable) return t.update;
@@ -338,10 +359,10 @@ function syncButtons(parent, items, className, activate) {
     node.setAttribute("aria-pressed", String(selected));
     node.tabIndex = 0;
     node.parts.title.textContent = item.name || id;
-    const version = [mcVersions(item).length ? `MC ${mcVersions(item).join(" / ")}` : "MC 版本未提供", loaders(item).join(" / "), item.version || ""].filter(Boolean).join(" · ");
+    const version = [mcVersions(item).length ? `MC ${mcVersions(item).join(" / ")}` : "MC 版本未提供", loaders(item).join(" / "), displayVersion(item)].filter(Boolean).join(" · ");
     node.parts.detail.textContent = version;
     node.parts.summary.textContent = item.description || "暂无简介，点击查看详情。";
-    node.parts.pill.textContent = isSre(item) ? text().test : isMcmod(item) ? "MC百科 · 查看详情" : statusLabel(item);
+    node.parts.pill.textContent = isSre(item) ? text().test : isMcmod(item) ? "MC百科 · 查看详情" : isPlatform(item) ? `${sourceName(item.source)} · 查看详情` : statusLabel(item);
     node.parts.pill.className = `pill${item.updateAvailable ? " update" : item.installed ? " installed" : item.offline ? " offline" : ""}`;
     const label = `${item.name || id}，${isSre(item) ? text().test : statusLabel(item)}，查看详情`;
     node.setAttribute("aria-label", label);
@@ -370,7 +391,7 @@ function syncButtons(parent, items, className, activate) {
  }
  function enqueue(operation) {
    const pack = selectedPack();
-   if (!pack || pack.offline || isMcmod(pack) || mutatingLocked()) return false;
+   if (!pack || pack.offline || isMcmod(pack) || isPlatform(pack) || mutatingLocked()) return false;
    if (state.confirmedSelected !== pack.id) {
      state.queued = { id: pack.id, operation, previous: state.confirmedSelected, at: Date.now() };
      state.localNote = text().sent;
@@ -488,7 +509,7 @@ function render() {
   setText("pack-name", selected?.name || "StarRailHarpyExpress");
   setText("pack-description", selected?.description || (isSre(selected) ? OFFLINE_SRE.description : "暂无简介，点击下方卡片查看版本与作者资料。"));
   setText("meta-mc", mcVersions(selected).join(" / ") || "未提供");
-  setText("meta-ver", selected?.version || "未提供");
+  setText("meta-ver", displayVersion(selected) || "未提供");
   setText("meta-installed", selected?.installedVersion || "—");
   setImage(ui["banner-image"], packArt(selected, "background"));
   ui.banner.setAttribute("aria-busy", String(isBusy || !!state.pending));
@@ -617,7 +638,7 @@ function applySnapshot(data) {
     state.configSent = null;
   }
   render();
-  ensureMcmod();
+  ensureBrowse();
 }
 function showHostError(message) {
    state.pending = null;
@@ -635,6 +656,7 @@ function receive(data) {
     else if (data.type === "browse" || data.type === "page") applySnapshot(data);
     else if (data.type === "error") showHostError(data.message);
     else if (["mcmodList", "mcmodDetail", "mcmodError"].includes(data.type)) receiveMcmod(data);
+    else if (["platformList", "platformDetail", "platformError"].includes(data.type)) receivePlatform(data);
   } catch { showHostError(text().badSnapshot); }
 }
 function moveFocus(parent, event, columns) {
@@ -674,15 +696,21 @@ function filterKey() { return JSON.stringify(siteFilters()); }
 function pageKey(page = catalog.page, filters = filterKey()) { return JSON.stringify([filters, page]); }
 function catalogItems() {
   const page = catalog.pages.get(pageKey());
-  const remote = catalog.include ? (page?.items || catalog.retained.get(filterKey())?.items || []) : [];
-  return [...packs(), ...remote.map(item => ({ ...item, ...catalog.details.get(wikiId(item)) }))];
+  const mcmodItems = catalog.include ? (page?.items || catalog.retained.get(filterKey())?.items || []) : [];
+  const platformPage = isRemoteBrowse() ? platform.pages.get(platformPageKey()) : null;
+  const platformItems = !isRemoteBrowse() ? [] : (platformPage ? platformPage.items : (platform.retained.get(platformFilterKey())?.items || []));
+  return [
+    ...packs(),
+    ...platformItems.map(item => ({ ...item, ...platform.details.get(detailKey(item.source, item.projectId)) })),
+    ...mcmodItems.map(item => ({ ...item, ...catalog.details.get(wikiId(item)) }))
+  ];
 }
 function syncFilterOptions(items) {
-  const versions = [...new Set([...COMMON_MC, ...items.flatMap(mcVersions), ...[...catalog.details.values()].flatMap(mcVersions), ui["filter-mc"].value].filter(Boolean))]
+  const versions = [...new Set([...COMMON_MC, ...items.flatMap(mcVersions), ...[...catalog.details.values()].flatMap(mcVersions), ...[...platform.details.values()].flatMap(mcVersions), ui["filter-mc"].value].filter(Boolean))]
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   for (const [id, options, label] of [
     ["filter-mc", versions.map(value => [value, value]), "全部版本"],
-    ["filter-loader", SITE_LOADERS.map(value => [value, value]), "全部加载器"],
+    ["filter-loader", activeLoaders().map(value => [value, value]), "全部加载器"],
     ["filter-category", SITE_CATEGORIES.map((value, index) => [String(index + 1), value]), "全部分类"]
   ]) {
     const node = ui[id];
@@ -696,15 +724,20 @@ function syncFilterOptions(items) {
       option.textContent = label;
       return option;
     }));
-    node.value = selected;
+    node.value = options.some(([value]) => value === selected) ? selected : "";
   }
 }
-function changeSiteFilters() {
+function changeSiteFilters(event) {
+  const categoryOnly = event?.target?.id === "filter-category";
   catalog.page = 1;
   catalog.totalPages = catalog.pages.get(pageKey())?.totalPages || catalog.retained.get(filterKey())?.totalPages || 0;
+  if (isRemoteBrowse() && !categoryOnly) {
+    platform.page = 1;
+    platform.totalPages = platform.pages.get(platformPageKey())?.totalPages || platform.retained.get(platformFilterKey())?.totalPages || 0;
+  }
   // Never present a different filter's results while this request is pending.
   render();
-  ensureMcmod();
+  ensureBrowse();
 }
 function ensureMcmod() {
   const key = pageKey();
@@ -812,6 +845,21 @@ function receiveMcmod(data) {
 }
 function renderCatalogStatus() {
   const live = state.link === "live";
+  const remote = isRemoteBrowse();
+  for (const source of ["curseforge", "modrinth", "mcmod"]) ui[`source-${source}`]?.setAttribute("aria-selected", String(browse.source === source));
+  ui["filter-category"].disabled = remote && !catalog.include;
+  ui["filter-sort-label"].hidden = !remote;
+  const name = sourceName();
+  if (!remote) {
+    setText("catalog-caption-main", "版本、加载器与分类筛选 MC百科全站 · 文字仅搜索已加载页与本地预设");
+    setText("catalog-caption-note", "百科资料来自 MC百科 · 不会请求 CurseForge 或 Modrinth");
+  } else if (catalog.include) {
+    setText("catalog-caption-main", `${name} 按已提交搜索、版本、加载器与排序筛选 · 每页 24 个`);
+    setText("catalog-caption-note", "同时显示的 MC百科仍用分类与本地文字筛选 · 分类不会传给平台 · 本地预设按搜索框即时筛选");
+  } else {
+    setText("catalog-caption-main", `${name} 搜索、版本、加载器与排序由平台处理 · 每页 24 个`);
+    setText("catalog-caption-note", "本地预设按搜索框即时筛选 · 未连接时不请求网络 · 分类仅用于 MC百科");
+  }
   const key = pageKey();
   const pending = catalog.listPending.has(key);
   const error = catalog.listErrors.get(key);
@@ -828,12 +876,263 @@ function renderCatalogStatus() {
   setText("page-label", `MC百科 · 第 ${catalog.page} 页${catalog.totalPages ? ` / ${catalog.totalPages}` : ""}`);
   ui["previous-page"].disabled = !live || catalog.page <= 1;
   ui["next-page"].disabled = !live || !catalog.totalPages || catalog.page >= catalog.totalPages || catalog.page >= 500;
+  renderPlatformStatus();
+}
+function isRemoteBrowse() { return browse.source === "curseforge" || browse.source === "modrinth"; }
+function sourceName(source = browse.source) {
+  return source === "modrinth" ? "Modrinth" : source === "mcmod" ? "MC百科" : "CurseForge";
+}
+function activeLoaders() { return isRemoteBrowse() && !catalog.include ? PLATFORM_LOADERS : SITE_LOADERS; }
+function projectIdOf(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = String(item.id || "");
+  const prefixed = id.match(/^(curseforge|modrinth)-([A-Za-z0-9]+)$/);
+  const source = item.source || prefixed?.[1] || "";
+  if (source !== "curseforge" && source !== "modrinth") return null;
+  const projectId = item.projectId != null && item.projectId !== "" ? String(item.projectId) : (prefixed && prefixed[1] === source ? prefixed[2] : "");
+  if (source === "curseforge" && !/^\d+$/.test(projectId)) return null;
+  if (source === "modrinth" && !/^[A-Za-z0-9]{1,32}$/.test(projectId)) return null;
+  if (prefixed && prefixed[1] === source && prefixed[2] !== projectId) return null;
+  return { source, projectId };
+}
+function isPlatform(item) { return !!projectIdOf(item); }
+function detailKey(source, projectId) { return `${source}:${projectId}`; }
+function normalizePlatform(item, expectedSource) {
+  const identity = projectIdOf(item);
+  if (!identity || (expectedSource && identity.source !== expectedSource)) return null;
+  return {
+    id: `${identity.source}-${identity.projectId}`,
+    projectId: identity.projectId,
+    source: identity.source,
+    name: typeof item.name === "string" ? item.name : "",
+    englishName: typeof item.englishName === "string" ? item.englishName : "",
+    description: typeof item.description === "string" ? item.description : "",
+    icon: typeof item.icon === "string" ? item.icon : "",
+    website: typeof item.website === "string" ? item.website : "",
+    minecraftVersions: Array.isArray(item.minecraftVersions) ? item.minecraftVersions.filter(value => typeof value === "string") : [],
+    loaders: Array.isArray(item.loaders) ? item.loaders.filter(value => typeof value === "string") : [],
+    authors: Array.isArray(item.authors) ? item.authors.filter(value => typeof value === "string") : [],
+    categories: Array.isArray(item.categories) ? item.categories.filter(value => typeof value === "string") : [],
+    version: typeof item.version === "string" ? item.version : ""
+  };
+}
+function platformFilters() {
+  const minecraft = ui["filter-mc"].value || "";
+  const loader = PLATFORM_LOADERS.includes(ui["filter-loader"].value) ? ui["filter-loader"].value : "";
+  const sort = PLATFORM_SORTS.includes(ui["filter-sort"]?.value) ? ui["filter-sort"].value : "relevance";
+  return { source: browse.source === "modrinth" ? "modrinth" : "curseforge", query: platform.query, minecraft, loader, sort };
+}
+function platformFilterKey() { return JSON.stringify(platformFilters()); }
+function platformPageKey(page = platform.page) { return JSON.stringify([platformFilterKey(), page]); }
+function selectBrowseSource(source) {
+  if (browse.source === source || !["curseforge", "modrinth", "mcmod"].includes(source)) return;
+  clearTimeout(platform.searchTimer);
+  platform.searchTimer = 0;
+  browse.source = source;
+  if (source === "mcmod") {
+    catalog.include = true;
+    ui["include-mcmod"].checked = true;
+    if (isPlatform({ id: catalog.viewedId })) catalog.viewedId = "";
+  } else {
+    catalog.include = false;
+    ui["include-mcmod"].checked = false;
+    ui["filter-category"].value = "";
+    if (!PLATFORM_LOADERS.includes(ui["filter-loader"].value)) ui["filter-loader"].value = "";
+    if (!state.composing) platform.query = ui.search.value.trim();
+    platform.page = 1;
+    const cached = platform.pages.get(platformPageKey());
+    platform.totalPages = cached?.totalPages || platform.retained.get(platformFilterKey())?.totalPages || 0;
+    if (isMcmod({ id: catalog.viewedId })) catalog.viewedId = "";
+  }
+  render();
+  ensureBrowse();
+  if (!state.composing && isRemoteBrowse() && ui.search.value.trim() !== platform.query) schedulePlatformSearch();
+}
+function ensureBrowse() {
+  if (state.link !== "live") return;
+  if (isRemoteBrowse()) ensurePlatform();
+  if (catalog.include) ensureMcmod();
+}
+function ensurePlatform() {
+  const key = platformPageKey();
+  if (isRemoteBrowse() && state.link === "live" && !platform.pages.has(key) && !platform.listPending.has(key) && !platform.listErrors.has(key)) requestPlatformPage(platform.page);
+}
+function invalidatePlatformLists() {
+  for (const key of [...platform.listPending.keys()]) clearRequest(platform.listPending, key);
+  platform.pages.clear();
+  platform.latest.clear();
+  platform.listErrors.clear();
+}
+function schedulePlatformSearch() {
+  clearTimeout(platform.searchTimer);
+  platform.searchTimer = 0;
+  if (!isRemoteBrowse() || state.composing) return;
+  platform.searchTimer = setTimeout(() => {
+    platform.searchTimer = 0;
+    commitPlatformQuery(false);
+  }, SEARCH_DEBOUNCE);
+}
+function commitPlatformQuery(force = false) {
+  if (!isRemoteBrowse() || state.composing) return;
+  const next = ui.search.value.trim();
+  if (next !== platform.query) {
+    platform.query = next;
+    platform.page = 1;
+    requestPlatformPage(1, true);
+    return;
+  }
+  if (force) requestPlatformPage(platform.page, true);
+}
+function requestPlatformPage(page, force = false) {
+  if (!isRemoteBrowse() || state.link !== "live" || !connected() || !Number.isInteger(page) || page < 1 || page > PLATFORM_PAGE_MAX) return;
+  platform.page = page;
+  const filters = platformFilters();
+  const filter = platformFilterKey();
+  const key = platformPageKey(page);
+  const cached = platform.pages.get(key);
+  if (cached && !force) {
+    platform.retained.set(filter, { ...cached, page });
+    platform.totalPages = cached.totalPages;
+    render();
+    return;
+  }
+  if (platform.listPending.has(key) && !force) { render(); return; }
+  clearRequest(platform.listPending, key);
+  if (force) platform.pages.delete(key);
+  const requestId = `platform-list-${++platform.sequence}`;
+  platform.requests.set(requestId, { kind: "list", key, filters: filter, page, source: filters.source });
+  platform.latest.set(key, requestId);
+  platform.listErrors.delete(key);
+  platform.listPending.set(key, setTimeout(() => {
+    if (platform.latest.get(key) !== requestId) return;
+    platform.listPending.delete(key);
+    platform.listErrors.set(key, "请求超时，未收到平台目录。请重试。");
+    render();
+  }, PLATFORM_TIMEOUT));
+  render();
+  if (!post({ type: "platform", operation: "list", source: filters.source, page, query: filters.query, minecraft: filters.minecraft, loader: filters.loader, sort: filters.sort, requestId })) {
+    clearRequest(platform.listPending, key);
+    platform.listErrors.set(key, "连接已断开，请连接启动器后重试。");
+    render();
+  }
+}
+function requestPlatformDetail(item, force = false) {
+  const normalized = normalizePlatform(item);
+  if (!normalized || state.link !== "live" || !connected()) return;
+  const key = detailKey(normalized.source, normalized.projectId);
+  if (platform.detailPending.has(key) && !force) return;
+  if (!force && platform.details.has(key)) return;
+  clearRequest(platform.detailPending, key);
+  const requestId = `platform-detail-${++platform.sequence}`;
+  platform.detailLatest.set(key, requestId);
+  platform.requests.set(requestId, { kind: "detail", source: normalized.source, projectId: normalized.projectId, key });
+  platform.detailErrors.delete(key);
+  platform.detailPending.set(key, setTimeout(() => {
+    if (platform.detailLatest.get(key) !== requestId) return;
+    platform.detailPending.delete(key);
+    platform.detailErrors.set(key, "详情请求超时，请重试。");
+    renderDetail();
+  }, PLATFORM_TIMEOUT));
+  renderDetail();
+  if (!post({ type: "platform", operation: "detail", source: normalized.source, id: normalized.projectId, requestId })) {
+    clearRequest(platform.detailPending, key);
+    platform.detailErrors.set(key, "连接已断开，请连接启动器后重试。");
+    renderDetail();
+  }
+}
+function downloadPlatform() {
+  const item = normalizePlatform(findDetailItem());
+  if (!item || mutatingLocked()) return;
+  const key = detailKey(item.source, item.projectId);
+  const requestId = `platform-download-${++platform.sequence}`;
+  platform.downloadLatest.set(key, requestId);
+  platform.requests.set(requestId, { kind: "download", source: item.source, projectId: item.projectId, key });
+  if (post({ type: "platform", operation: "download", source: item.source, id: item.projectId, requestId })) platform.downloads.set(key, { error: false, message: "已请求启动器打开版本列表，请在原生界面选择文件。", requestId });
+  else platform.downloads.set(key, { error: true, message: "无法连接启动器，请重新连接后重试。", requestId });
+  renderDetail();
+}
+function receivePlatform(data) {
+  const request = platform.requests.get(data.requestId);
+  if (data.type === "platformList") {
+    if (!request || request.kind !== "list" || platform.latest.get(request.key) !== data.requestId) return;
+    if (data.source !== request.source || Number(data.page) !== request.page) return;
+    if (!Array.isArray(data.items)) {
+      receivePlatform({ type: "platformError", source: request.source, operation: "list", page: request.page, requestId: data.requestId, message: "目录数据格式不正确，请重试。" });
+      return;
+    }
+    clearRequest(platform.listPending, request.key);
+    platform.listErrors.delete(request.key);
+    const totalPages = Math.max(1, Math.min(PLATFORM_PAGE_MAX, Math.floor(Number(data.totalPages) || 1)));
+    const items = [...new Map(data.items.map(item => normalizePlatform(item, request.source)).filter(Boolean).map(item => [item.id, item])).values()];
+    platform.pages.set(request.key, { items, totalPages });
+    platform.requests.delete(data.requestId);
+    if (request.filters === platformFilterKey() && request.page === platform.page && isRemoteBrowse()) {
+      platform.retained.set(request.filters, { items, totalPages, page: request.page });
+      platform.totalPages = totalPages;
+    }
+    render();
+    return;
+  }
+  if (data.type === "platformDetail") {
+    const item = normalizePlatform(data.item, data.source);
+    if (!request || request.kind !== "detail" || !item) return;
+    if (data.source !== request.source || String(data.id ?? "") !== request.projectId || item.projectId !== request.projectId) return;
+    if (platform.detailLatest.get(request.key) !== data.requestId) return;
+    clearRequest(platform.detailPending, request.key);
+    platform.detailErrors.delete(request.key);
+    platform.details.set(request.key, item);
+    platform.requests.delete(data.requestId);
+    render();
+    return;
+  }
+  if (data.type !== "platformError" || !request || data.source !== request.source || data.operation !== request.kind) return;
+  const message = String(data.message || "平台请求失败，请重试。");
+  if (request.kind === "list") {
+    if (platform.latest.get(request.key) !== data.requestId || (data.page != null && Number(data.page) !== request.page)) return;
+    clearRequest(platform.listPending, request.key);
+    platform.listErrors.set(request.key, message);
+  } else if (request.kind === "detail") {
+    if (platform.detailLatest.get(request.key) !== data.requestId || (data.id != null && String(data.id) !== request.projectId)) return;
+    clearRequest(platform.detailPending, request.key);
+    platform.detailErrors.set(request.key, message);
+  } else if (request.kind === "download") {
+    if (platform.downloadLatest.get(request.key) !== data.requestId || (data.id != null && String(data.id) !== request.projectId)) return;
+    platform.downloads.set(request.key, { error: true, message, requestId: data.requestId });
+  } else return;
+  platform.requests.delete(data.requestId);
+  render();
+}
+function renderPlatformStatus() {
+  const live = state.link === "live";
+  const remote = isRemoteBrowse();
+  ui["platform-status"].hidden = !remote;
+  ui["platform-pagination"].hidden = !remote;
+  if (!remote) return;
+  const name = sourceName();
+  const key = platformPageKey();
+  const pending = platform.listPending.has(key);
+  const error = platform.listErrors.get(key);
+  const page = platform.pages.get(key);
+  const previous = platform.retained.get(platformFilterKey());
+  const retained = previous && (error || !page) ? ` 仍显示${name}相同筛选的第 ${previous.page} 页结果。` : "";
+  ui["platform-status"].dataset.state = !live ? "offline" : pending ? "loading" : error ? "error" : "ready";
+  ui["platform-status"].setAttribute("aria-busy", String(live && pending));
+  setText("platform-message", !live ? `连接启动器后加载 ${name}。` : pending ? `正在加载 ${name} 第 ${platform.page} 页…${retained}` : error ? `${error}${retained}` : page ? (page.items.length ? `${name} · 当前页 ${page.items.length} 个整合包` : `${name} · 当前页暂无整合包`) : `等待加载 ${name}…`);
+  ui["platform-retry"].hidden = !error || pending;
+  ui["platform-retry"].disabled = !live;
+  setText("platform-page-label", `${name} · 第 ${platform.page} 页${platform.totalPages ? ` / ${platform.totalPages}` : ""}`);
+  ui["platform-previous-page"].disabled = !live || platform.page <= 1;
+  ui["platform-next-page"].disabled = !live || !platform.totalPages || platform.page >= platform.totalPages || platform.page >= PLATFORM_PAGE_MAX;
 }
 function findDetailItem() {
   if (!catalog.detailId) return null;
   if (isMcmod({ id: catalog.detailId })) {
     const id = wikiId({ id: catalog.detailId });
     return { ...catalog.detailBase, ...catalog.details.get(id) };
+  }
+  if (isPlatform(catalog.detailBase) || isPlatform({ id: catalog.detailId })) {
+    const identity = projectIdOf(catalog.detailBase) || projectIdOf({ id: catalog.detailId });
+    return identity ? { ...catalog.detailBase, ...platform.details.get(detailKey(identity.source, identity.projectId)) } : catalog.detailBase;
   }
   return packs().find(item => item.id === catalog.detailId) || catalog.detailBase;
 }
@@ -846,10 +1145,11 @@ function openDetail(id) {
   catalog.viewedId = id;
   catalog.detailBase = item;
   ui["detail-introduction"].open = false;
-  if (!isMcmod(item)) choose(id);
+  if (!isMcmod(item) && !isPlatform(item)) choose(id);
   render();
   if (!ui["pack-detail"].open) ui["pack-detail"].showModal();
   if (isMcmod(item)) requestDetail(item);
+  if (isPlatform(item)) requestPlatformDetail(item);
 }
 function externalUrl(value) {
   return typeof value === "string" && value && classifyUrl(value).ok ? value : "";
@@ -868,39 +1168,42 @@ function renderDetail() {
   const item = findDetailItem();
   if (!item) return;
   const remote = isMcmod(item);
+  const platformItem = isPlatform(item);
   const id = wikiId(item);
-  const loaded = remote && catalog.details.has(id);
-  const pending = remote && catalog.detailPending.has(id);
-  const error = remote && catalog.detailErrors.get(id);
+  const key = platformItem ? detailKey(item.source, item.projectId) : "";
+  const loaded = remote ? catalog.details.has(id) : platformItem ? platform.details.has(key) : true;
+  const pending = remote ? catalog.detailPending.has(id) : platformItem ? platform.detailPending.has(key) : false;
+  const error = remote ? catalog.detailErrors.get(id) : platformItem ? platform.detailErrors.get(key) : "";
   const live = state.link === "live";
-  setText("detail-source", remote ? "MC百科 · 整合包资料" : isSre(item) ? text().test : "启动器预设 · 整合包资料");
+  const needsFetch = remote || platformItem;
+  setText("detail-source", platformItem ? `${sourceName(item.source)} · 整合包资料` : remote ? "MC百科 · 整合包资料" : isSre(item) ? text().test : "启动器预设 · 整合包资料");
   setText("detail-name", item.name || item.id);
   setText("detail-english", item.englishName || "");
   setText("detail-description", item.description || "暂无简介。");
   setImage(ui["detail-icon"], packArt(item, "icon"));
   setText("detail-mc", mcVersions(item).join(" / ") || "未提供");
-  setText("detail-version", item.version || "未提供");
+  setText("detail-version", displayVersion(item) || "未提供");
   setText("detail-loader", loaders(item).join(" / ") || "未提供");
   setText("detail-authors", authors(item).join("、") || "未提供");
   setText("detail-categories", values(item.categories).join(" · ") || "未提供");
-  ui["detail-status"].hidden = !remote || (!!loaded && !pending && !error);
+  ui["detail-status"].hidden = !needsFetch || (!!loaded && !pending && !error);
   ui["detail-status"].dataset.state = pending ? "loading" : error ? "error" : "offline";
   ui["detail-status"].setAttribute("aria-busy", String(!!pending));
   setText("detail-message", pending ? "正在获取完整资料与下载来源…" : error || (!live ? "连接启动器后可获取完整详情。" : "完整资料尚未加载。"));
-  ui["detail-retry"].hidden = !remote || pending || (!error && !!loaded);
-  ui["detail-retry"].disabled = !live || !catalog.include;
-  const cf = loaded && curseForgeUrl(item);
-  ui["detail-download"].hidden = !cf;
+  ui["detail-retry"].hidden = !needsFetch || pending || (!error && !!loaded);
+  ui["detail-retry"].disabled = !live || (remote && !catalog.include);
+  const cf = remote && loaded && curseForgeUrl(item);
+  ui["detail-download"].hidden = platformItem ? false : !cf;
   ui["detail-download"].disabled = mutatingLocked();
-  ui["detail-native"].hidden = remote;
+  ui["detail-native"].hidden = remote || platformItem;
   ui["detail-native"].disabled = !live || busy() || !!item.offline;
   const website = externalUrl(item.website);
   ui["detail-website"].hidden = !website;
   ui["detail-website"].disabled = !live;
   ui["detail-website"].textContent = remote ? "在 MC百科查看 ↗" : "访问项目网站 ↗";
   ui["detail-import"].disabled = mutatingLocked();
-  setText("detail-guidance", !remote ? "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。" : !loaded ? "完整详情加载后显示实际下载来源；也可先在 MC百科阅读介绍。" : cf ? "在启动器的 CurseForge 文件列表中选择实际版本下载。" : "暂无 CurseForge 下载入口。请前往作者提供的网站手动下载，再将 ZIP / MRPACK 归档导入启动器。");
-  const links = loaded && Array.isArray(item.links) ? item.links.filter(link => externalUrl(link?.url)) : [];
+  setText("detail-guidance", platformItem ? "在启动器中选择版本并下载。也可访问项目网站，或导入已下载的 ZIP / MRPACK。" : !remote ? "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。" : !loaded ? "完整详情加载后显示实际下载来源；也可先在 MC百科阅读介绍。" : cf ? "在启动器的 CurseForge 文件列表中选择实际版本下载。" : "暂无 CurseForge 下载入口。请前往作者提供的网站手动下载，再将 ZIP / MRPACK 归档导入启动器。");
+  const links = remote && loaded && Array.isArray(item.links) ? item.links.filter(link => externalUrl(link?.url)) : [];
   const linkKey = JSON.stringify([links, live]);
   if (ui["detail-links"].dataset.key !== linkKey) {
     ui["detail-links"].dataset.key = linkKey;
@@ -914,9 +1217,9 @@ function renderDetail() {
       return button;
     }));
   }
-  const download = remote && catalog.downloads.get(id);
+  const download = platformItem ? platform.downloads.get(key) : remote ? catalog.downloads.get(id) : null;
   setText("download-status", download?.message || "");
-  ui["download-retry"].hidden = !download?.error || !cf;
+  ui["download-retry"].hidden = !download?.error || (remote && !cf);
   ui["download-retry"].disabled = mutatingLocked();
 }
 function downloadMcmod() {
@@ -933,23 +1236,43 @@ function downloadMcmod() {
     renderDetail();
   }
 }
+function downloadCurrent() {
+  if (isPlatform(findDetailItem())) downloadPlatform();
+  else downloadMcmod();
+}
 
 ui.filters.addEventListener("submit", event => event.preventDefault());
 for (const id of ["filter-mc", "filter-loader", "filter-category"]) ui[id].addEventListener("change", changeSiteFilters);
+ui["filter-sort"].addEventListener("change", () => {
+  if (!isRemoteBrowse()) return;
+  platform.page = 1;
+  platform.totalPages = platform.pages.get(platformPageKey())?.totalPages || 0;
+  render();
+  ensurePlatform();
+});
+for (const source of ["curseforge", "modrinth", "mcmod"]) ui[`source-${source}`].addEventListener("click", () => selectBrowseSource(source));
 ui["reset-filters"].addEventListener("click", () => {
   ui.search.value = "";
+  clearTimeout(platform.searchTimer);
+  platform.searchTimer = 0;
+  platform.query = "";
+  ui["filter-sort"].value = "relevance";
   for (const id of ["filter-mc", "filter-loader", "filter-category"]) ui[id].value = "";
   changeSiteFilters();
 });
 ui["include-mcmod"].addEventListener("change", () => {
   catalog.include = ui["include-mcmod"].checked;
   if (!catalog.include && isMcmod({ id: catalog.viewedId })) catalog.viewedId = "";
+  if (!catalog.include && isRemoteBrowse()) ui["filter-category"].value = "";
   render();
-  ensureMcmod();
+  ensureBrowse();
 });
 ui["previous-page"].addEventListener("click", () => { if (!ui["previous-page"].disabled) requestPage(catalog.page - 1); });
 ui["next-page"].addEventListener("click", () => { if (!ui["next-page"].disabled) requestPage(catalog.page + 1); });
 ui["mcmod-retry"].addEventListener("click", () => requestPage(catalog.page, true));
+ui["platform-previous-page"].addEventListener("click", () => { if (!ui["platform-previous-page"].disabled) requestPlatformPage(platform.page - 1); });
+ui["platform-next-page"].addEventListener("click", () => { if (!ui["platform-next-page"].disabled) requestPlatformPage(platform.page + 1); });
+ui["platform-retry"].addEventListener("click", () => requestPlatformPage(platform.page, true));
 ui["close-detail"].addEventListener("click", () => ui["pack-detail"].close());
 ui["pack-detail"].addEventListener("cancel", event => {
   if (state.composing || event.isComposing || event.keyCode === 229) event.preventDefault();
@@ -959,41 +1282,82 @@ ui["pack-detail"].addEventListener("close", () => {
   if (catalog.returnFocus?.isConnected) catalog.returnFocus.focus();
   else ui.search.focus();
 });
-ui["detail-retry"].addEventListener("click", () => requestDetail(findDetailItem(), true));
+ui["detail-retry"].addEventListener("click", () => {
+  const item = findDetailItem();
+  if (isPlatform(item)) requestPlatformDetail(item, true);
+  else requestDetail(item, true);
+});
 ui["detail-website"].addEventListener("click", () => openExternal(findDetailItem()?.website));
-ui["detail-download"].addEventListener("click", downloadMcmod);
-ui["download-retry"].addEventListener("click", downloadMcmod);
+ui["detail-download"].addEventListener("click", downloadCurrent);
+ui["download-retry"].addEventListener("click", downloadCurrent);
 ui["detail-import"].addEventListener("click", () => { if (!mutatingLocked()) postLauncher("import"); });
 ui["detail-native"].addEventListener("click", () => {
   const item = findDetailItem();
-  if (!item || isMcmod(item) || ui["detail-native"].disabled) return;
+  if (!item || isMcmod(item) || isPlatform(item) || ui["detail-native"].disabled) return;
   choose(item.id);
   ui["pack-detail"].close();
   ui.primary.focus();
 });
 
-document.addEventListener("compositionstart", () => { state.composing = true; });
-document.addEventListener("compositionend", () => { state.composing = false; });
-ui["search-form"].addEventListener("submit", event => event.preventDefault());
-ui.search.addEventListener("input", () => render());
+document.addEventListener("compositionstart", () => {
+  state.composing = true;
+  clearTimeout(platform.searchTimer);
+  platform.searchTimer = 0;
+});
+document.addEventListener("compositionend", () => {
+  state.composing = false;
+  schedulePlatformSearch();
+});
+ui["search-form"].addEventListener("submit", event => {
+  event.preventDefault();
+  if (state.composing || event.isComposing) return;
+  clearTimeout(platform.searchTimer);
+  platform.searchTimer = 0;
+  commitPlatformQuery(true);
+});
+ui.search.addEventListener("input", event => {
+  render();
+  if (state.composing || event.isComposing) return;
+  schedulePlatformSearch();
+});
 ui.search.addEventListener("keydown", event => {
   if (event.key === "Escape" && !state.composing && !event.isComposing && event.keyCode !== 229 && ui.search.value) {
     event.preventDefault();
     ui.search.value = "";
-    render();
+    clearTimeout(platform.searchTimer);
+    platform.searchTimer = 0;
+    if (isRemoteBrowse() && platform.query) {
+      platform.query = "";
+      platform.page = 1;
+      requestPlatformPage(1, true);
+    } else render();
   }
 });
 ui.refresh.addEventListener("click", () => {
   if (ui.refresh.disabled) return;
-   markPending("refresh");
-   render();
-   postLauncher("refresh");
-   if (catalog.include) requestPage(catalog.page, true);
- });
- ui["open-services"].addEventListener("click", openServices);
- ui["notice-config"].addEventListener("click", openServices);
+  markPending("refresh");
+  render();
+  postLauncher("refresh");
+  if (isRemoteBrowse()) {
+    invalidatePlatformLists();
+    requestPlatformPage(platform.page, true);
+  }
+  if (catalog.include) requestPage(catalog.page, true);
+});
+ui["open-services"].addEventListener("click", openServices);
+ui["notice-config"].addEventListener("click", openServices);
 ui["empty-config"].addEventListener("click", openServices);
-ui["clear-search"].addEventListener("click", () => { ui.search.value = ""; ui.search.focus(); render(); });
+ui["clear-search"].addEventListener("click", () => {
+  ui.search.value = "";
+  ui.search.focus();
+  clearTimeout(platform.searchTimer);
+  platform.searchTimer = 0;
+  if (isRemoteBrowse() && platform.query) {
+    platform.query = "";
+    platform.page = 1;
+    requestPlatformPage(1, true);
+  } else render();
+});
 ui.primary.addEventListener("click", () => {
   if (ui.primary.disabled) return;
   const pack = selectedPack();

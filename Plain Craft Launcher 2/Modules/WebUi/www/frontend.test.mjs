@@ -15,7 +15,7 @@ const sre = { id: 'starrail-harpy-express', name: 'SRE DEMO fixture', minecraft:
 const native = { id: 'native-demo', name: 'Native DEMO fixture', minecraft: '1.19.2', loader: 'Fabric', author: 'Native DEMO author', version: 'DEMO-2' };
 const remote = (id, extra = {}) => ({ id: `mcmod-${id}`, wikiId: id, source: 'mcmod', name: `DEMO encyclopedia pack ${id}`, englishName: 'DEMO fixture', description: 'DEMO plain description', minecraftVersions: ['1.20.1'], loaders: ['Forge'], categories: ['科技'], website: `https://www.mcmod.cn/modpack/${id}.html`, ...extra });
 const snapshot = (extra = {}) => ({ type: 'browse', launcher: { presets: [native, sre], selected: sre.id, config: {}, task: {}, ...extra } });
-async function setup(live = true) {
+async function setup(live = true, source = 'mcmod') {
   const page = await browser.newPage({ viewport: { width: 1280, height: 960 } });
   page.on('pageerror', error => errors.push(error.message));
   await page.route(/^https?:\/\//, route => route.abort()); // No external network in tests.
@@ -26,6 +26,8 @@ async function setup(live = true) {
     window.chrome = { webview: { postMessage: message => window.__messages.push(message), addEventListener: (name, listener) => listeners.push(listener) } };
   });
   await page.goto(url);
+  // Legacy encyclopedia regressions explicitly select their source; default-platform behavior is tested separately.
+  if (source === 'mcmod') await page.locator('#source-mcmod').click();
   return page;
 }
 const send = async (page, message) => {

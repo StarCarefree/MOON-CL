@@ -210,6 +210,7 @@ internal sealed partial class WebUiController : IDisposable
             {
                 case "bootstrap": SendBootstrap(core); Refresh(force: true); break;
                 case "mcmod": await HandleMcmodAsync(core, message, form); break;
+                case "platform": await HandlePlatformAsync(core, message, form); break;
                 case "launcher" when _library is not null:
                     await _library.HandleAsync(message, form);
                     Refresh(force: true);
