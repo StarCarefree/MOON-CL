@@ -2,72 +2,101 @@
 
 <div align="center">
 
-<img src="Plain Craft Launcher 2/Images/icon.ico" alt="Logo" width="80" height="80">
+<img src="Plain Craft Launcher 2/Images/icon.ico" alt="MOONCL" width="80" height="80">
 
-# PCL Community Edition
+# MOONCL
 
-[![Stars](https://img.shields.io/github/stars/PCL-Community/PCL-CE?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZD0iTTggLjI1YS43NS43NSAwIDAgMSAuNjczLjQxOGwxLjg4MiAzLjgxNSA0LjIxLjYxMmEuNzUuNzUgMCAwIDEgLjQxNiAxLjI3OWwtMy4wNDYgMi45Ny43MTkgNC4xOTJhLjc1MS43NTEgMCAwIDEtMS4wODguNzkxTDggMTIuMzQ3bC0zLjc2NiAxLjk4YS43NS43NSAwIDAgMS0xLjA4OC0uNzlsLjcyLTQuMTk0TC44MTggNi4zNzRhLjc1Ljc1IDAgMCAxIC40MTYtMS4yOGw0LjIxLS42MTFMNy4zMjcuNjY4QS43NS43NSAwIDAgMSA4IC4yNVoiIGZpbGw9IiNlYWM1NGYiLz48L3N2Zz4=&logoSize=auto&label=stars&labelColor=444444&color=eac54f)](https://github.com/PCL-Community/PCL-CE/)
-![GitHub Release](https://img.shields.io/github/v/release/PCL-Community/PCL-CE?label=release&logo=github&style=for-the-badge)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/PCL-Community/PCL-CE/build-test.yml?style=for-the-badge)
+[![Stars](https://img.shields.io/github/stars/catmoon233/MOON-CL?style=for-the-badge&label=stars&labelColor=444444&color=eac54f)](https://github.com/catmoon233/MOON-CL)
+[![Release](https://img.shields.io/github/v/release/catmoon233/MOON-CL?label=release&logo=github&style=for-the-badge)](https://github.com/catmoon233/MOON-CL/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/catmoon233/MOON-CL/build-test.yml?branch=dev&label=build&style=for-the-badge)](https://github.com/catmoon233/MOON-CL/actions/workflows/build-test.yml)
 
-[![Issues](https://img.shields.io/github/issues/PCL-Community/PCL-CE?style=for-the-badge&label=issues&labelColor=444444&color=1F883D&logo=github)](https://github.com/PCL-Community/PCL-CE/issues)
-[![Pull requests](https://img.shields.io/github/issues-pr/PCL-Community/PCL-CE?style=for-the-badge&label=pull%20requests&labelColor=444444&color=1F883D&logo=github)](https://github.com/PCL-Community/PCL-CE/pulls)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/PCL-Community/PCL-CE/total?style=for-the-badge)
-[![嗶哩嗶哩](https://img.shields.io/badge/貼文-bilibili-00A4DB?style=for-the-badge&labelColor=444444&logo=bilibili)](https://space.bilibili.com/3546847192811755/dynamic) <br />
+[![Issues](https://img.shields.io/github/issues/catmoon233/MOON-CL?style=for-the-badge&label=issues&labelColor=444444&color=1F883D&logo=github)](https://github.com/catmoon233/MOON-CL/issues)
+[![Pull requests](https://img.shields.io/github/issues-pr/catmoon233/MOON-CL?style=for-the-badge&label=pull%20requests&labelColor=444444&color=1F883D&logo=github)](https://github.com/catmoon233/MOON-CL/pulls)
 
-<a href="https://trendshift.io/repositories/21800?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-21800" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/21800/daily?language=C%23" alt="PCL-Community%2FPCL-CE | Trendshift" width="250" height="55"/></a>
-<a href="https://trendshift.io/repositories/21800" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21800" alt="PCL-Community%2FPCL-CE | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+[下載](https://github.com/catmoon233/MOON-CL/releases/latest) |
+[問題回報](https://github.com/catmoon233/MOON-CL/issues) |
+[貢獻說明](CONTRIBUTING.md)
 
-[MOONCL 下載](https://github.com/catmoon233/MOON-CL/releases/latest) |
-[上游儲存庫](https://github.com/Meloong-Git/PCL)
-
-[提交問題](https://github.com/PCL-Community/PCL-CE/issues/new/choose) |
-[貢獻指南](https://github.com/PCL-Community/PCL-CE/wiki/开发指南)
+[PCL 上游](https://github.com/Meloong-Git/PCL) |
+[PCL CE](https://github.com/PCL-Community/PCL-CE)
 
 </div>
 
-PCL CE 是基於 PCL 開放原始碼二次開發的社群版本，包括了主線暫未製作的功能和改進！
+MOONCL 是 Windows 上的 Minecraft 啟動器。它基於 [PCL](https://github.com/Meloong-Git/PCL) 與 [PCL CE](https://github.com/PCL-Community/PCL-CE) 的開放原始碼繼續開發，但程式名稱、介面品牌和更新來源都是本儲存庫。
 
-社群版的版本號與主線並非嚴格對應關係，也請不要向官方儲存庫回饋社群版問題。
+版本號不與 PCL 主線或 PCL CE 對應。MOONCL 的問題請提交到 [本儲存庫 Issues](https://github.com/catmoon233/MOON-CL/issues)，不要發到上游或 PCL CE。也不要安裝 PCL CE 的 `PCL2_CE_*.exe` 或鏡像站套件來更新本啟動器。
 
-歡迎大家來用用看！
+## 這版包含什麼
 
-**開發群:** [599620549](https://qm.qq.com/q/PNQA4Md8wc) | **使用者 1 群:** [1028074835](https://qm.qq.com/q/qrMGJo8BQQ) | **使用者 2 群:** [1070029541](https://qm.qq.com/q/lBywbDMWhG)
+- **原生主介面**：帳號、啟動、版本清單和版本設定由 .NET 10 / WPF 執行。WebView2 只補充「瀏覽」，不覆蓋標題列和側欄。
+- **資源瀏覽**：資料包、地圖、整合包、光影包、材質包。來源可多選 MCL、CurseForge、Modrinth 和 MC 百科。下載進入原有檔案清單，由玩家選擇版本。
+- **整合包目錄**：可設定 `index.json` 主來源和最多 8 個備用來源，成功一個即停止，不合併多個目錄。夸克分享只有在同意授權後，才會把選中的單個 `.mrpack` / `.zip` 轉存到網盤目錄 `MOONCL`。
+- **聯機房間**：中控只交換房間、成員和線路設定，不轉發遊戲流量，也不是 FRP、ZeroTier 或 EasyTier 的伺服器。房主可發布 IPv6、FRP、XTCP、ZeroTier、EasyTier 線路。一鍵進入伺服器尚未開放。
+- **伺服器管理**：伺服器放在啟動器目錄 `servers/<id>/`，與客戶端版本、模組和帳號隔離。可安裝 Vanilla、Paper、Purpur 或整合包作者提供的伺服器包，並管理主控台與 `server.properties`。不會自動開放防火牆或連接埠對應。
+- **啟動動畫**：預設開啟。設定 → 個性化 → 基礎選項可關閉；關閉後仍使用原來的啟動進度面板，不影響啟動遊戲。
 
-## 💻 支援平台
+更細的邊界和操作見下方文件。文件裡的驗證紀錄不等於所有連網流程都已在你的機器上跑通。
+
+## 下載
+
+只從 [本儲存庫 Releases](https://github.com/catmoon233/MOON-CL/releases/latest) 取得發布檔案。啟動器檢查更新時也只請求 `https://api.github.com/repos/catmoon233/MOON-CL/releases`，並選擇目前架構的 `mooncl-win-*.exe`。
+
+| 檔案 | 用途 |
+| --- | --- |
+| `mooncl-win-x64.exe` | 64 位元 Windows 程式，也是啟動器更新會下載的檔案 |
+| `mooncl-win-ARM64.exe` | ARM64 Windows 程式 |
+| `mooncl-win-x64-portable.zip` | 64 位元便攜包。解壓整個目錄後執行 `Start-PCL-CY.cmd` |
+| `mooncl-win-ARM64-portable.zip` | ARM64 便攜包，用法相同 |
+
+發布包不附帶 .NET 10 Desktop Runtime。便攜包缺少執行階段時會先彈出確認框，只有點「是」才從微軟官方網址下載安裝。單個 exe 會先列出缺少的元件；點「同意並下載」才安裝。只缺瀏覽頁元件時可以跳過並啟動。
+
+x64 與 ARM64 不能混用。不要把便攜包裡的 exe 單獨拷走：瀏覽頁依賴同層 `WebView2Runtime`。
+
+## 支援平台
 
 | 作業系統 | 支援情況 | 環境要求 |
-|---|---|---|
-| Windows 10 1809 (17763) 或更高 | ✅ 完整支援 | [.NET 10 Desktop Runtime](https://get.dot.net/10) |
-| Windows 8 - Windows 10 1809 (17763) | ⚠️ 理論能跑，酌情提供社群支援 | [.NET 10 Desktop Runtime](https://get.dot.net/10) |
-| Windows 7 或更低版本 | ❌ 不支援 | / |
-| macOS / Linux / 其他作業系統 | ⚠️ 僅跨平台開發支援（交叉編譯）| [.NET 10 SDK](https://get.dot.net/10) |
+| --- | --- | --- |
+| Windows 10 1809 (17763) 或更高 | 完整支援 | [.NET 10 Desktop Runtime](https://get.dot.net/10) |
+| Windows 8 到 Windows 10 1809 之前 | 可能能開啟，不保證功能完整 | [.NET 10 Desktop Runtime](https://get.dot.net/10) |
+| Windows 7 或更低 | 不支援 | — |
+| macOS / Linux | 只能交叉編譯，不能直接執行 | [.NET 10 SDK](https://get.dot.net/10) |
 
-**✅ 完整支援**：盡可能提供一切相關支援，但必須確保啟動器為最新版本。
+本儲存庫只維護最新發布。WPF 介面不能當作 macOS 或 Linux 客戶端。
 
-**⚠️ 理論能跑，酌情提供社群支援**：PCL CE 應該可以在這些平台上執行，但不保證功能完全可用。你可能需要升級到完整支援的系統版本以獲得進一步社群技術支援。
+## 自行建置
 
-**❌ 不支援**：PCL CE 在這些平台的可用性較低，甚至根本打不開。請升級作業系統以使用 PCL CE。
+在 Windows 上安裝 [.NET 10 SDK](https://get.dot.net/10)，於儲存庫根目錄執行：
 
-**⚠️ 僅跨平台開發支援（交叉編譯）**：PCL CE 的原始碼可以在 macOS 與 Linux 平台編譯，但無法直接執行。作為開發者，你可以在這些平台上進行開發，然後將編譯產物轉移到 Windows 系統測試。
+```powershell
+.\scripts\Publish-SingleExe.ps1 -Architecture x64
+```
 
-**注**：
-社群僅對最新版本的啟動器提供支援。
-取決於部分問題的特殊性（如系統不完整），有時你仍然必須升級作業系統以繼續獲得支援。
-PCL CE 始終建議使用最新版本的作業系統以獲得最佳體驗。
-你仍然可以嘗試在不受支援的系統上使用 PCL CE，但可能會遇到很多額外問題。
+或按兩下 `scripts/Publish-SingleExe.bat`。本機單檔產物名稱是 `MOONCL.exe`，不要把它和 Release 上的 `mooncl-win-x64.exe` 當成同一個檔名。
 
-## 🔒 授權條款
+便攜包：
 
-- `Plain Craft Launcher 2/` 使用 [自訂授權條款](https://github.com/PCL-Community/PCL-CE/blob/dev/Plain%20Craft%20Launcher%202/LICENCE)
-- `其餘所有目錄` 使用 [Apache License 2.0](https://github.com/PCL-Community/PCL-CE/blob/dev/LICENSE)
+```powershell
+.\scripts\Publish-Portable.ps1 -Architecture x64 -Configuration Release -FixedRuntimeDirectory <FixedVersion根目錄>
+```
 
-## 🌟 統計資料
-![Alt](https://repobeats.axiom.co/api/embed/3e46296e6e3a134991a783480fd2f62723bb0353.svg "Repobeats analytics image")
+`x64` 與 `arm64` 必須分別建置。目錄服務和聯機中控在 `mooncl-cloud/`，需要 Java 17 或更高版本，見 [mooncl-cloud/README.md](mooncl-cloud/README.md)。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=PCL-Community/PCL-CE&type=Date)](https://www.star-history.com/#PCL-Community/PCL-CE&Date)
+## 文件
 
-**此頁瀏覽量**（總計 / 今日）：[![Hits](https://hits.zkitefly.eu.org/?tag=https://github.com/PCL-Community/PCL-CE)](https://hits.zkitefly.eu.org/?tag=https://github.com/PCL-Community/PCL-CE&web=true)
-## ❤️ 貢獻者
+- [原生介面與瀏覽頁](docs/hybrid-ui.md)
+- [五類資源瀏覽](docs/resource-browse.md)
+- [整合包目錄來源](docs/catalog-sources.md)
+- [聯機房間](docs/multiplayer-rooms.md)
+- [伺服器管理](docs/server-management.md)
+- [伺服器核心來源](docs/server-core-sources.md)
+- [啟動動畫](docs/game-launch-animation.md)
+- [便攜包與單個 exe](docs/webview2-portable.md)
 
-[![](https://contrib.rocks/image?repo=PCL-Community/PCL-CE)](https://github.com/PCL-Community/PCL-CE/graphs/contributors)
+## 授權條款
+
+- `Plain Craft Launcher 2/` 使用上游 [《PCL 散布有限許可》](Plain%20Craft%20Launcher%202/LICENCE)。除該許可明確授予的權利外，權利仍歸許可方。
+- 其餘目錄使用 [Apache License 2.0](LICENSE)。
+
+## 貢獻者
+
+[![](https://contrib.rocks/image?repo=catmoon233/MOON-CL)](https://github.com/catmoon233/MOON-CL/graphs/contributors)
