@@ -23,8 +23,8 @@ http://127.0.0.1:8080/index.json
 目录源留空时，启动器不把 MCL 当成「没有目录」，而是使用随仓库发布的默认源：
 
 ```text
-https://raw.githubusercontent.com/catmoon233/PCL-CY/dev/docs/pack-catalog/index.json
-https://cdn.jsdelivr.net/gh/catmoon233/PCL-CY@dev/docs/pack-catalog/index.json
+https://raw.githubusercontent.com/catmoon233/MOON-CL/dev/docs/pack-catalog/index.json
+https://cdn.jsdelivr.net/gh/catmoon233/MOON-CL@dev/docs/pack-catalog/index.json
 ```
 
 `docs/pack-catalog/index.json` 随 `dev` 分支发布，默认带一个 `starrail-harpy-express` 条目：Gitee Release 直链下载 + 夸克分享备用。两个地址内容相同，GitHub raw 不可达时按顺序回退到 jsDelivr。服务配置里的「使用 GitHub 默认源」按钮把这两个地址填进输入框，等价于留空；用户保存过任意目录源后，默认源不再参与请求。
