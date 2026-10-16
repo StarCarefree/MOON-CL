@@ -49,7 +49,7 @@ public partial class HybridRooms : UserControl, IDisposable
         _settingsPath = settingsPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "multiplayer.json");
         InitializeComponent();
         LoadSettings();
-        Members.ItemsSource = _members; HallMembers.ItemsSource = _members; RouteList.ItemsSource = _routes;
+        Members.ItemsSource = _memberPage; HallMembers.ItemsSource = _hallPage; RouteList.ItemsSource = _routePage;
         _initialized = true;
         SaveSettings(); // Migrate legacy URL fields without persisting the built-in address.
         _heartbeat = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
@@ -62,11 +62,13 @@ public partial class HybridRooms : UserControl, IDisposable
     public void UpdateLocalState(string playerName, ImageSource? face, ImageSource? hat, McInstance? selected)
     {
         if (_closed || !_initialized) return;
+        _selectedInstance = selected ?? _selectedInstance;
         var name = RoomPresentation.Bounded(playerName, 32);
         if (_session?.Room is null && !PlayerName.IsKeyboardFocusWithin &&
             (string.IsNullOrWhiteSpace(PlayerName.Text) || PlayerName.Text == "Player" || PlayerName.Text == _profileName))
             PlayerName.Text = string.IsNullOrWhiteSpace(name) ? "Player" : name;
         _profileName = name;
+        IdentitySummary.Text = PlayerName.Text + " · 联机大厅";
         var avatar = _presence.Avatar;
         if (!ReferenceEquals(_face, face) || !ReferenceEquals(_hat, hat))
         { _face = face; _hat = hat; avatar = RoomPresentation.EncodeAvatar(face, hat); }
@@ -104,12 +106,14 @@ public partial class HybridRooms : UserControl, IDisposable
         LeaveButton.IsEnabled = HallLeaveButton.IsEnabled = !_busy;
         LeaveButton.Content = HallLeaveButton.Content = _session?.IsHost == true ? "解散房间" : "退出房间";
         CancelButton.Visibility = Show(_busy);
-        RouteEditor.IsEnabled = ToolsPanel.IsEnabled = ConnectActions.IsEnabled = !_busy && joined;
+        RouteEditor.IsEnabled = ConnectActions.IsEnabled = !_busy && joined;
+        CreateForm.IsEnabled = JoinForm.IsEnabled = !_busy && !joined;
+        ToolsPanel.IsEnabled = !_busy;
         EditorCard.Visibility = RemoveRouteButton.Visibility = Show(_session?.IsHost == true);
-        RemoveRouteButton.IsEnabled = RouteList.SelectedItem is RoomRoutePresentation;
+        RemoveRouteButton.IsEnabled = !_busy && SelectedRoute is not null;
         if (room is null)
         {
-            ClearLeases(); _members.Clear(); _routes.Clear(); Endpoint.Text = "";
+            ClearLeases(); _members.Clear(); _routes.Clear(); Endpoint.Text = ""; RefreshPages();
             return;
         }
         ReconcileLeases(room);
@@ -134,11 +138,16 @@ public partial class HybridRooms : UserControl, IDisposable
             else view.Update(route);
         }
         NoRoutes.Visibility = Show(published.Length == 0);
-        if (RouteList.SelectedItem is null && _routes.Count > 0) RouteList.SelectedIndex = 0;
+        RefreshPages();
         var target = GetLaunchTarget();
         Endpoint.Text = target is null ? "" : RoomConnection.FormatEndpoint(target.Host, target.Port);
     }
-    private void Mode_Changed(object sender, SelectionChangedEventArgs e) { if (_initialized && !_closed) RenderMode(); }
+    private void Mode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_initialized || _closed) return;
+        RenderMode();
+        if (Overlay.Visibility == Visibility.Visible && RouteEditor.Visibility == Visibility.Visible) FillModeDefaults();
+    }
     private void RenderMode()
     {
         Ipv6Fields.Visibility = Show(Mode == "ipv6"); FrpFields.Visibility = Show(Mode == "frp");
@@ -167,8 +176,9 @@ public partial class HybridRooms : UserControl, IDisposable
     private void Reenter_Click(object sender, RoutedEventArgs e) { if (!_initialized || _closed) return; _inRoom = _session?.Room is not null; Render(); }
     private void Route_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!_initialized || _closed) return;
-        RemoveRouteButton.IsEnabled = !_busy && RouteList.SelectedItem is RoomRoutePresentation;
+        if (!_initialized || _closed || _paging) return;
+        if (RouteList.SelectedItem is RoomRoutePresentation selected) _selectedRouteId = selected.Route.Id;
+        RemoveRouteButton.IsEnabled = !_busy && SelectedRoute is not null;
     }
 
     internal RoomLaunchTarget? GetLaunchTarget()
@@ -204,6 +214,7 @@ public partial class HybridRooms : UserControl, IDisposable
     }
     private async void Create_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
     {
+        SuggestRoomName();
         if (string.IsNullOrWhiteSpace(RoomName.Text)) throw new ArgumentException("请填写房间名称。");
         var session = OpenSession();
         try
@@ -230,7 +241,7 @@ public partial class HybridRooms : UserControl, IDisposable
     });
     private void EnterRoom()
     {
-        CreatePassword.Clear(); JoinPassword.Clear(); _inRoom = true;
+        CreatePassword.Clear(); JoinPassword.Clear(); _inRoom = true; CloseOverlay();
         _nextHeartbeat = DateTime.UtcNow.AddSeconds(15); _presenceDue = null;
     }
     private async void Leave_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
@@ -277,6 +288,7 @@ public partial class HybridRooms : UserControl, IDisposable
     private async void AddRoute_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
     {
         var session = RequireRoom(true);
+        PreparePublication();
         var local = ParsePort(LocalPort.Text);
         var route = new RoomRoute(Guid.NewGuid().ToString("N"), RouteName.Text.Trim(), ReadConnection(local));
         var routes = session.Room!.EffectiveRoutes.Append(route).ToArray(); RoomRoute.ValidateAll(routes);
@@ -290,7 +302,7 @@ public partial class HybridRooms : UserControl, IDisposable
             await session.PublishRoutesAsync(routes, ct);
             Guard(_lifetime.Token, session); // A completed publication remains owned even if Cancel raced its response.
             _leases[route.Id] = lease; lease = null;
-            Render(); RouteList.SelectedItem = _routes.FirstOrDefault(v => v.Route.Id == route.Id);
+            _selectedRouteId = route.Id; Render(); CloseOverlay();
             Status.Text = "线路已发布，其他线路与本机传输保持不变；访客需检测真实游戏握手。";
         }
         finally { lease?.Dispose(); }
@@ -298,7 +310,7 @@ public partial class HybridRooms : UserControl, IDisposable
     private async void RemoveRoute_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
     {
         var session = RequireRoom(true);
-        if (RouteList.SelectedItem is not RoomRoutePresentation selected) throw new InvalidOperationException("请选择要移除的线路。");
+        if (SelectedRoute is not { } selected) throw new InvalidOperationException("请选择要移除的线路。");
         await session.PublishRoutesAsync(session.Room!.EffectiveRoutes.Where(r => r.Id != selected.Route.Id).ToArray(), ct);
         Guard(ct, session);
         // Only after the server accepts removal may the corresponding owned transport stop.
@@ -313,7 +325,7 @@ public partial class HybridRooms : UserControl, IDisposable
     }
     private async void AutoConnect_Click(object sender, RoutedEventArgs e) => await RunAsync(ct => ConnectAsync(null, ct));
     private async void ManualConnect_Click(object sender, RoutedEventArgs e) => await RunAsync(ct =>
-        RouteList.SelectedItem is RoomRoutePresentation selected ? ConnectAsync(selected.Route.Id, ct) : throw new InvalidOperationException("请选择一条线路。"));
+        SelectedRoute is { } selected ? ConnectAsync(selected.Route.Id, ct) : throw new InvalidOperationException("请选择一条线路。"));
     private async Task ConnectAsync(string? manual, CancellationToken ct)
     {
         var session = RequireRoom();
@@ -368,7 +380,7 @@ public partial class HybridRooms : UserControl, IDisposable
             _verifiedRouteId = winner.RouteId;
             if (!session.IsHost)
                 foreach (var id in _leases.Keys.Where(id => id != winner.RouteId).ToArray()) RemoveLease(id);
-            RouteList.SelectedItem = _routes.FirstOrDefault(v => v.Route.Id == winner.RouteId);
+            _selectedRouteId = winner.RouteId; RefreshPages();
             Status.Text = "已选择可响应游戏握手的线路 · " + (winner.GameLatencyMs?.ToString() ?? "—") + " ms。可复制接入地址；不会自动启动游戏。";
         }
         finally { foreach (var lease in created.Values) lease.Dispose(); }

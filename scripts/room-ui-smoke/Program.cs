@@ -44,7 +44,8 @@ internal static class Program
     {
         view.UpdateLayout();
         var button = Descendants(view).OfType<Button>().First(b => AutomationProperties.GetAutomationId(b) == id);
-        Check(button.IsEnabled, id + " is disabled"); button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(button.IsEnabled && button.IsVisible, id + " is disabled or hidden");
+        AssertInViewport(view, button, id); button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     }
     private static async Task Idle(HybridRooms view)
     {
@@ -65,9 +66,12 @@ internal static class Program
         BindingFlags.Instance | BindingFlags.NonPublic, null, [preferences], null)!;
     private static void Configure(HybridRooms view, string url, string name)
     {
+        Click(view, "Rooms.OpenSettings");
         Control<ComboBox>(view, "Coordinator").SelectedIndex = 1;
         Control<TextBox>(view, "CustomUrl").Text = url;
         Control<TextBox>(view, "PlayerName").Text = name;
+        AssertNoScrollBars(view);
+        Click(view, "Rooms.CloseOverlay");
     }
     private static void Screenshot(HybridRooms view, string path)
     {
@@ -82,6 +86,35 @@ internal static class Program
         Check(!Descendants(view).OfType<TextBlock>().Any(t => t.Text.Contains(hidden)), "Official address leaked into visible text");
         Check(!Descendants(view).OfType<TextBox>().Any(t => t.Text.Contains(hidden)), "Official address leaked into an input");
     }
+    private static void AssertNoScrollBars(HybridRooms view)
+    {
+        view.UpdateLayout();
+        Check(!Descendants(view).OfType<System.Windows.Controls.Primitives.ScrollBar>().Any(bar => bar.IsVisible && bar.ActualWidth > 0 && bar.ActualHeight > 0),
+            "The lobby must not display any scroll bars");
+    }
+    private static void AssertInViewport(HybridRooms view, FrameworkElement element, string label)
+    {
+        view.UpdateLayout();
+        Check(element.IsVisible && element.ActualWidth > 1 && element.ActualHeight > 1, label + " is not visible");
+        var bounds = element.TransformToAncestor(view).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+        Check(bounds.Left >= -1 && bounds.Top >= -1 && bounds.Right <= view.ActualWidth + 1 && bounds.Bottom <= view.ActualHeight + 1,
+            label + " extends beyond the fixed lobby viewport");
+        for (var parent = VisualTreeHelper.GetParent(element); parent is FrameworkElement ancestor && !ReferenceEquals(ancestor, view); parent = VisualTreeHelper.GetParent(parent))
+        {
+            if (!ancestor.ClipToBounds) continue;
+            var local = element.TransformToAncestor(ancestor).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+            Check(local.Left >= -1 && local.Top >= -1 && local.Right <= ancestor.ActualWidth + 1 && local.Bottom <= ancestor.ActualHeight + 1,
+                label + " is clipped by a container");
+        }
+    }
+    private static Button ButtonById(HybridRooms view, string id) => Descendants(view).OfType<Button>().First(b => AutomationProperties.GetAutomationId(b) == id);
+    private static async Task ResizeViewport(Window window, HybridRooms view, double width, double height)
+    {
+        view.Width = width; view.Height = height;
+        window.SizeToContent = SizeToContent.WidthAndHeight;
+        await view.Dispatcher.InvokeAsync(() => view.UpdateLayout(), System.Windows.Threading.DispatcherPriority.Loaded);
+        AssertNoScrollBars(view);
+    }
     private static void Run(string[] args)
     {
         Directory.CreateDirectory(args[1]); Directory.CreateDirectory(args[2]);
@@ -95,20 +128,34 @@ internal static class Program
             {
                 Check(Control<ComboBox>(host, "Coordinator").SelectedIndex == 0, "Official must be the default");
                 Check(Control<TextBox>(host, "CustomUrl").Visibility == Visibility.Collapsed, "Official mode must hide the URL");
-                Check(Control<StackPanel>(host, "HallPanel").Visibility == Visibility.Visible, "Hall is the initial view");
+                Check(Control<FrameworkElement>(host, "HallPanel").Visibility == Visibility.Visible, "Hall is the initial view");
+                await ResizeViewport(window, host, 750, 540);
+                AssertInViewport(host, ButtonById(host, "Rooms.OpenCreate"), "Create entry at compact size");
+                AssertInViewport(host, ButtonById(host, "Rooms.OpenJoin"), "Join entry at compact size");
+                Screenshot(host, Path.Combine(args[2], "multiplayer-hall-compact.png"));
+                await ResizeViewport(window, host, 1080, 860);
                 AssertPrivate(host); Screenshot(host, Path.Combine(args[2], "multiplayer-hall.png"));
                 Configure(host, args[0], "房主烟测");
                 var face = new DrawingImage(new GeometryDrawing(Brushes.Goldenrod, null, new RectangleGeometry(new Rect(0, 0, 8, 8)))); face.Freeze();
                 host.UpdateLocalState("房主烟测", face, null, null);
+                Click(host, "Rooms.OpenCreate");
+                Check(!string.IsNullOrWhiteSpace(Control<TextBox>(host, "RoomName").Text), "Room name should be suggested automatically");
                 Click(host, "Rooms.Create"); await Idle(host);
                 var session = Field<RoomSession>(host, "_session");
                 Check(session.IsHost && session.Room is not null, "Create failed: " + Control<TextBlock>(host, "Status").Text);
                 Check(session.Room!.EffectiveRoutes.Length == 0, "Create must not need a transport");
                 Check(session.Room.Members[0].Avatar.Length > 0, "PNG avatar did not round-trip through the coordinator");
-                Check(Control<StackPanel>(host, "RoomPanel").Visibility == Visibility.Visible, "Create did not enter the room");
+                Check(Control<FrameworkElement>(host, "RoomPanel").Visibility == Visibility.Visible, "Create did not enter the room");
+                Click(host, "Rooms.OpenSettings");
                 var lockedToggle = Descendants(Control<ComboBox>(host, "Coordinator")).OfType<System.Windows.Controls.Primitives.ToggleButton>().First();
                 var lockedBorder = Descendants(lockedToggle).OfType<Border>().First();
                 Check(lockedBorder.Background is SolidColorBrush lockedBrush && lockedBrush.Color.R + lockedBrush.Color.G + lockedBrush.Color.B < 180, "Disabled coordinator dropdown lost its dark fill");
+                Click(host, "Rooms.CloseOverlay");
+                await ResizeViewport(window, host, 750, 540);
+                AssertInViewport(host, ButtonById(host, "Rooms.AutoConnect"), "Auto connect at compact size");
+                AssertInViewport(host, Control<ItemsControl>(host, "Members"), "Player seats at compact size");
+                Screenshot(host, Path.Combine(args[2], "multiplayer-room-compact.png"));
+                await ResizeViewport(window, host, 1080, 860);
                 var presence = new RoomPresence(session.Room.Members[0].Avatar, new("NeoForge 联机实例", "1.21.1", "launching"));
                 Set(host, "_presence", presence); await Refresh(host);
                 Check(Control<TextBlock>(host, "HostGame").Text.Contains("正在启动"), "Host launch state missing");
@@ -121,13 +168,15 @@ internal static class Program
                 Check(labels.All(t => t.Foreground is SolidColorBrush brush && brush.Color.R > 180 && brush.Color.G > 180 && brush.Color.B > 180), "Member labels are unreadable on the dark background");
                 foreach (var name in new[] { "IPv6 主线路", "IPv6 备用线路" })
                 {
+                    Click(host, "Rooms.OpenRouteEditor");
+                    AssertNoScrollBars(host);
                     Control<TextBox>(host, "RouteName").Text = name;
                     Control<TextBox>(host, "Ipv6Address").Text = "2606:4700::1";
                     Click(host, "Rooms.PublishRoute"); await Idle(host);
                 }
                 Check(session.Room.EffectiveRoutes.Length == 2 && Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count == 2, "Multiple host routes not retained");
                 Click(host, "Rooms.Back");
-                Check(Control<StackPanel>(host, "HallPanel").Visibility == Visibility.Visible && session.Room is not null, "Back left membership");
+                Check(Control<FrameworkElement>(host, "HallPanel").Visibility == Visibility.Visible && session.Room is not null, "Back left membership");
                 Check(Control<Border>(host, "CurrentCard").Visibility == Visibility.Visible, "Current-room hall card missing");
                 Check(Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count == 2, "Back stopped transports");
                 Screenshot(host, Path.Combine(args[2], "multiplayer-current-room.png"));
@@ -135,12 +184,54 @@ internal static class Program
                 Click(host, "Rooms.RemoveRoute"); await Idle(host);
                 Check(session.Room!.EffectiveRoutes.Length == 1 && Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count == 1, "Removal affected the wrong transports");
                 AssertPrivate(host); Screenshot(host, Path.Combine(args[2], "multiplayer-room.png"));
+                Click(host, "Rooms.OpenRouteEditor");
+                await ResizeViewport(window, host, 750, 540);
                 for (var mode = 0; mode < 5; mode++)
                 {
+                    Click(host, "Rooms.RouteBasic");
                     Control<ComboBox>(host, "RouteMode").SelectedIndex = mode;
-                    var visible = new[] { "Ipv6Fields", "FrpFields", "ZtFields", "EtFields" }.Count(n => Control<StackPanel>(host, n).Visibility == Visibility.Visible);
+                    Click(host, "Rooms.RouteAdvanced");
+                    var visible = new[] { "Ipv6Fields", "FrpFields", "ZtFields", "EtFields" }.Count(n => Control<FrameworkElement>(host, n).Visibility == Visibility.Visible);
                     Check(visible == (mode == 2 ? 0 : 1), "Mode-specific fields overlap");
+                    AssertNoScrollBars(host);
+                    AssertInViewport(host, ButtonById(host, "Rooms.PublishRoute"), "Publish button at compact size");
+                    foreach (var field in new[] { "Ipv6Address", "PublicHost", "NetworkId", "ZtAddress", "EtAddress", "NetworkName", "NetworkSecret", "Peers" })
+                        if (Control<FrameworkElement>(host, field).IsVisible) AssertInViewport(host, Control<FrameworkElement>(host, field), "Visible mode field " + field);
                 }
+                Invoke(host, "PreparePublication");
+                Check(Control<TextBox>(host, "NetworkName").Text.StartsWith("mooncl-"), "EasyTier name not generated before publication");
+                Check(Control<PasswordBox>(host, "NetworkSecret").Password.Length >= 32, "EasyTier secret not generated");
+                Control<TextBox>(host, "NetworkName").Text = "custom-preserved-network";
+                Control<TextBox>(host, "LocalPort").Text = "51234";
+                Click(host, "Rooms.CloseOverlay"); Click(host, "Rooms.OpenRouteEditor");
+                Check(Control<TextBox>(host, "NetworkName").Text == "custom-preserved-network", "Auto setup overwrote a manual network name");
+                Check(Control<TextBox>(host, "LocalPort").Text == "51234", "Auto setup overwrote a manual port");
+                Control<TextBox>(host, "LocalPort").Text = "25565";
+                Check(Field<bool>(host, "_manualLocalPort"), "A manually entered default port must remain an explicit override");
+                Click(host, "Rooms.RouteTools");
+                var tools = Control<TabControl>(host, "ToolsPanel");
+                for (var tab = 0; tab < tools.Items.Count; tab++)
+                {
+                    tools.SelectedIndex = tab; host.UpdateLayout();
+                    var nested = Descendants(tools).OfType<TabControl>().FirstOrDefault(control => !ReferenceEquals(control, tools));
+                    var pages = nested?.Items.Count ?? 1;
+                    for (var sub = 0; sub < pages; sub++)
+                    {
+                        if (nested is not null) { nested.SelectedIndex = sub; host.UpdateLayout(); }
+                        AssertNoScrollBars(host);
+                        foreach (var field in new[] { "FrpcPath", "NodeHost", "NodePort", "NodeToken", "NodeCa", "EasyTierPath", "ZeroTierToken" })
+                            if (Control<FrameworkElement>(host, field).IsVisible) AssertInViewport(host, Control<FrameworkElement>(host, field), "Tool field " + field);
+                    }
+                }
+                Screenshot(host, Path.Combine(args[2], "multiplayer-tools-compact.png"));
+                Click(host, "Rooms.ReturnToRoute");
+                Click(host, "Rooms.RouteAdvanced");
+                Screenshot(host, Path.Combine(args[2], "multiplayer-setup-compact.png"));
+                var escape = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, PresentationSource.FromVisual(host)!, 0, System.Windows.Input.Key.Escape)
+                { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent };
+                host.RaiseEvent(escape);
+                Check(Control<FrameworkElement>(host, "Overlay").Visibility == Visibility.Collapsed, "Escape must close the setup panel");
+                await ResizeViewport(window, host, 1080, 860);
                 await friend.LeaveAsync(CancellationToken.None);
                 await using var fast = new FakeGame(5);
                 await using var slow = new FakeGame(1200);
@@ -150,6 +241,7 @@ internal static class Program
                 await Refresh(host);
                 Check(Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count == 0, "Updated routes retained obsolete resources");
                 window.Content = guest; window.UpdateLayout(); Configure(guest, args[0], "访客烟测");
+                Click(guest, "Rooms.OpenJoin");
                 Control<TextBox>(guest, "RoomCode").Text = session.Room!.Code;
                 Click(guest, "Rooms.Join"); await Idle(guest);
                 Check(Field<RoomSession>(guest, "_session").Room?.EffectiveRoutes.Length == 2, "Guest did not receive both routes");
@@ -173,6 +265,51 @@ internal static class Program
                 Check(Target(guest)?.Port == slow.Port, "Hall return destroyed guest connection");
                 Click(guest, "Rooms.Reenter"); AssertPrivate(guest);
                 Screenshot(guest, Path.Combine(args[2], "multiplayer-lines.png"));
+                var extraMembers = new List<RoomSession>();
+                try
+                {
+                    for (var i = 0; i < 14; i++)
+                    {
+                        var member = new RoomSession(new RoomApiClient(args[0])); extraMembers.Add(member);
+                        await member.JoinAsync(session.Room!.Code, new("队员" + (i + 3), ""), CancellationToken.None);
+                    }
+                    await Refresh(guest);
+                    Check(Field<RoomSession>(guest, "_session").Room!.Members.Length == 16, "Full room fixture was not created");
+                    await ResizeViewport(window, guest, 750, 540);
+                    var seenMembers = new HashSet<string>();
+                    for (var page = 0; page < 4; page++)
+                    {
+                        var seats = Control<ItemsControl>(guest, "Members");
+                        Check(seats.Items.Count <= 4 && seats.Items.Count > 0, "Seats must use bounded pages");
+                        foreach (var item in seats.Items)
+                            seenMembers.Add((string)item.GetType().GetProperty("Id", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(item)!);
+                        AssertNoScrollBars(guest); AssertInViewport(guest, seats, "Full-room seats at compact size");
+                        if (page < 3) Click(guest, "Rooms.MemberNext");
+                    }
+                    Check(seenMembers.Count == 16, "Member pagination lost players");
+                    Check(!ButtonById(guest, "Rooms.MemberNext").IsEnabled, "Member pages must stop at the last page");
+                    await Refresh(guest);
+                    Check(Control<TextBlock>(guest, "MemberPageLabel").Text.Contains("4"), "Heartbeat unexpectedly reset the member page");
+                    var manyRoutes = Enumerable.Range(0, 12).Select(i => fastRoute with { Id = "paged" + i, Name = "游戏线路 " + (i + 1) }).ToArray();
+                    await session.PublishRoutesAsync(manyRoutes, CancellationToken.None); await Refresh(guest);
+                    var seenRoutes = new HashSet<string>();
+                    for (var page = 0; page < 4; page++)
+                    {
+                        var list = Control<ListBox>(guest, "RouteList");
+                        Check(list.Items.Count <= 3 && list.Items.Count > 0, "Routes must use bounded pages");
+                        foreach (var item in list.Items)
+                            seenRoutes.Add(((RoomRoute)item.GetType().GetProperty("Route", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(item)!).Id);
+                        AssertNoScrollBars(guest); AssertInViewport(guest, list, "Route pages at compact size");
+                        if (page < 3) Click(guest, "Rooms.RouteNext");
+                    }
+                    Check(seenRoutes.Count == 12, "Route pagination lost routes");
+                    Control<ListBox>(guest, "RouteList").SelectedIndex = 2;
+                    Click(guest, "Rooms.Connect"); await Idle(guest);
+                    Check(Target(guest)?.Port == fast.Port, "Last-page route cannot be connected");
+                    Screenshot(guest, Path.Combine(args[2], "multiplayer-full-room-compact.png"));
+                    await ResizeViewport(window, guest, 1080, 860);
+                }
+                finally { foreach (var member in extraMembers) { try { await member.LeaveAsync(CancellationToken.None); } finally { member.Dispose(); } } }
                 await session.PublishRoutesAsync([fastRoute], CancellationToken.None); await Refresh(guest);
                 Check(Target(guest) is null && Field<Dictionary<string, RoomTransportLease>>(guest, "_leases").Count == 0, "Deleted route remained selectable");
                 Click(guest, "Rooms.Leave"); await Idle(guest);
@@ -187,7 +324,11 @@ internal static class Program
                 }
                 Console.WriteLine($"ROOM_UI_HTTP_SMOKE_PASS: {_checks} checks, actual WPF + Java HTTP + game probe fixtures");
             }
-            catch (Exception ex) { Console.Error.WriteLine(RoomServiceDirectory.FriendlyError(ex, false)); Console.Error.WriteLine(ex.StackTrace); Environment.ExitCode = 1; }
+            catch (Exception ex)
+            {
+                try { Screenshot((HybridRooms)window.Content, Path.Combine(args[2], "multiplayer-failure.png")); } catch { }
+                Console.Error.WriteLine(RoomServiceDirectory.FriendlyError(ex, false)); Console.Error.WriteLine(ex.StackTrace); Environment.ExitCode = 1;
+            }
             finally { host.Dispose(); guest.Dispose(); window.Close(); app.Shutdown(); }
         };
         app.Run(window);

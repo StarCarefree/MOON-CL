@@ -43,6 +43,18 @@ internal static class RoomPresentation
         }
         catch (Exception) { return new RoomGameStatus(); }
     }
+    internal static McInstance? LatestRunningInstance()
+    {
+        try
+        {
+            return ModWatcher.mcWatcherList.ToArray()
+                .Where(w => w.version is not null && Alive(w) &&
+                    w.State is ModWatcher.Watcher.MinecraftState.Loading or ModWatcher.Watcher.MinecraftState.Running)
+                .OrderByDescending(StartTime).FirstOrDefault()?.version;
+        }
+        catch (Exception) { return null; }
+    }
+
     private static bool Alive(ModWatcher.Watcher watcher)
     {
         try { return watcher.gameProcess is not null && !watcher.gameProcess.HasExited; }
