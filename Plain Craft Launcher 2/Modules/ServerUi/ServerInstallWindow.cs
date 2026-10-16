@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using PCL.Core.Minecraft.Server;
@@ -10,43 +11,59 @@ internal sealed class ServerInstallWindow : Window
     private readonly ServerProfile _profile;
     private readonly Action _refresh;
     private readonly ServerProfileEditor _editor;
-    private readonly TextBox _pack;
-    private readonly TextBox _installer;
-    private readonly TextBox _script;
-    private readonly CheckBox _trust = new() { Content = "我信任所选安装器及脚本的来源，允许执行（脚本拥有当前用户权限）", Margin = new Thickness(0, 8, 0, 14) };
-    private readonly Button _install;
-    private readonly Button _cancel;
+    private readonly TextBox _pack, _installer, _script;
+    private readonly CheckBox _trust;
+    private readonly FrameworkElement _sources;
+    private readonly Button _install, _cancel;
     private readonly TextBlock _status;
+    private readonly ProgressBar _progress;
     private CancellationTokenSource? _work;
     private bool _saved;
 
     internal ServerInstallWindow(Action refresh, ServerProfile? profile = null)
     {
+        ServerUi.ApplyTheme(this);
         _profile = profile ?? new ServerProfile { Name = "新服务端" };
-        _refresh = refresh;
-        _saved = profile is not null;
-        Title = profile is null ? "一键安装服务端" : "重试服务端安装";
-        Width = 660; Height = 800; MinWidth = 530; MinHeight = 500;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(ServerUi.Text("NeoForge / Fabric 服务端", 23));
-        panel.Children.Add(ServerUi.Text("填写精确的 Minecraft / 加载器版本，未选择本地 JAR 时自动从官方下载对应安装器。Java 建议使用完整 java.exe 路径，1.20.5+ 通常需要 Java 21。"));
-        _editor = new ServerProfileEditor(_profile, installing: true);
-        panel.Children.Add(_editor);
-        _pack = ServerUi.FileField(panel, "服务端整合包 ZIP（可选；不是客户端包）", "服务端整合包 (*.zip)|*.zip");
-        _installer = ServerUi.FileField(panel, "本地加载器安装器 JAR（可选；优先于官方下载）", "Java 安装器 (*.jar)|*.jar");
-        _script = ServerUi.FileField(panel, "安装脚本（可选；包内脚本也需下面的信任确认）", "安装脚本 (*.bat;*.cmd;*.ps1)|*.bat;*.cmd;*.ps1");
-        panel.Children.Add(ServerUi.Text("NeoForge 调用 --installServer；Fabric 调用 server -downloadMinecraft。选择安装脚本时，由脚本安装。脚本不得需要交互式输入。ZIP 只导入服务端文件，不会将客户端模组自动转换成服务端模组。"));
-        panel.Children.Add(_trust);
-        var actions = new WrapPanel();
-        _install = ServerUi.Button("一键安装并打开控制台", Install_Click);
-        _cancel = ServerUi.Button("取消安装", (_, _) => _work?.Cancel());
-        _cancel.IsEnabled = false;
-        actions.Children.Add(_install); actions.Children.Add(_cancel);
-        panel.Children.Add(actions);
-        _status = ServerUi.Text("安装和客户端完全隔离，目录：" + ServerUi.Manager.GetDirectory(_profile));
-        panel.Children.Add(_status);
-        Content = ServerUi.Scroll(panel);
+        _refresh = refresh; _saved = profile is not null;
+        Title = profile is null ? "MOONCL · 创建服务端" : "MOONCL · 继续安装服务端";
+        Width = 800; Height = Math.Min(860, Math.Max(620, SystemParameters.WorkArea.Height - 70));
+        MinWidth = 660; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        var root = new DockPanel();
+        var header = new StackPanel { Margin = new Thickness(26, 20, 26, 10) };
+        var title = ServerUi.Text(profile is null ? "创建服务端" : "继续安装服务端", 25); title.FontWeight = FontWeights.SemiBold;
+        header.Children.Add(title);
+        header.Children.Add(ServerUi.Text("NeoForge / Fabric   ·   独立安装，不影响客户端", 12, muted: true));
+        DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
+
+        var footer = new StackPanel { Margin = new Thickness(26, 12, 26, 14) };
+        _progress = new ProgressBar { Height = 3, IsIndeterminate = true, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 10) };
+        _progress.SetResourceReference(Control.ForegroundProperty, "Hybrid.Accent");
+        _progress.SetResourceReference(Control.BackgroundProperty, "Hybrid.Line");
+        footer.Children.Add(_progress);
+        _status = ServerUi.Text("服务端将独立保存在启动器 servers 目录。", 12, muted: true);
+        _status.ToolTip = ServerUi.Manager.GetDirectory(_profile); footer.Children.Add(_status);
+        var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
+        _cancel = ServerUi.Button("取消安装", (_, _) => _work?.Cancel()); _cancel.IsEnabled = false;
+        _install = ServerUi.Button("安装并打开控制台", Install_Click, primary: true);
+        actions.Children.Add(_cancel); actions.Children.Add(_install); footer.Children.Add(actions);
+        var footerBorder = new Border { Child = footer, BorderThickness = new Thickness(0, 1, 0, 0) };
+        footerBorder.SetResourceReference(Border.BorderBrushProperty, "Hybrid.Line");
+        footerBorder.SetResourceReference(Border.BackgroundProperty, "Hybrid.Background");
+        DockPanel.SetDock(footerBorder, Dock.Bottom); root.Children.Add(footerBorder);
+
+        var panel = new StackPanel { Margin = new Thickness(26, 0, 26, 4) };
+        _editor = new ServerProfileEditor(_profile, installing: true); panel.Children.Add(_editor);
+        var sources = ServerUi.Section("安装来源", "可以全部留空，自动下载所选加载器的安装器；导入整合包时请选择服务端包。");
+        _pack = ServerUi.FileField(sources, "服务端整合包 ZIP · 可选", "服务端整合包 (*.zip)|*.zip");
+        _installer = ServerUi.FileField(sources, "本地 installer JAR · 可选，优先使用", "Java 安装器 (*.jar)|*.jar");
+        var scripts = new StackPanel();
+        _script = ServerUi.FileField(scripts, "安装脚本 BAT / CMD / PS1", "安装脚本 (*.bat;*.cmd;*.ps1)|*.bat;*.cmd;*.ps1");
+        scripts.Children.Add(ServerUi.Text("选择后由脚本负责安装。请使用无需交互输入的脚本；包内 install 脚本也需要下方的信任确认。", 12, muted: true));
+        sources.Children.Add(new Expander { Header = ServerUi.Text("使用整合包安装脚本", 13), Content = scripts, Margin = new Thickness(0, 0, 0, 6) });
+        _trust = new CheckBox { Content = ServerUi.Text("我信任所选安装器及脚本的来源，允许执行（拥有当前用户权限）。", 12), Margin = new Thickness(0, 8, 0, 0) };
+        sources.Children.Add(_trust);
+        _sources = ServerUi.Card(sources); panel.Children.Add(_sources);
+        root.Children.Add(ServerUi.Scroll(panel)); Content = root;
         Closing += OnClosing;
     }
 
@@ -59,29 +76,25 @@ internal sealed class ServerInstallWindow : Window
             if ((!string.IsNullOrWhiteSpace(_script.Text) || !string.IsNullOrWhiteSpace(_installer.Text)) && _trust.IsChecked != true)
                 throw new InvalidOperationException("请先确认信任所选本地安装器或脚本。外部程序可执行任意代码。");
             ServerUi.Manager.DownloadSource = ServerUi.DownloadSource();
-            ServerUi.Manager.Save(_profile);
-            _saved = true;
+            ServerUi.Manager.Save(_profile); _saved = true;
             _work = new CancellationTokenSource();
-            _editor.IsEnabled = _pack.IsEnabled = _installer.IsEnabled = _script.IsEnabled = _trust.IsEnabled = _install.IsEnabled = false;
-            _cancel.IsEnabled = true;
+            _editor.IsEnabled = _sources.IsEnabled = _install.IsEnabled = false;
+            _cancel.IsEnabled = true; _progress.Visibility = Visibility.Visible; _install.Content = "正在安装…";
             _status.Text = "正在安装，可在控制面板查看实时日志；此窗口可取消。";
-            ServerUi.Open(_profile);
-            _refresh();
+            ServerUi.Open(_profile); _refresh();
             await ServerUi.Manager.InstallAsync(_profile, Optional(_pack.Text), Optional(_installer.Text), Optional(_script.Text), _trust.IsChecked == true, _work.Token);
             _status.Text = "安装成功。请在控制面板确认 EULA 后启动服务端。";
-            _install.Content = "已安装";
         }
         catch (OperationCanceledException) { _status.Text = "安装已取消，可检查日志后重试。"; }
         catch (Exception ex) { _status.Text = "安装失败：" + ex.Message; ServerUi.Error(ex); }
         finally
         {
             _work?.Dispose(); _work = null;
-            _cancel.IsEnabled = false;
-            _editor.IsEnabled = _pack.IsEnabled = _installer.IsEnabled = _script.IsEnabled = _trust.IsEnabled = true;
+            _cancel.IsEnabled = false; _progress.Visibility = Visibility.Collapsed;
+            _editor.IsEnabled = _sources.IsEnabled = true;
             _install.IsEnabled = string.IsNullOrWhiteSpace(_profile.EntryPoint);
-            ServerUi.Refresh(_profile);
-            _editor.Reload(_profile);
-            _refresh();
+            _install.Content = _install.IsEnabled ? "安装并打开控制台" : "安装完成";
+            ServerUi.Refresh(_profile); _editor.Reload(_profile); _refresh();
         }
     }
 
@@ -102,28 +115,56 @@ internal sealed class ServerProfileEditor : StackPanel
 {
     private readonly TextBox _name, _minecraft, _version, _java, _min, _max, _jvm, _entry;
     private readonly ComboBox _loader;
+    private readonly TextBlock _runtimeSummary;
 
     internal ServerProfileEditor(ServerProfile profile, bool installing = false)
     {
-        _name = ServerUi.Field(this, "服务端名称", profile.Name);
-        Children.Add(ServerUi.Text("加载器"));
-        _loader = new ComboBox { ItemsSource = Enum.GetValues<ServerLoader>(), SelectedItem = profile.Loader, Margin = new Thickness(0, 0, 0, 10), MinHeight = 32, IsEnabled = installing };
-        Children.Add(_loader);
-        _minecraft = ServerUi.Field(this, "Minecraft 版本（例如 1.21.1）", profile.MinecraftVersion);
-        _version = ServerUi.Field(this, "加载器版本（例如 NeoForge 21.1.172 / Fabric 0.16.14）", profile.LoaderVersion);
+        var identity = ServerUi.Section("版本信息");
+        _name = ServerUi.Field(identity, "服务端名称", profile.Name);
+        var loader = new StackPanel(); loader.Children.Add(ServerUi.Text("加载器", 12, muted: true));
+        _loader = new ComboBox { ItemsSource = Enum.GetValues<ServerLoader>(), SelectedItem = profile.Loader, Margin = new Thickness(0, 0, 0, 10), IsEnabled = installing };
+        loader.Children.Add(_loader);
+        var minecraft = new StackPanel(); _minecraft = ServerUi.Field(minecraft, "Minecraft 版本", profile.MinecraftVersion);
+        var version = new StackPanel(); _version = ServerUi.Field(version, "加载器版本", profile.LoaderVersion);
+        identity.Children.Add(Columns(loader, minecraft, version));
+        identity.Children.Add(ServerUi.Text("例如 Minecraft 1.21.1，NeoForge 21.1.172 或 Fabric 0.16.14。", 11, muted: true));
         _minecraft.IsReadOnly = _version.IsReadOnly = !installing;
-        _java = ServerUi.Field(this, "Java 可执行文件（java 或完整 java.exe 路径）", profile.JavaPath);
-        Children.Add(ServerUi.Button("选择 Java…", (_, _) =>
+        Children.Add(ServerUi.Card(identity));
+
+        var runtime = new StackPanel();
+        _java = ServerUi.Field(runtime, "Java 可执行文件 · java 或完整 java.exe 路径", profile.JavaPath);
+        runtime.Children.Add(ServerUi.Button("选择 Java…", (_, _) =>
         {
             var picker = new Microsoft.Win32.OpenFileDialog { Filter = "Java (java.exe)|java.exe|可执行文件 (*.exe)|*.exe" };
             if (picker.ShowDialog() == true) _java.Text = picker.FileName;
         }));
-        _min = ServerUi.Field(this, "最小内存（MiB）", profile.MinMemoryMb.ToString());
-        _max = ServerUi.Field(this, "最大内存（MiB）", profile.MaxMemoryMb.ToString());
-        _jvm = ServerUi.Field(this, "额外 JVM 参数（高级；不要填写 -jar、入口或内存参数）", profile.JvmArguments);
-        _entry = ServerUi.Field(this, "启动入口（安装后自动识别；相对服务端目录的 JAR / win_args.txt / 启动脚本）", profile.EntryPoint);
+        runtime.Children.Add(ServerUi.Text("Minecraft 1.20.5+ 通常需要 Java 21。使用 java.exe，不是 javaw.exe。", 11, muted: true));
+        var min = new StackPanel(); _min = ServerUi.Field(min, "最小内存 MiB", profile.MinMemoryMb.ToString());
+        var max = new StackPanel(); _max = ServerUi.Field(max, "最大内存 MiB", profile.MaxMemoryMb.ToString());
+        runtime.Children.Add(Columns(min, max));
+        _jvm = ServerUi.Field(runtime, "额外 JVM 参数 · 不含内存和入口参数", profile.JvmArguments);
+        _entry = installing ? new TextBox { Text = profile.EntryPoint } : ServerUi.Field(runtime, "启动入口 · 相对服务端目录的 JAR / win_args.txt / 脚本", profile.EntryPoint);
         _entry.IsReadOnly = installing;
-        if (!installing) Children.Add(ServerUi.Text("加载器和游戏版本由已安装文件决定；更换版本请新建服务端，勿直接修改。使用自定义启动脚本时，内存与 JVM 参数由脚本自行管理。"));
+        var heading = new StackPanel(); heading.Children.Add(ServerUi.Text("运行环境", 16));
+        _runtimeSummary = ServerUi.Text("", 12, muted: true); heading.Children.Add(_runtimeSummary);
+        Children.Add(ServerUi.Card(new Expander { Header = heading, Content = runtime, IsExpanded = !installing }));
+        _java.TextChanged += (_, _) => UpdateRuntimeSummary(); _min.TextChanged += (_, _) => UpdateRuntimeSummary(); _max.TextChanged += (_, _) => UpdateRuntimeSummary();
+        UpdateRuntimeSummary();
+        if (!installing) Children.Add(ServerUi.Text("游戏和加载器版本由安装文件决定。更换版本请新建服务端；自定义脚本的 JVM 参数由脚本管理。", 12, muted: true));
+    }
+
+    private void UpdateRuntimeSummary() => _runtimeSummary.Text = $"{Path.GetFileName(_java.Text)}   ·   {_min.Text} – {_max.Text} MiB   ·   展开调整";
+
+    private static Grid Columns(params FrameworkElement[] fields)
+    {
+        var grid = new Grid();
+        for (var i = 0; i < fields.Length; i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            fields[i].Margin = new Thickness(0, 0, i == fields.Length - 1 ? 0 : 14, 0);
+            Grid.SetColumn(fields[i], i); grid.Children.Add(fields[i]);
+        }
+        return grid;
     }
 
     internal void Reload(ServerProfile profile)

@@ -16,6 +16,45 @@ internal static class ServerUi
 
     private static readonly HashSet<ServerSession> Sessions = [];
 
+    internal static void ApplyTheme(Control root)
+    {
+        root.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("/Plain Craft Launcher 2;component/Modules/ServerUi/ServerTheme.xaml", UriKind.Relative)
+        });
+        root.SetResourceReference(Control.BackgroundProperty, "Hybrid.Background");
+        root.SetResourceReference(Control.ForegroundProperty, "Hybrid.Text");
+        root.SetResourceReference(Control.FontFamilyProperty, "LaunchFontFamily");
+        void SharePalette()
+        {
+            var host = root is Window ? System.Windows.Application.Current?.MainWindow : Window.GetWindow(root);
+            if (host is not null && !ReferenceEquals(host, root) && !root.Resources.MergedDictionaries.Contains(host.Resources))
+                root.Resources.MergedDictionaries.Add(host.Resources);
+        }
+        SharePalette();
+        root.Loaded += (_, _) => SharePalette();
+        if (root is Window window)
+        {
+            window.SetResourceReference(FrameworkElement.StyleProperty, "Server.Window");
+            window.CommandBindings.Add(new System.Windows.Input.CommandBinding(SystemCommands.CloseWindowCommand, (_, _) => window.Close()));
+        }
+    }
+
+    internal static Border Card(UIElement content)
+    {
+        var card = new Border { Child = content };
+        card.SetResourceReference(FrameworkElement.StyleProperty, "Server.Card");
+        return card;
+    }
+
+    internal static StackPanel Section(string title, string? description = null)
+    {
+        var body = new StackPanel();
+        body.Children.Add(Text(title, 16));
+        if (!string.IsNullOrWhiteSpace(description)) body.Children.Add(Text(description, 12, muted: true));
+        return body;
+    }
+
     internal static bool CanExit()
     {
         if (!Sessions.Any(s => s.IsRunning || s.IsInstalling)) return true;
@@ -45,24 +84,27 @@ internal static class ServerUi
         Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { path }, UseShellExecute = true });
     }
 
-    internal static TextBlock Text(string text, double size = 13) => new()
+    internal static TextBlock Text(string text, double size = 13, bool muted = false)
     {
-        Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 8)
-    };
+        var block = new TextBlock { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 8) };
+        block.SetResourceReference(TextBlock.ForegroundProperty, muted ? "Hybrid.Muted" : "Hybrid.Text");
+        return block;
+    }
 
-    internal static Button Button(string title, RoutedEventHandler click)
+    internal static Button Button(string title, RoutedEventHandler click, bool primary = false)
     {
-        var button = new Button { Content = title, Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(0, 0, 8, 8), MinHeight = 32 };
+        var button = new Button { Content = title, Margin = new Thickness(0, 0, 8, 8) };
+        button.SetResourceReference(FrameworkElement.StyleProperty, primary ? "Server.PrimaryButton" : "Server.Button");
         button.Click += click;
         return button;
     }
 
     internal static TextBox Field(Panel panel, string label, string value, bool multiline = false)
     {
-        panel.Children.Add(Text(label));
+        panel.Children.Add(Text(label, 12, muted: true));
         var field = new TextBox
         {
-            Text = value, Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 0, 0, 10),
+            Text = value, Padding = new Thickness(11, 8, 11, 8), Margin = new Thickness(0, 0, 0, 10),
             MinHeight = multiline ? 180 : 32, AcceptsReturn = multiline, TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
             VerticalScrollBarVisibility = multiline ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden
         };
@@ -72,12 +114,17 @@ internal static class ServerUi
 
     internal static TextBox FileField(Panel panel, string label, string filter)
     {
-        var field = Field(panel, label, "");
-        panel.Children.Add(Button("浏览…", (_, _) =>
+        panel.Children.Add(Text(label, 12, muted: true));
+        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
+        var field = new TextBox { Padding = new Thickness(11, 8, 11, 8), ToolTip = label };
+        var browse = Button("浏览…", (_, _) =>
         {
             var picker = new Microsoft.Win32.OpenFileDialog { Filter = filter, CheckFileExists = true };
             if (picker.ShowDialog() == true) field.Text = picker.FileName;
-        }));
+        });
+        browse.Margin = new Thickness(8, 0, 0, 0);
+        DockPanel.SetDock(browse, Dock.Right); row.Children.Add(browse); row.Children.Add(field);
+        panel.Children.Add(row);
         return field;
     }
 
@@ -88,9 +135,10 @@ internal static class ServerUi
         var badge = new Border
         {
             Width = size * .47, Height = size * .47, HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom, Background = Brushes.White, CornerRadius = new CornerRadius(4), Padding = new Thickness(2),
+            VerticalAlignment = VerticalAlignment.Bottom, CornerRadius = new CornerRadius(4), Padding = new Thickness(2),
             Child = new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Images/Icons/DefaultServer.png")), Stretch = Stretch.Uniform }
         };
+        badge.SetResourceReference(Border.BackgroundProperty, "Hybrid.Surface");
         grid.Children.Add(badge);
         return grid;
     }

@@ -29,6 +29,7 @@ internal sealed class ServerControlWindow : Window
 
     internal ServerControlWindow(ServerProfile profile)
     {
+        ServerUi.ApplyTheme(this);
         _profile = profile;
         _session = ServerUi.Manager.GetSession(profile);
         Title = profile.Name + " · 服务端控制面板";

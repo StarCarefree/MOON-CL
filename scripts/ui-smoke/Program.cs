@@ -61,6 +61,7 @@ internal static class Program
                         throw new InvalidOperationException("Version-list switch did not update the expected containers.");
                 }
                 Console.WriteLine("PASS client/server list round trips");
+                if (args.Contains("--server-theme")) ServerThemeChecks.Run(assembly, application, args);
                 application.Shutdown();
             }
             return 0;
