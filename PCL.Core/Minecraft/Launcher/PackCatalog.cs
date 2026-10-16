@@ -14,6 +14,8 @@ public sealed record PackDefinition
     public string Description { get; init; } = "";
     public string Version { get; init; } = "";
     public string Minecraft { get; init; } = "";
+    public string Author { get; init; } = "";
+    public string Loader { get; init; } = "";
     public string Icon { get; init; } = "";
     public string Background { get; init; } = "";
     public string DownloadUrl { get; init; } = "";
@@ -80,6 +82,7 @@ public static class PackCatalog
             {
                 Id = id, Name = Get("name"), Description = Get("description"), Version = Get("version"),
                 Minecraft = Get("minecraft"), Icon = Url("icon"), Background = Url("background"),
+                Author = Get("author"), Loader = Get("loader"),
                 DownloadUrl = Url("downloadUrl"), FileName = fileName, Sha256 = sha,
                 ShareUrl = Url("shareUrl"), SharePath = Get("sharePath")
             };

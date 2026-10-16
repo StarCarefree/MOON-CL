@@ -8,6 +8,8 @@
 
 原生我的游戏只展示真实本地版本。SRE (`starrail-harpy-express` / StarRailHarpyExpress) 保留在浏览页作为标明的测试整合包，下载/更新/夸克/配置继续调用现有 LauncherLibrary 后端，界面不假下载。
 
+浏览目录现支持 MC 百科整合包、站点筛选与专属详情 UI，SRE 继续置顶。来源和下载衔接说明见 [mcmod-browse.md](mcmod-browse.md)。
+
 ## 精简发布包（用户最终确认）
 
 - 路径：`artifacts/PCL-CY-portable-win-x64-Release.zip`

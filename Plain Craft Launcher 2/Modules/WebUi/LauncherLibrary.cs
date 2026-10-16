@@ -116,6 +116,7 @@ internal sealed class LauncherLibrary : IDisposable
             {
                 ["id"] = pack.Id, ["name"] = pack.Name, ["description"] = pack.Description,
                 ["version"] = pack.Version,
+                ["author"] = pack.Author, ["loader"] = pack.Loader,
                 ["updateVersion"] = _updates.TryGetValue(pack.Id, out var update) ? update.Version : "",
                 ["installedVersion"] = installed.Version ?? "", ["minecraft"] = pack.Minecraft,
                 ["icon"] = pack.Icon, ["background"] = pack.Background, ["installed"] = installed.Instance is not null,

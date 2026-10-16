@@ -14,7 +14,7 @@ using PCL.Core.UI.WebHost;
 namespace PCL;
 
 /// <summary>Optional browse/pack-services surface. The window, game launch and all original pages remain native.</summary>
-internal sealed class WebUiController : IDisposable
+internal sealed partial class WebUiController : IDisposable
 {
     private WebView2? _view;
     private LauncherLibrary? _library;
@@ -209,6 +209,7 @@ internal sealed class WebUiController : IDisposable
             switch (type)
             {
                 case "bootstrap": SendBootstrap(core); Refresh(force: true); break;
+                case "mcmod": await HandleMcmodAsync(core, message, form); break;
                 case "launcher" when _library is not null:
                     await _library.HandleAsync(message, form);
                     Refresh(force: true);
@@ -261,6 +262,8 @@ internal sealed class WebUiController : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _mcmodLifetime.Cancel();
+        _mcmodHttp.Dispose();
         ReleaseView();
         _library?.Dispose();
         _library = null;
