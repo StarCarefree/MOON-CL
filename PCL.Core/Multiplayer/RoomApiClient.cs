@@ -22,14 +22,16 @@ public sealed class RoomApiClient : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
     private readonly Uri _root;
+    private readonly bool _official;
 
     public RoomApiClient(string serviceUrl, HttpClient? http = null)
     {
         if (!Uri.TryCreate(serviceUrl.Trim().TrimEnd('/') + "/", UriKind.Absolute, out var uri) ||
-            (uri.Scheme != "https" && !(uri.Scheme == "http" && uri.IsLoopback)) ||
+            (uri.Scheme != "https" && !(uri.Scheme == "http" && (uri.IsLoopback || RoomServiceDirectory.IsOfficial(uri)))) ||
             !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
             throw new ArgumentException("房间服务须使用 HTTPS；仅本机调试允许 HTTP。请填写服务根地址。");
         _root = new Uri(uri, "api/v1/rooms");
+        _official = RoomServiceDirectory.IsOfficial(uri);
         _ownsHttp = http is null;
         _http = http ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(12) };
     }
@@ -40,6 +42,16 @@ public sealed class RoomApiClient : IDisposable
         SendAsync<RoomTicket>(HttpMethod.Post, "/" + Code(code) + "/join", request, null, ct);
     public Task<RoomSnapshot> HeartbeatAsync(RoomTicket ticket, CancellationToken ct) =>
         SendAsync<RoomSnapshot>(HttpMethod.Post, MemberPath(ticket) + "/heartbeat", null, ticket.Token, ct);
+    public Task<RoomSnapshot> HeartbeatAsync(RoomTicket ticket, RoomPresence presence, CancellationToken ct)
+    {
+        presence.Validate();
+        return SendAsync<RoomSnapshot>(HttpMethod.Post, MemberPath(ticket) + "/heartbeat", presence, ticket.Token, ct);
+    }
+    public Task<RoomSnapshot> PublishRoutesAsync(RoomTicket ticket, RoomRoute[] routes, CancellationToken ct)
+    {
+        RoomRoute.ValidateAll(routes);
+        return SendAsync<RoomSnapshot>(HttpMethod.Put, "/" + Code(ticket.Room.Code) + "/routes", new { routes }, ticket.Token, ct);
+    }
     public Task<RoomSnapshot> PublishAsync(RoomTicket ticket, RoomConnection connection, CancellationToken ct)
     {
         connection.Validate();
@@ -65,8 +77,8 @@ public sealed class RoomApiClient : IDisposable
         using var request = new HttpRequestMessage(method, new Uri(_root.AbsoluteUri + suffix));
         if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (body is not null) request.Content = JsonContent.Create(body, options: Json);
-        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        await response.Content.LoadIntoBufferAsync(128 * 1024, ct).ConfigureAwait(false);
+        using var response = await SendRequestAsync(request, ct).ConfigureAwait(false);
+        await response.Content.LoadIntoBufferAsync(256 * 1024, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             string message = $"房间服务返回 {(int)response.StatusCode}。";
@@ -77,11 +89,19 @@ public sealed class RoomApiClient : IDisposable
                     message = error.GetString() is { Length: <= 512 } text ? text : message;
             }
             catch (JsonException) { }
-            throw new RoomApiException(response.StatusCode, message);
+            var failure = new RoomApiException(response.StatusCode, message);
+            throw _official ? new RoomApiException(response.StatusCode, RoomServiceDirectory.FriendlyError(failure, true)) : failure;
         }
         if (response.StatusCode == HttpStatusCode.NoContent) return default!;
         return await response.Content.ReadFromJsonAsync<T>(Json, ct).ConfigureAwait(false)
             ?? throw new JsonException("房间服务返回了空数据。");
+    }
+
+    private async Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        try { return await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false); }
+        catch (HttpRequestException ex) when (_official)
+        { throw new HttpRequestException("官方中控暂未就绪或无法连接。", null, ex.StatusCode); }
     }
 
     public void Dispose() { if (_ownsHttp) _http.Dispose(); }

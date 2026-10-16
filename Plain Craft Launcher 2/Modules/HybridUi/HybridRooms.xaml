@@ -11,81 +11,98 @@
                 <Setter Property="BorderBrush" Value="{StaticResource Hybrid.Line}" /><Setter Property="CaretBrush" Value="{StaticResource Hybrid.Accent}" />
                 <Setter Property="Padding" Value="10,8" /><Setter Property="MinHeight" Value="34" /><Setter Property="MaxLength" Value="253" />
                 <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="4"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" /></Border></ControlTemplate></Setter.Value></Setter>
-                <Style.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Hybrid.Accent}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger></Style.Triggers>
             </Style>
             <Style TargetType="PasswordBox">
                 <Setter Property="Background" Value="#111315" /><Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" /><Setter Property="BorderBrush" Value="{StaticResource Hybrid.Line}" />
                 <Setter Property="Padding" Value="10,8" /><Setter Property="MaxLength" Value="128" /><Setter Property="CaretBrush" Value="{StaticResource Hybrid.Accent}" />
                 <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="PasswordBox"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="4"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" /></Border></ControlTemplate></Setter.Value></Setter>
             </Style>
-            <Style TargetType="RadioButton"><Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" /><Setter Property="Margin" Value="0,6,18,6" /></Style>
+            <Style TargetType="ComboBoxItem"><Setter Property="Background" Value="#25282D" /><Setter Property="Foreground" Value="#F0F0F0" /><Setter Property="Padding" Value="10,7" /></Style>
+            <Style TargetType="ComboBox">
+                <Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" /><Setter Property="Background" Value="#25282D" /><Setter Property="MinHeight" Value="36" />
+                <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+                    <Grid><ToggleButton x:Name="Toggle" Focusable="False" Background="#25282D" Foreground="#F0F0F0" BorderBrush="#45484D" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                        <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"><ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.7" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+                        <DockPanel Margin="10,6"><TextBlock Text="▾" DockPanel.Dock="Right" Margin="16,0,0,0" /><ContentPresenter Content="{TemplateBinding SelectionBoxItem}" /></DockPanel>
+                    </ToggleButton>
+                        <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="False" Focusable="False"><Border Background="#25282D" BorderBrush="#45484D" BorderThickness="1" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"><StackPanel IsItemsHost="True" /></Border></Popup>
+                    </Grid>
+                </ControlTemplate></Setter.Value></Setter>
+            </Style>
+            <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" /><Setter Property="Margin" Value="0,10,0,0" /></Style>
             <Style x:Key="Action" TargetType="Button" BasedOn="{StaticResource Hybrid.QuietButton}"><Setter Property="Background" Value="#303238" /><Setter Property="Foreground" Value="{StaticResource Hybrid.Text}" /><Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="Margin" Value="0,12,8,0" /></Style>
             <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="{StaticResource Hybrid.Surface}" /><Setter Property="BorderBrush" Value="{StaticResource Hybrid.Line}" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Padding" Value="20" /><Setter Property="Margin" Value="0,0,0,16" /></Style>
+            <DataTemplate x:Key="MemberTemplate">
+                <DockPanel Margin="0,6"><Border Width="32" Height="32" CornerRadius="4" Background="#41454B" DockPanel.Dock="Left" Margin="0,0,12,0"><Grid><TextBlock Text="{Binding Initials}" Foreground="{StaticResource Hybrid.Text}" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" /><Image Source="{Binding Avatar}" RenderOptions.BitmapScalingMode="NearestNeighbor" /></Grid></Border><StackPanel><TextBlock Text="{Binding Name}" Foreground="{StaticResource Hybrid.Text}" FontWeight="SemiBold" /><TextBlock Text="{Binding Game}" FontSize="12" Foreground="{StaticResource Hybrid.Muted}" /></StackPanel></DockPanel>
+            </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid Background="{StaticResource Hybrid.Background}">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <Border Background="#24221B" CornerRadius="6" Padding="14" Margin="28,16,28,0"><TextBlock x:Name="Status" Text="请先配置已部署的房间服务地址，然后创建或加入房间。房间服务不转发游戏流量。" Foreground="{StaticResource Hybrid.Accent}" AutomationProperties.AutomationId="Rooms.Status" /></Border>
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="28,24,28,32" MaxWidth="960" HorizontalAlignment="Stretch">
-                <TextBlock Text="联机房间" FontSize="26" FontWeight="SemiBold" />
-                <TextBlock Text="轻量房间协调 · 游戏流量走 IPv6 / FRP / P2P，不经过房间服务" Foreground="{StaticResource Hybrid.Muted}" Margin="0,8,0,20" />
-                <Border Style="{StaticResource Card}">
-                    <StackPanel x:Name="IdentityPanel">
-                        <TextBlock Text="房间服务" Style="{StaticResource Label}" Margin="0,0,0,6" />
-                        <TextBox x:Name="ServiceUrl" AutomationProperties.AutomationId="Rooms.ServiceUrl" ToolTip="例如 https://rooms.example.com，本机调试可用 http://localhost:8080" MaxLength="1024" />
-                        <TextBlock Text="玩家名称" Style="{StaticResource Label}" />
-                        <TextBox x:Name="PlayerName" MaxLength="32" AutomationProperties.AutomationId="Rooms.PlayerName" />
-                    </StackPanel>
-                </Border>
-                <Border x:Name="CurrentCard" Style="{StaticResource Card}" Visibility="Collapsed">
-                    <StackPanel>
-                        <TextBlock x:Name="RoomTitle" FontSize="19" FontWeight="SemiBold" />
-                        <StackPanel Orientation="Horizontal"><TextBlock x:Name="Invitation" FontSize="26" Foreground="{StaticResource Hybrid.Accent}" Margin="0,12,16,0" /><Button Content="复制邀请码" Style="{StaticResource Action}" Click="CopyCode_Click" /></StackPanel>
-                        <TextBlock Text="房间成员" Style="{StaticResource Label}" />
-                        <ItemsControl x:Name="Members"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Margin="0,3" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                        <TextBlock x:Name="ConnectionInfo" Foreground="{StaticResource Hybrid.Muted}" Margin="0,14,0,6" />
-                        <TextBox x:Name="Endpoint" IsReadOnly="True" AutomationProperties.AutomationId="Rooms.Endpoint" />
-                        <WrapPanel>
-                            <Button x:Name="ConnectButton" Content="建立 / 检测连接" Style="{StaticResource Action}" Click="Connect_Click" AutomationProperties.AutomationId="Rooms.Connect" />
-                            <Button x:Name="CopyAddressButton" Content="复制地址" Style="{StaticResource Action}" Click="CopyAddress_Click" />
-                            <Button x:Name="LeaveButton" Content="退出房间" Style="{StaticResource Action}" Click="Leave_Click" AutomationProperties.AutomationId="Rooms.Leave" />
-                            <Button Content="一键联机 · 稍后开放" Style="{StaticResource Action}" IsEnabled="False" ToolTip="本轮不自动启动游戏" />
-                        </WrapPanel>
-                        <TextBlock Text="仅连接你信任的房间。建立连接会访问房主发布的地址或 P2P 节点。" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" Margin="0,12,0,0" />
-                    </StackPanel>
-                </Border>
-                <Grid x:Name="EntryForms">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <Border Style="{StaticResource Card}" VerticalAlignment="Top"><StackPanel>
-                        <TextBlock Text="创建房间" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock Text="房间名称" Style="{StaticResource Label}" /><TextBox x:Name="RoomName" Text="一起玩 Minecraft" MaxLength="48" />
-                        <TextBlock Text="房间密码（可选）" Style="{StaticResource Label}" /><PasswordBox x:Name="CreatePassword" />
-                        <TextBlock Text="连接方式" Style="{StaticResource Label}" />
-                        <WrapPanel><RadioButton x:Name="Ipv6Mode" GroupName="Mode" Content="IPv6" IsChecked="True" Checked="Mode_Changed" /><RadioButton x:Name="FrpMode" GroupName="Mode" Content="FRP" Checked="Mode_Changed" /><RadioButton x:Name="P2pMode" GroupName="Mode" Content="P2P" Checked="Mode_Changed" /></WrapPanel>
-                        <TextBlock Text="本地游戏 / LAN 端口" Style="{StaticResource Label}" /><TextBox x:Name="LocalPort" Text="25565" MaxLength="5" />
-                        <StackPanel x:Name="Ipv6Fields"><TextBlock Text="房主公网 IPv6（不带方括号）" Style="{StaticResource Label}" /><TextBox x:Name="Ipv6Address" /><Button Content="检测本机 IPv6" Style="{StaticResource Action}" Click="DetectIpv6_Click" /></StackPanel>
-                        <StackPanel x:Name="FrpFields" Visibility="Collapsed"><TextBlock Text="FRP 公网入口域名 / IP" Style="{StaticResource Label}" /><TextBox x:Name="PublicHost" /><TextBlock Text="FRP 分配的远程 TCP 端口" Style="{StaticResource Label}" /><TextBox x:Name="RemotePort" Text="25565" MaxLength="5" /></StackPanel>
-                        <TextBlock x:Name="ModeHelp" Text="需双方具备 IPv6，并手动允许游戏端口入站。" Foreground="{StaticResource Hybrid.Muted}" FontSize="11" Margin="0,12,0,0" />
-                        <Button x:Name="CreateButton" Content="创建房间" Style="{StaticResource Action}" Click="Create_Click" AutomationProperties.AutomationId="Rooms.Create" />
+        <Border Background="#24221B" CornerRadius="6" Padding="14" Margin="28,16,28,0"><DockPanel><Button x:Name="CancelButton" Content="取消操作" DockPanel.Dock="Right" Style="{StaticResource Action}" Margin="12,0,0,0" Click="Cancel_Click" Visibility="Collapsed" AutomationProperties.AutomationId="Rooms.Cancel" /><TextBlock x:Name="Status" Text="选择中控后创建或加入房间；加入房间不代表游戏已连通。" Foreground="{StaticResource Hybrid.Accent}" AutomationProperties.AutomationId="Rooms.Status" AutomationProperties.LiveSetting="Polite" /></DockPanel></Border>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" AutomationProperties.AutomationId="Rooms.Scroll">
+            <StackPanel Margin="28,24,28,32" MaxWidth="960">
+                <TextBlock Text="联机房间" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,16" />
+                <StackPanel x:Name="HallPanel">
+                    <Border Style="{StaticResource Card}"><StackPanel x:Name="IdentityPanel">
+                        <TextBlock Text="房间中控" Style="{StaticResource Label}" Margin="0,0,0,6" />
+                        <ComboBox x:Name="Coordinator" SelectedIndex="0" SelectionChanged="Coordinator_Changed" AutomationProperties.AutomationId="Rooms.Coordinator"><ComboBoxItem Content="官方中控" /><ComboBoxItem Content="自定义中控" /></ComboBox>
+                        <TextBox x:Name="CustomUrl" Visibility="Collapsed" Margin="0,8,0,0" MaxLength="1024" TextChanged="CustomUrl_Changed" AutomationProperties.AutomationId="Rooms.CustomUrl" AutomationProperties.Name="自定义中控地址" />
+                        <TextBlock x:Name="SecurityHint" Style="{StaticResource Label}" Text="中控只协调房间，不转发游戏流量。" />
+                        <TextBlock Text="玩家名称（离线玩家也可加入）" Style="{StaticResource Label}" /><TextBox x:Name="PlayerName" Text="Player" MaxLength="32" AutomationProperties.AutomationId="Rooms.PlayerName" />
                     </StackPanel></Border>
-                    <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top"><StackPanel>
-                        <TextBlock Text="加入房间" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock Text="8 位邀请码" Style="{StaticResource Label}" /><TextBox x:Name="RoomCode" MaxLength="8" CharacterCasing="Upper" AutomationProperties.AutomationId="Rooms.Code" />
-                        <TextBlock Text="房间密码" Style="{StaticResource Label}" /><PasswordBox x:Name="JoinPassword" />
-                        <TextBlock Text="输入好友的邀请码即可加入。加入后按房主公布的方式连接；不会自动启动游戏。" Foreground="{StaticResource Hybrid.Muted}" FontSize="12" Margin="0,14,0,0" />
-                        <Button x:Name="JoinButton" Content="加入房间" Style="{StaticResource Action}" Click="Join_Click" AutomationProperties.AutomationId="Rooms.Join" />
+                    <Border x:Name="CurrentCard" Style="{StaticResource Card}" Visibility="Collapsed"><StackPanel>
+                        <TextBlock Text="当前房间 · 返回大厅不会退出" Foreground="{StaticResource Hybrid.Accent}" /><TextBlock x:Name="CurrentTitle" FontSize="19" Margin="0,8,0,6" />
+                        <TextBlock x:Name="CurrentHostGame" /><ItemsControl x:Name="HallMembers" ItemTemplate="{StaticResource MemberTemplate}" />
+                        <WrapPanel><Button Content="重新进入房间" Click="Reenter_Click" Style="{StaticResource Action}" AutomationProperties.AutomationId="Rooms.Reenter" /><Button x:Name="HallLeaveButton" Content="退出房间" Click="Leave_Click" Style="{StaticResource Action}" AutomationProperties.AutomationId="Rooms.HallLeave" /></WrapPanel>
                     </StackPanel></Border>
-                </Grid>
-                <Border x:Name="NodeCard" Style="{StaticResource Card}" Visibility="Collapsed"><StackPanel>
-                    <TextBlock Text="FRP / P2P · 本机工具与节点" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="使用官方 frp 0.61+。P2P 复用 frp XTCP，受 NAT 类型影响，不保证打洞成功；失败可换 FRP 建房。节点凭据不随房间共享。" Foreground="{StaticResource Hybrid.Muted}" FontSize="12" Margin="0,8,0,0" />
-                    <TextBlock Text="可信 frpc.exe 完整路径" Style="{StaticResource Label}" /><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Margin="8,0,0,0" Click="SelectFrpc_Click" /><TextBox x:Name="FrpcPath" MaxLength="1024" /></DockPanel>
-                    <StackPanel x:Name="NodeAddressFields"><TextBlock Text="frps 节点主机" Style="{StaticResource Label}" /><TextBox x:Name="NodeHost" /><TextBlock Text="frps 控制端口" Style="{StaticResource Label}" /><TextBox x:Name="NodePort" Text="7000" MaxLength="5" /></StackPanel>
-                    <TextBlock Text="本机节点 Token（仅保留在本次会话中）" Style="{StaticResource Label}" /><PasswordBox x:Name="NodeToken" MaxLength="512" />
-                    <TextBlock Text="节点 TLS CA 文件（推荐填写，留空使用 frp 默认 TLS 策略）" Style="{StaticResource Label}" /><TextBox x:Name="NodeCa" MaxLength="1024" />
-                    <StackPanel x:Name="VisitorFields" Visibility="Collapsed"><TextBlock Text="P2P 本机接入端口（仅监听 127.0.0.1）" Style="{StaticResource Label}" /><TextBox x:Name="VisitorPort" Text="25566" MaxLength="5" /></StackPanel>
-                </StackPanel></Border>
+                    <Grid x:Name="EntryForms"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource Card}" VerticalAlignment="Top"><StackPanel>
+                            <TextBlock Text="创建房间" FontSize="18" /><TextBlock Text="房间名称" Style="{StaticResource Label}" /><TextBox x:Name="RoomName" Text="一起玩 Minecraft" MaxLength="48" AutomationProperties.AutomationId="Rooms.RoomName" />
+                            <TextBlock Text="密码（可选）" Style="{StaticResource Label}" /><PasswordBox x:Name="CreatePassword" AutomationProperties.AutomationId="Rooms.CreatePassword" />
+                            <TextBlock Text="先创建房间，再在房间内添加游戏线路。无需提前配置传输工具。" Style="{StaticResource Label}" /><Button Content="创建房间" Style="{StaticResource Action}" Click="Create_Click" AutomationProperties.AutomationId="Rooms.Create" />
+                        </StackPanel></Border>
+                        <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top"><StackPanel>
+                            <TextBlock Text="加入房间" FontSize="18" /><TextBlock Text="8 位邀请码" Style="{StaticResource Label}" /><TextBox x:Name="RoomCode" MaxLength="8" CharacterCasing="Upper" AutomationProperties.AutomationId="Rooms.Code" />
+                            <TextBlock Text="房间密码" Style="{StaticResource Label}" /><PasswordBox x:Name="JoinPassword" AutomationProperties.AutomationId="Rooms.JoinPassword" /><Button Content="加入房间" Style="{StaticResource Action}" Click="Join_Click" AutomationProperties.AutomationId="Rooms.Join" />
+                        </StackPanel></Border>
+                    </Grid>
+                </StackPanel>
+                <StackPanel x:Name="RoomPanel" Visibility="Collapsed">
+                    <WrapPanel><Button Content="← 返回大厅（保留房间和连接）" Style="{StaticResource Action}" Margin="0,0,8,16" Click="Back_Click" AutomationProperties.AutomationId="Rooms.Back" /><Button x:Name="LeaveButton" Content="退出房间" Style="{StaticResource Action}" Margin="0,0,0,16" Click="Leave_Click" AutomationProperties.AutomationId="Rooms.Leave" /></WrapPanel>
+                    <Border Style="{StaticResource Card}"><StackPanel>
+                        <TextBlock x:Name="RoomTitle" FontSize="20" FontWeight="SemiBold" /><WrapPanel><TextBlock x:Name="Invitation" FontSize="26" Foreground="{StaticResource Hybrid.Accent}" Margin="0,12,16,0" /><Button Content="复制邀请码" Style="{StaticResource Action}" Click="CopyCode_Click" AutomationProperties.AutomationId="Rooms.CopyCode" /></WrapPanel>
+                        <TextBlock x:Name="HostGame" Margin="0,12,0,6" AutomationProperties.AutomationId="Rooms.HostGame" /><ItemsControl x:Name="Members" ItemTemplate="{StaticResource MemberTemplate}" AutomationProperties.AutomationId="Rooms.Members" />
+                    </StackPanel></Border>
+                    <Border Style="{StaticResource Card}"><StackPanel>
+                        <TextBlock Text="游戏线路" FontSize="18" /><TextBlock Text="游戏握手延迟决定可达性；ICMP Ping 仅供参考，代理本机 Ping 不代表远端延迟。" Style="{StaticResource Label}" />
+                        <ListBox x:Name="RouteList" Background="#17191C" Foreground="#EEEEEE" BorderBrush="#41454B" SelectionChanged="Route_Changed" HorizontalContentAlignment="Stretch" MinHeight="60" MaxHeight="420" AutomationProperties.AutomationId="Rooms.Routes">
+                            <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="4,8"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" /><TextBlock Text="{Binding Endpoint}" /><TextBlock Text="{Binding Result}" FontSize="12" Foreground="{StaticResource Hybrid.Muted}" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock x:Name="NoRoutes" Text="房主尚未发布线路。" Style="{StaticResource Label}" />
+                        <WrapPanel x:Name="ConnectActions"><Button Content="自动选择 · 检测全部启用线路" Style="{StaticResource Action}" Click="AutoConnect_Click" AutomationProperties.AutomationId="Rooms.AutoConnect" /><Button Content="建立 / 检测所选线路" Style="{StaticResource Action}" Click="ManualConnect_Click" AutomationProperties.AutomationId="Rooms.Connect" /><Button x:Name="RemoveRouteButton" Content="移除所选线路" Style="{StaticResource Action}" Click="RemoveRoute_Click" AutomationProperties.AutomationId="Rooms.RemoveRoute" /></WrapPanel>
+                        <TextBlock Text="当前已验证的游戏接入地址" Style="{StaticResource Label}" /><TextBox x:Name="Endpoint" IsReadOnly="True" AutomationProperties.AutomationId="Rooms.Endpoint" /><WrapPanel><Button Content="复制接入地址" Style="{StaticResource Action}" Click="CopyAddress_Click" AutomationProperties.AutomationId="Rooms.CopyAddress" /><Button Content="一键联机 · 后续开放" IsEnabled="False" Style="{StaticResource Action}" AutomationProperties.AutomationId="Rooms.LaunchFuture" /></WrapPanel>
+                        <TextBlock Text="仅连接你信任的线路。不会自动启动 Minecraft。" Style="{StaticResource Label}" />
+                    </StackPanel></Border>
+                    <Border x:Name="EditorCard" Style="{StaticResource Card}"><StackPanel x:Name="RouteEditor">
+                        <TextBlock Text="房主 · 添加线路（最多 12 条）" FontSize="18" /><TextBlock Text="线路名称" Style="{StaticResource Label}" /><TextBox x:Name="RouteName" Text="游戏线路" MaxLength="48" AutomationProperties.AutomationId="Rooms.RouteName" />
+                        <TextBlock Text="连接模式" Style="{StaticResource Label}" /><ComboBox x:Name="RouteMode" SelectedIndex="0" SelectionChanged="Mode_Changed" AutomationProperties.AutomationId="Rooms.Mode"><ComboBoxItem Content="IPv6 直连" /><ComboBoxItem Content="FRP / TCP" /><ComboBoxItem Content="P2P / XTCP" /><ComboBoxItem Content="ZeroTier" /><ComboBoxItem Content="EasyTier" /></ComboBox>
+                        <TextBlock Text="本地游戏 / LAN 端口" Style="{StaticResource Label}" /><TextBox x:Name="LocalPort" Text="25565" MaxLength="5" AutomationProperties.AutomationId="Rooms.LocalPort" />
+                        <StackPanel x:Name="Ipv6Fields"><TextBlock Text="房主公网 IPv6" Style="{StaticResource Label}" /><TextBox x:Name="Ipv6Address" AutomationProperties.AutomationId="Rooms.Ipv6" /><Button Content="检测本机 IPv6" Style="{StaticResource Action}" Click="DetectIpv6_Click" /></StackPanel>
+                        <StackPanel x:Name="FrpFields" Visibility="Collapsed"><TextBlock Text="FRP 公网游戏入口主机" Style="{StaticResource Label}" /><TextBox x:Name="PublicHost" AutomationProperties.AutomationId="Rooms.PublicHost" /><TextBlock Text="远程 TCP 端口（区别于本地游戏端口）" Style="{StaticResource Label}" /><TextBox x:Name="RemotePort" Text="25565" MaxLength="5" AutomationProperties.AutomationId="Rooms.RemotePort" /></StackPanel>
+                        <StackPanel x:Name="ZtFields" Visibility="Collapsed"><TextBlock Text="ZeroTier Network ID（16 位十六进制）" Style="{StaticResource Label}" /><TextBox x:Name="NetworkId" MaxLength="16" AutomationProperties.AutomationId="Rooms.NetworkId" /><TextBlock Text="房主 ZeroTier 虚拟 IP（需在控制台授权成员）" Style="{StaticResource Label}" /><TextBox x:Name="ZtAddress" AutomationProperties.AutomationId="Rooms.ZtAddress" /><Button Content="读取本机已加入网络的地址（不加入 / 退出）" Style="{StaticResource Action}" Click="ReadZeroTier_Click" AutomationProperties.AutomationId="Rooms.ReadZeroTier" /></StackPanel>
+                        <StackPanel x:Name="EtFields" Visibility="Collapsed"><TextBlock Text="房主 EasyTier 虚拟 IP" Style="{StaticResource Label}" /><TextBox x:Name="EtAddress" Text="10.144.14.1" AutomationProperties.AutomationId="Rooms.EtAddress" /><TextBlock Text="网络名称（同一网络成员共享）" Style="{StaticResource Label}" /><TextBox x:Name="NetworkName" MaxLength="64" AutomationProperties.AutomationId="Rooms.NetworkName" /><TextBlock Text="网络密码（随线路分享给房间成员，不持久保存）" Style="{StaticResource Label}" /><PasswordBox x:Name="NetworkSecret" AutomationProperties.AutomationId="Rooms.NetworkSecret" /><TextBlock Text="引导节点 URI，每行一个，1–8 个" Style="{StaticResource Label}" /><TextBox x:Name="Peers" Text="tcp://public.easytier.top:11010" AcceptsReturn="True" MinHeight="70" MaxLength="2056" AutomationProperties.AutomationId="Rooms.Peers" /><TextBlock Text="默认引导为社区节点，不保证在线；使用无 TUN 端口映射，无需 UAC。" Style="{StaticResource Label}" /></StackPanel>
+                        <TextBlock x:Name="ModeHelp" Style="{StaticResource Label}" /><Button Content="启动本机传输并发布线路" Style="{StaticResource Action}" Click="AddRoute_Click" AutomationProperties.AutomationId="Rooms.PublishRoute" />
+                    </StackPanel></Border>
+                    <Border Style="{StaticResource Card}"><Expander Header="本机工具与节点设置（凭据不随房间分享）" Foreground="#EEEEEE" AutomationProperties.AutomationId="Rooms.LocalTools"><StackPanel x:Name="ToolsPanel">
+                        <TextBlock Text="只选择你信任的本机程序。自动选择会对每条线路使用当前本机凭据；不同节点可选择线路后更换凭据手动连接。" Style="{StaticResource Label}" />
+                        <TextBlock Text="可信 frpc.exe 路径" Style="{StaticResource Label}" /><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Margin="8,0,0,0" Click="SelectFrpc_Click" /><TextBox x:Name="FrpcPath" MaxLength="1024" AutomationProperties.AutomationId="Rooms.FrpcPath" /></DockPanel>
+                        <TextBlock Text="frps 控制主机（房主发布 FRP / P2P 时使用）" Style="{StaticResource Label}" /><TextBox x:Name="NodeHost" AutomationProperties.AutomationId="Rooms.NodeHost" /><TextBlock Text="frps 控制端口" Style="{StaticResource Label}" /><TextBox x:Name="NodePort" Text="7000" MaxLength="5" AutomationProperties.AutomationId="Rooms.NodePort" />
+                        <TextBlock Text="frps Token（仅本次会话）" Style="{StaticResource Label}" /><PasswordBox x:Name="NodeToken" MaxLength="512" AutomationProperties.AutomationId="Rooms.NodeToken" /><TextBlock Text="节点 TLS CA 文件（可选）" Style="{StaticResource Label}" /><TextBox x:Name="NodeCa" MaxLength="1024" AutomationProperties.AutomationId="Rooms.NodeCa" />
+                        <TextBlock Text="可信 easytier-core.exe 路径" Style="{StaticResource Label}" /><DockPanel><Button Content="选择" DockPanel.Dock="Right" Style="{StaticResource Action}" Margin="8,0,0,0" Click="SelectEasyTier_Click" /><TextBox x:Name="EasyTierPath" MaxLength="1024" AutomationProperties.AutomationId="Rooms.EasyTierPath" /></DockPanel>
+                        <TextBlock Text="ZeroTier 本机 API Token（可选；留空读取 ProgramData 默认文件，仅本次会话）" Style="{StaticResource Label}" /><PasswordBox x:Name="ZeroTierToken" MaxLength="512" AutomationProperties.AutomationId="Rooms.ZeroTierToken" />
+                    </StackPanel></Expander></Border>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

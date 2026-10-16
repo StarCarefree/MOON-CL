@@ -1,14 +1,22 @@
 package io.mooncl.cloud;
 
 import java.net.*;
+import java.util.List;
 
 /** Only client connection information, never an frps administration/auth token. */
 record RoomConnection(String mode, String address, Integer port, String serverHost,
-                      Integer serverPort, String proxyName, String secretKey) {
+                      Integer serverPort, String proxyName, String secretKey,
+                      String networkId, String networkName, List<String> peers) {
+    RoomConnection(String mode, String address, Integer port, String serverHost,
+                   Integer serverPort, String proxyName, String secretKey) {
+        this(mode, address, port, serverHost, serverPort, proxyName, secretKey, null, null, null);
+    }
     @Override public String toString() { return "RoomConnection[redacted]"; }
 
     RoomConnection validated() {
         if (mode == null) throw invalid();
+        if (!mode.equals("zerotier") && !mode.equals("easytier")
+                && (networkId != null || networkName != null || peers != null)) throw invalid();
         switch (mode) {
             case "ipv6" -> {
                 if (!globalIpv6(address) || !validPort(port) || serverHost != null || serverPort != null
@@ -24,9 +32,51 @@ record RoomConnection(String mode, String address, Integer port, String serverHo
                         || secretKey == null || secretKey.isBlank() || secretKey.length() > 128
                         || secretKey.chars().anyMatch(c -> c < 33 || c > 126)) throw invalid();
             }
+            case "zerotier" -> {
+                if (!ipLiteral(address) || !validPort(port) || networkId == null
+                        || !networkId.matches("[A-Fa-f0-9]{16}") || serverHost != null || serverPort != null
+                        || proxyName != null || secretKey != null || networkName != null || peers != null) throw invalid();
+            }
+            case "easytier" -> {
+                if (!ipLiteral(address) || !validPort(port) || !boundedText(networkName, 64)
+                        || !boundedText(secretKey, 128) || serverHost != null || serverPort != null
+                        || proxyName != null || networkId != null || peers == null || peers.isEmpty()
+                        || peers.size() > 8 || peers.stream().anyMatch(p -> !peer(p))) throw invalid();
+            }
             default -> throw invalid();
         }
-        return this;
+        return peers == null ? this : new RoomConnection(mode, address, port, serverHost,
+                serverPort, proxyName, secretKey, networkId, networkName, List.copyOf(peers));
+    }
+
+    private static boolean boundedText(String value, int max) {
+        return value != null && !value.isEmpty() && value.length() <= max
+                && value.chars().noneMatch(Character::isISOControl);
+    }
+
+    private static boolean ipLiteral(String value) {
+        if (value == null) return false;
+        if (!value.contains(":")) return value.matches("[0-9.]+") && host(value);
+        if (value.length() > 45 || !value.matches("[0-9A-Fa-f:.]+")) return false;
+        if (value.contains(".") && !host(value.substring(value.lastIndexOf(':') + 1))) return false;
+        try {
+            InetAddress.getByName(value); // Literal-only characters and a colon: never DNS.
+            return true;
+        } catch (UnknownHostException exception) { return false; }
+    }
+
+    private static boolean peer(String value) {
+        if (value == null || value.length() > 256) return false;
+        try {
+            URI uri = new URI(value);
+            String hostname = uri.getHost();
+            if (hostname != null && hostname.startsWith("[") && hostname.endsWith("]"))
+                hostname = hostname.substring(1, hostname.length() - 1);
+            return uri.getScheme() != null && List.of("tcp", "udp", "ws", "wss", "quic", "wg").contains(uri.getScheme())
+                    && (hostname != null && hostname.contains(":") ? ipLiteral(hostname) : host(hostname))
+                    && validPort(uri.getPort()) && uri.getRawUserInfo() == null
+                    && uri.getRawQuery() == null && uri.getRawFragment() == null;
+        } catch (URISyntaxException exception) { return false; }
     }
 
     private static boolean validPort(Integer value) { return value != null && value >= 1 && value <= 65535; }

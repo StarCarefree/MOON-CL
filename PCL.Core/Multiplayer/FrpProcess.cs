@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -28,12 +29,7 @@ public sealed partial class FrpProcess : IDisposable
         var owner = new FrpProcess();
         try
         {
-            owner._directory = Path.Combine(Path.GetTempPath(), "mooncl-frp-" + Guid.NewGuid().ToString("N"));
-            var security = new DirectorySecurity();
-            security.SetAccessRuleProtection(true, false);
-            security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-            new DirectoryInfo(owner._directory).Create(security);
+            owner._directory = CreatePrivateDirectory();
             var config = Path.Combine(owner._directory, "frpc.toml");
             await File.WriteAllTextAsync(config, toml, new UTF8Encoding(false), ct).ConfigureAwait(false);
             owner._job = NativeJob.Create();
@@ -54,22 +50,48 @@ public sealed partial class FrpProcess : IDisposable
         catch { owner.Dispose(); throw; }
     }
 
-    private static Process Start(string exe, string config, string directory, bool verify, SafeFileHandle job)
+    internal static async Task<FrpProcess> StartToolAsync(string executable, NetworkToolPlan plan, CancellationToken ct)
+    {
+        if (!Path.IsPathFullyQualified(executable) || !File.Exists(executable) || !string.Equals(Path.GetExtension(executable), ".exe", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("请选择可信网络工具的完整 exe 路径。");
+        var owner = new FrpProcess();
+        try
+        {
+            owner._directory = CreatePrivateDirectory();
+            owner._job = NativeJob.Create();
+            owner._process = StartTool(executable, plan.Arguments, plan.Environment, Path.GetDirectoryName(executable)!, owner._job);
+            await Task.Delay(700, ct).ConfigureAwait(false);
+            if (!owner.IsRunning) throw new IOException("网络工具已退出，请检查程序版本、所需组件和线路配置。");
+            ct.ThrowIfCancellationRequested();
+            return owner;
+        }
+        catch { owner.Dispose(); throw; }
+    }
+
+    private static string CreatePrivateDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "mooncl-frp-" + Guid.NewGuid().ToString("N"));
+        var security = new DirectorySecurity(); security.SetAccessRuleProtection(true, false);
+        security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        new DirectoryInfo(directory).Create(security); return directory;
+    }
+    private static Process Start(string exe, string config, string directory, bool verify, SafeFileHandle job) =>
+        StartTool(exe, verify ? ["verify", "-c", config] : ["-c", config], null, directory, job);
+    private static Process StartTool(string exe, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? environment, string directory, SafeFileHandle job)
     {
         var start = new ProcessStartInfo(exe)
         {
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = directory,
             RedirectStandardOutput = true, RedirectStandardError = true
         };
-        if (verify) start.ArgumentList.Add("verify");
-        start.ArgumentList.Add("-c"); start.ArgumentList.Add(config);
-        var process = Process.Start(start) ?? throw new IOException("无法启动 frpc。");
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        if (environment is not null) foreach (var pair in environment) start.Environment[pair.Key] = pair.Value;
+        var process = Process.Start(start) ?? throw new IOException("无法启动网络工具。");
         try
         {
             if (NativeJob.AssignProcessToJobObject(job, process.Handle) == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
-            // Drain without retaining logs: credentials and peer metadata must never reach launcher logs.
-            _ = DrainAsync(process.StandardOutput.BaseStream);
-            _ = DrainAsync(process.StandardError.BaseStream);
+            _ = DrainAsync(process.StandardOutput.BaseStream); _ = DrainAsync(process.StandardError.BaseStream);
             return process;
         }
         catch { if (!process.HasExited) process.Kill(true); process.Dispose(); throw; }

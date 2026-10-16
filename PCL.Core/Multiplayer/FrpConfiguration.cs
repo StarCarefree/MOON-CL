@@ -5,7 +5,10 @@ using System.Text.Json;
 
 namespace PCL.Core.Multiplayer;
 
-public sealed record FrpNode(string Host, int Port, string Token, string TrustedCaFile = "");
+public sealed record FrpNode(string Host, int Port, string Token, string TrustedCaFile = "")
+{
+    public override string ToString() => "FrpNode[redacted]";
+}
 
 /// <summary>frp's native TOML format (frp >= 0.61); XTCP delegates NAT traversal to frp.</summary>
 public static class FrpConfiguration

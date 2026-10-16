@@ -58,9 +58,13 @@ final class PortGuard extends OncePerRequestFilter {
                     }
                 }
                 if (!read) {
-                    if (request.getContentLengthLong() > 4096) { error(response, 413, "Room body exceeds 4 KiB"); return; }
-                    byte[] body = request.getInputStream().readNBytes(4097);
-                    if (body.length > 4096) { error(response, 413, "Room body exceeds 4 KiB"); return; }
+                    boolean profileOrRoutes = method.equals("POST") && (path.equals("/api/v1/rooms")
+                            || path.matches("/api/v1/rooms/[A-HJ-NP-Z2-9]{8}/join") || heartbeat)
+                            || method.equals("PUT") && path.matches("/api/v1/rooms/[A-HJ-NP-Z2-9]{8}/routes");
+                    int limit = profileOrRoutes ? 32 * 1024 : 4096;
+                    if (request.getContentLengthLong() > limit) { error(response, 413, "Room body exceeds limit"); return; }
+                    byte[] body = request.getInputStream().readNBytes(limit + 1);
+                    if (body.length > limit) { error(response, 413, "Room body exceeds limit"); return; }
                     request = new BufferedRequest(request, body);
                 }
             } else {

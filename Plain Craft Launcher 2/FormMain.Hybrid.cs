@@ -170,6 +170,7 @@ public partial class FormMain
         HybridSidebarView.UpdateAccount(account?.UserName ?? Lang.Text("Hybrid.NotLoggedIn"),
             skin?.ImgBack?.Source, skin?.ImgFore?.Source);
         var selected = ModInstanceList.McMcInstanceSelected;
+        HybridRoomsView.UpdateLocalState(account?.UserName ?? "Player", skin?.ImgBack?.Source, skin?.ImgFore?.Source, selected);
         var versionPath = selected?.PathInstance ?? "";
         var versionChanged = _hybridVersionPath is not null && !string.Equals(_hybridVersionPath, versionPath, StringComparison.OrdinalIgnoreCase);
         _hybridVersionPath = versionPath;

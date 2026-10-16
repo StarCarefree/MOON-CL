@@ -97,7 +97,7 @@ class RoomApiTest {
     }
 
     @Test void bodyRateAndPortLimitsPreserveAdminSeparation() throws Exception {
-        call(post(ROOT).contentType("application/json").content("x".repeat(4097))).andExpect(status().isPayloadTooLarge());
+        call(post(ROOT).contentType("application/json").content("x".repeat(32769))).andExpect(status().isPayloadTooLarge());
         call(post(ROOT).contentType("application/json").content("{}").with(r -> { r.setLocalPort(9091); return r; }))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/admin/packs").header("Authorization", "Bearer integration_test_token_0123456789abcdef"))
@@ -117,5 +117,117 @@ class RoomApiTest {
         call(post(member(host) + "/heartbeat").header("Authorization", auth(host))).andExpect(status().isOk());
         call(post(room(host) + "/join;guess=1").contentType("application/json").content("{\"playerName\":\"Guest\"}"))
                 .andExpect(status().isTooManyRequests());
+    }
+
+    private String route(String id, boolean enabled, String connection) {
+        return "{\"id\":\"" + id + "\",\"name\":\"Route\",\"enabled\":" + enabled + ",\"connection\":" + connection + "}";
+    }
+    private ResultActions routes(JsonNode session, String body) throws Exception {
+        return call(put(room(session) + "/routes").header("Authorization", auth(session)).contentType("application/json").content(body));
+    }
+
+    @Test void multiRoutesAreHostOnlyAtomicClearableAndLegacyCompatible() throws Exception {
+        JsonNode host = create();
+        assertThat(host.at("/room/routes").size()).isZero();
+        JsonNode guest = json(call(post(room(host) + "/join").contentType("application/json").content("{\"playerName\":\"Guest\"}"))
+                .andExpect(status().isOk()));
+        String batch = "{\"routes\":[" + route("off", false, FRP) + "," + route("on", true, FRP) + "]}";
+        call(put(room(host) + "/routes").contentType("application/json").content(batch)).andExpect(status().isUnauthorized());
+        routes(guest, batch).andExpect(status().isForbidden());
+        routes(host, batch).andExpect(status().isOk()).andExpect(jsonPath("$.routes.length()").value(2))
+                .andExpect(jsonPath("$.connection.mode").value("frp"));
+        for (String bad : new String[]{"{\"routes\":[" + route("same", true, FRP) + "," + route("same", true, FRP) + "]}",
+                "{\"routes\":[" + route("good", true, FRP) + "," + route("bad", true, "{\"mode\":\"ipv6\"}") + "]}",
+                "{\"routes\":null}", "{\"routes\":[null]}", "{\"routes\":[],\"unknown\":true}"}) {
+            routes(host, bad).andExpect(status().isBadRequest());
+            call(get(room(host)).header("Authorization", auth(host))).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.routes.length()").value(2)).andExpect(jsonPath("$.routes[0].id").value("off"));
+        }
+        routes(host, "{\"routes\":[]}").andExpect(status().isOk()).andExpect(jsonPath("$.routes").isEmpty())
+                .andExpect(jsonPath("$.connection").isEmpty());
+        call(put(room(host) + "/connection").header("Authorization", auth(host)).contentType("application/json").content(FRP))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.routes.length()").value(1))
+                .andExpect(jsonPath("$.routes[0].id").value("legacy")).andExpect(jsonPath("$.routes[0].enabled").value(true));
+        call(post(ROOT).contentType("application/json").content(CREATE.replace("null", FRP)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.room.routes[0].id").value("legacy"));
+    }
+
+    @Test void profileCreateJoinAndOwnHeartbeatStayAuthenticatedAndPreserveNoBody() throws Exception {
+        String avatar = RoomStoreTest.png(1, 1, 68);
+        JsonNode host = json(call(post(ROOT).contentType("application/json").content(CREATE.replace("null}",
+                "null,\"avatar\":\"" + avatar + "\",\"game\":{\"name\":\"Minecraft\",\"version\":\"1.21\",\"state\":\"launching\"}}")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.room.members[0].avatar").value(avatar)));
+        JsonNode guest = json(call(post(room(host) + "/join").contentType("application/json").content(
+                "{\"playerName\":\"Guest\",\"avatar\":\"" + avatar + "\",\"game\":{\"state\":\"running\"}}"))
+                .andExpect(status().isOk()));
+        String update = "{\"avatar\":\"\",\"game\":{\"name\":\"Game\",\"version\":\"v2\",\"state\":\"failed\"}}";
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(guest)).contentType("application/json").content(update))
+                .andExpect(status().isForbidden());
+        call(post(member(guest) + "/heartbeat").header("Authorization", auth(guest)).contentType("application/json").content(update))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.members[0].game.state").value("launching"))
+                .andExpect(jsonPath("$.members[1].game.state").value("failed")).andExpect(jsonPath("$.members[1].name").value("Guest"));
+        call(post(member(guest) + "/heartbeat").header("Authorization", auth(guest))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[1].game.state").value("failed"));
+        call(get(room(host))).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.members").doesNotExist());
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json")
+                .content("{\"playerName\":\"Renamed\"}")).andExpect(status().isBadRequest());
+    }
+
+    @Test void invalidPresenceDoesNotRenewAndRejectsAvatarAndGameBounds() throws Exception {
+        JsonNode host = create();
+        assertThat(host.at("/room/members/0/avatar").asText()).isEmpty();
+        assertThat(host.at("/room/members/0/game/state").asText()).isEqualTo("stopped");
+        clock.advance(74);
+        for (String bad : new String[]{"{\"avatar\":\"https://example.com/a.png\"}", "{\"avatar\":\"broken!\"}",
+                "{\"avatar\":\"" + RoomStoreTest.png(65, 1, 68) + "\"}", "{\"game\":{\"state\":\"starting\"}}",
+                "{\"game\":{\"name\":\"" + "x".repeat(81) + "\"}}", "{\"game\":{\"version\":\"bad\\n\"}}"}) {
+            call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json").content(bad))
+                    .andExpect(status().isBadRequest());
+        }
+        call(get(room(host)).header("Authorization", auth(host))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[0].game.state").value("stopped"));
+        clock.advance(1);
+        call(get(room(host)).header("Authorization", auth(host))).andExpect(status().isNotFound());
+    }
+
+    @Test void overlayDescriptorsWorkThroughRoutesAndRejectIrrelevantFields() throws Exception {
+        JsonNode host = create();
+        String zt = "{\"mode\":\"zerotier\",\"address\":\"10.0.0.1\",\"port\":25565,\"networkId\":\"0123456789abcdef\"}";
+        String et = "{\"mode\":\"easytier\",\"address\":\"fd00::1\",\"port\":25565,\"networkName\":\"net\",\"secretKey\":\"room-only\",\"peers\":[\"tcp://example.com:11010\",\"wss://[fd00::2]:443/ws\"]}";
+        routes(host, "{\"routes\":[" + route("zt", true, zt) + "," + route("et", true, et) + "]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.routes[0].connection.networkId").value("0123456789abcdef"))
+                .andExpect(jsonPath("$.routes[1].connection.peers.length()").value(2));
+        for (String bad : new String[]{zt.replace("abcdef", "abcdeg"), zt.replace("25565,", "25565,\"peers\":[],"),
+                et.replace("net", "x".repeat(65)), et.replace("tcp://example.com:11010", "tcp://user@example.com:11010"),
+                FRP.replace("25565}", "25565,\"networkName\":\"net\"}")})
+            routes(host, "{\"routes\":[" + route("bad", true, bad) + "]}").andExpect(status().isBadRequest());
+    }
+
+    @Test void largerBodiesAreBoundedOnlyForRoutesAndProfilesIncludingUnknownLength() throws Exception {
+        JsonNode host = create();
+        String padded = " ".repeat(5000);
+        routes(host, padded + "{\"routes\":[]}").andExpect(status().isOk());
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json")
+                .content(padded + "{\"game\":{\"state\":\"running\"}}" )).andExpect(status().isOk());
+        call(post(ROOT).contentType("application/json").content(padded + CREATE)).andExpect(status().isOk());
+        call(post(room(host) + "/join").contentType("application/json").content(padded + "{\"playerName\":\"Guest\"}"))
+                .andExpect(status().isOk());
+        call(put(room(host) + "/connection").header("Authorization", auth(host)).contentType("application/json").content(padded + FRP))
+                .andExpect(status().isPayloadTooLarge());
+        mvc.perform(context -> {
+            var request = new org.springframework.mock.web.MockHttpServletRequest(context) {
+                @Override public int getContentLength() { return -1; }
+                @Override public long getContentLengthLong() { return -1; }
+            };
+            request.setMethod("PUT");
+            request.setRequestURI(room(host) + "/routes");
+            request.setContentType("application/json");
+            request.addHeader("Authorization", auth(host));
+            request.addHeader("Transfer-Encoding", "chunked");
+            request.setContent(" ".repeat(32769).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return request;
+        }).andExpect(status().isPayloadTooLarge()).andExpect(header().string("Cache-Control", "no-store"));
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json").content(" ".repeat(32769)))
+                .andExpect(status().isPayloadTooLarge());
     }
 }

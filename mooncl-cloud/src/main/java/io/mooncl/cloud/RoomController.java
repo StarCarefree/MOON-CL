@@ -22,14 +22,21 @@ final class RoomController {
 
     @PostMapping("/{code}/members/{id}/heartbeat")
     RoomStore.Room heartbeat(@PathVariable String code, @PathVariable String id,
-                            @RequestHeader(value = "Authorization", required = false) String auth) {
-        return rooms.heartbeat(code, id, bearer(auth));
+                            @RequestHeader(value = "Authorization", required = false) String auth,
+                            @RequestBody(required = false) RoomStore.Presence presence) {
+        return rooms.heartbeat(code, id, bearer(auth), presence);
     }
 
     @PutMapping("/{code}/connection")
     RoomStore.Room publish(@PathVariable String code, @RequestHeader(value = "Authorization", required = false) String auth,
                           @RequestBody RoomConnection connection) {
         return rooms.publish(code, bearer(auth), connection);
+    }
+
+    @PutMapping("/{code}/routes")
+    RoomStore.Room routes(@PathVariable String code, @RequestHeader(value = "Authorization", required = false) String auth,
+                          @RequestBody RoomStore.Routes request) {
+        return rooms.publishRoutes(code, bearer(auth), request);
     }
 
     @DeleteMapping("/{code}/members/{id}")
