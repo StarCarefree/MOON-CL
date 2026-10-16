@@ -104,6 +104,22 @@ internal static class Program
                 Check(ModAssets.McAssetsFixList(instance, false, ref progress).Count == 1, "Legacy files must be checked separately");
             }
 
+            Index("benchmark", new Dictionary<string, object>
+            {
+                ["first"] = new { hash = Hash(4), size = 64 },
+                ["conflict"] = new { hash = Hash(4), size = 65 }
+            });
+            Check(ModAssets.McAssetsListGet(instance).Count == 2, "Conflicting sizes must not be hidden by deduplication");
+            File.WriteAllText(Path.Combine(root, "assets", "indexes", "benchmark.json"),
+                "{/* comment */\"OBJECTS\":{\"a\":{\"HASH\":\"" + Hash(4) + "\",\"SIZE\":\"64\",},},\"VIRTUAL\":\"true\",\"MAP_TO_RESOURCES\":null,}");
+            var flexible = ModAssets.McAssetsListGet(instance).Single();
+            Check(flexible.size == 64 && flexible.localPath == Path.Combine(root, "assets", "virtual", "legacy", "a"),
+                "Loose JSON, case-insensitive fields, quoted numbers/booleans or null flags regressed");
+            Index("benchmark", new Dictionary<string, object>());
+            Check(ModAssets.McAssetsListGet(instance).Count == 0, "Empty index failed");
+            Check(ModAssets.McAssetsFixList(instance, false, ref progress).Count == 0 && progress.Progress == .99, "Empty scan failed");
+            Index("benchmark", new Dictionary<string, object> { ["culture"] = new { hash = Hash(4), size = 64 } });
+
             // Culture must not affect numeric index parsing.
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
             Check(ModAssets.McAssetsListGet(instance)[0].size == 64, "Culture-dependent size parsing");
@@ -127,7 +143,7 @@ namespace PCL
     public static class ModFolder { public static string mcFolderSelected; }
     public static class ModBase
     {
-        public static object GetJson(string text) => JsonNode.Parse(text);
+        public static object GetJson(string text) => PCL.Core.Utils.JsonCompat.ParseNode(text);
         public static string ReadFile(string path) => File.ReadAllText(path);
         public static string GetString(long value) => value.ToString();
         public static void Log(string text) { }
@@ -152,14 +168,11 @@ namespace PCL.Network
     public sealed class DownloadFile(string[] urls, string path, ModBase.FileChecker check)
     {
         public string LocalPath => path;
+        public string[] Urls => urls;
         public ModBase.FileChecker Check => check;
     }
 }
 namespace PCL.Core.App.Localization
 {
     public static class Lang { public static string Text(string key) => key; }
-}
-namespace PCL.Core.Utils
-{
-    public static class JsonExtensions { public static T ToObject<T>(this JsonNode node) => node.Deserialize<T>(); }
 }
