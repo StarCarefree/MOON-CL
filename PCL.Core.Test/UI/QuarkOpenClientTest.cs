@@ -52,10 +52,115 @@ public sealed class QuarkOpenClientTest
         Assert.IsFalse(text.Contains("secret-page", StringComparison.Ordinal));
     }
 
+    private static Handler OwnShareHandler(HttpStatusCode saveStatus, bool wrongSize = false, bool owner = true, bool limited = false) => new(async (request, ct) =>
+    {
+        if (request.RequestUri!.Host == "drive-pc.quark.cn")
+            return request.RequestUri.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
+                ? Json(new { code = 0, data = new { stoken = Stoken } })
+                : Json(new { data = new { list = new[] { new { file_name = "pack.mrpack", fid = "share-fid", dir = false, size = 100, share_fid_token = "file-token" } } } });
+        switch (request.RequestUri.AbsolutePath)
+        {
+            case "/open/v1/dir":
+                return Json(new { status = 0, data = new { fid = "folder-fid" } });
+            case "/open/v1/share/saveas":
+                if (!owner) return SaveAs(await request.Content!.ReadAsStringAsync(ct));
+                var rejected = Json(new { status = -1, errno = 41017, error_info = "用户禁止转存自己的分享 " + Stoken });
+                rejected.StatusCode = saveStatus;
+                return rejected;
+            case "/open/v1/file/get_download_url":
+                using (var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)))
+                    Assert.AreEqual(owner ? "share-fid" : "owned-fid", body.RootElement.GetProperty("fid").GetString());
+                if (limited)
+                {
+                    var limit = Json(new { status = -1, errno = 23018, error_info = "download file size limit[52428800]" });
+                    limit.StatusCode = HttpStatusCode.BadRequest;
+                    return limit;
+                }
+                return Json(new { status = 0, data = new { fid = "share-fid", file_name = "pack.mrpack", size = wrongSize ? 99 : 100, download_url = Signed } });
+            default:
+                throw new AssertFailedException("Owner share must not poll a save task or search for a new copy.");
+        }
+    });
+
     [TestMethod]
-    [DataRow(false)]
+    [DataRow(HttpStatusCode.BadRequest)]
+    [DataRow(HttpStatusCode.OK)]
+    public async Task OwnShareDownloadsOriginalFileInsteadOfSavingAnotherCopy(HttpStatusCode saveStatus)
+    {
+        using var handler = OwnShareHandler(saveStatus);
+        using var http = new HttpClient(handler);
+        var owned = await new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None);
+        Assert.AreEqual("pack.mrpack", owned.Download.FileName);
+        Assert.AreEqual(Signed, owned.Download.Url);
+        Assert.IsFalse(owned.SavedToDrive);
+        Assert.AreEqual(1, handler.Paths.Count(path => path == "/open/v1/share/saveas"));
+        Assert.AreEqual(1, handler.Paths.Count(path => path == "/open/v1/file/get_download_url"));
+        Assert.IsFalse(handler.Paths.Any(path => path is "/open/v1/task/query" or "/open/v1/file/list"));
+    }
+
+    [TestMethod]
+    public async Task OwnShareStillRejectsWrongFileSizeWithoutClaimingItWasSaved()
+    {
+        using var handler = OwnShareHandler(HttpStatusCode.BadRequest, wrongSize: true);
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<QuarkOpenException>(() => new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None));
+        Assert.AreEqual("网盘文件大小与分享文件不一致，已停止下载。", ex.Message);
+        Assert.IsFalse(ex.SavedToDrive);
+        Redacted(ex);
+    }
+
+    [TestMethod]
     [DataRow(true)]
-    public async Task RefreshedCredentialsPersistEvenWhenLaterRequestFails(bool serverExpired)
+    [DataRow(false)]
+    public async Task DownloadLimitReportsServerSizeAndActualSaveState(bool owner)
+    {
+        using var handler = OwnShareHandler(HttpStatusCode.BadRequest, owner: owner, limited: true);
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<QuarkOpenException>(() => new QuarkOpenClient(http).ResolveOwnedAsync(Session(), Share, "pack.mrpack", CancellationToken.None));
+        Assert.AreEqual(23018, ex.ErrorCode);
+        Assert.AreEqual(!owner, ex.SavedToDrive);
+        StringAssert.Contains(ex.Message, "50 MiB");
+        Redacted(ex);
+    }
+
+    [TestMethod]
+    [DataRow(32003)]
+    [DataRow(41008)]
+    [DataRow(98765)]
+    [DataRow(23018)]
+    public async Task Http400RetainsBusinessCodeWithoutEchoingServerSecrets(int code)
+    {
+        using var handler = new Handler((_, _) =>
+        {
+            var response = Json(new { status = -1, errno = code, error_info = Access + " " + Stoken + " " + Signed });
+            response.StatusCode = HttpStatusCode.BadRequest;
+            return Task.FromResult(response);
+        });
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<QuarkOpenException>(() => new QuarkOpenClient(http).BeginAuthorizeAsync(CancellationToken.None));
+        Assert.AreEqual(code, ex.ErrorCode);
+        Assert.IsFalse(ex.Message.Contains("HTTP 请求失败", StringComparison.Ordinal));
+        Assert.AreEqual(1, handler.Calls);
+        Redacted(ex);
+    }
+
+    [TestMethod]
+    public async Task NonJsonHttp400KeepsSafeHttpFailure()
+    {
+        using var handler = new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+        { Content = new StringContent("<html>" + Access + " " + Signed + "</html>") }));
+        using var http = new HttpClient(handler);
+        var ex = await Assert.ThrowsExactlyAsync<QuarkOpenException>(() => new QuarkOpenClient(http).BeginAuthorizeAsync(CancellationToken.None));
+        Assert.AreEqual(0, ex.ErrorCode);
+        Assert.AreEqual("夸克开放平台 HTTP 请求失败（400）。", ex.Message);
+        Redacted(ex);
+    }
+
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public async Task RefreshedCredentialsPersistEvenWhenLaterRequestFails(bool serverExpired, bool httpError)
     {
         var root = Path.Combine(Environment.GetEnvironmentVariable("PI_SCRATCH_DIR") ?? Path.GetTempPath(), "quark-refresh-" + Guid.NewGuid().ToString("N"));
         var store = new QuarkOpenSessionStore(root, root);
@@ -71,7 +176,12 @@ public sealed class QuarkOpenClientTest
                 return Task.FromResult(request.RequestUri.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
                     ? Json(new { code = 0, data = new { stoken = Stoken } })
                     : Json(new { data = new { list = new[] { new { file_name = "pack.mrpack", fid = "share-fid", dir = false, size = 100, share_fid_token = "file-token" } } } }));
-            if (!rotated) return Task.FromResult(Json(new { status = 1, errno = 11001, data = new { } }));
+            if (!rotated)
+            {
+                var expired = Json(new { status = 1, errno = 11001, data = new { } });
+                if (httpError) expired.StatusCode = HttpStatusCode.BadRequest;
+                return Task.FromResult(expired);
+            }
             Assert.IsTrue(new QuarkOpenSessionStore(root, root).Load()!.Matches("rotated-access", "rotated-refresh"));
             return Task.FromResult(Json(new { status = 1, errno = 32003, data = new { } }));
         });

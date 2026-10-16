@@ -12,22 +12,21 @@ https://backup.example.com/index.json
 http://127.0.0.1:8080/index.json
 ```
 
-第一项是主源，其余按顺序备用，最多 8 项；同一地址重复填写会去重。留空表示不使用自定义目录源，改用下方的 GitHub 默认源。这里填写的是目录 JSON，不是 ZIP/MRPACK 下载地址、网盘分享页，也不是 Packwiz 的更新索引或 `modrinth.index.json`。
+ 第一项是主源，其余按顺序备用，最多 8 项；同一地址重复填写会去重。留空表示不使用自定义目录源，改用下方的 Gitee 默认源。这里填写的是目录 JSON，不是 ZIP/MRPACK 下载地址、网盘分享页，也不是 Packwiz 的更新索引或 `modrinth.index.json`。
 
 网络异常、HTTP 错误、单源超过 8 秒、目录 JSON 解析/验证失败都会尝试下一项；第一次成功就停止，**不合并多个目录**。有效的空 `packs` 数组是成功，不继续尝试备用。全部失败保留本次运行中上次成功的条目并显示错误；缓存不跨启动持久化。设置页显示“上次成功源”，可确认是否用了备用。取消操作会停止所有后续请求。
 
 每个源支持 Gzip/Deflate/Brotli 自动解压、ETag/304 复用及重新验证缓存，解压后目录上限 4 MiB。按列表顺序刷新，主源恢复后优先使用主源。不要把每次访问内容不同的服务作为互相备用源。
 
-## 默认源（未配置时）
+ ## 默认源（未配置时）
 
-目录源留空时，启动器不把 MCL 当成「没有目录」，而是使用随仓库发布的默认源：
+ 目录源留空时，启动器不把 MCL 当成「没有目录」，而是使用 Gitee Release 上的默认源：
 
-```text
-https://raw.githubusercontent.com/catmoon233/MOON-CL/dev/docs/pack-catalog/index.json
-https://cdn.jsdelivr.net/gh/catmoon233/MOON-CL@dev/docs/pack-catalog/index.json
-```
+ ```text
+ https://gitee.com/canyue_1_0/mcl-index/releases/download/default/index.json
+ ```
 
-`docs/pack-catalog/index.json` 随 `dev` 分支发布，默认带一个 `starrail-harpy-express` 条目：Gitee Release 直链下载 + 夸克分享备用。两个地址内容相同，GitHub raw 不可达时按顺序回退到 jsDelivr。服务配置里的「使用 GitHub 默认源」按钮把这两个地址填进输入框，等价于留空；用户保存过任意目录源后，默认源不再参与请求。
+ 服务配置里的「使用 Gitee 默认源」按钮把这个地址填进输入框，等价于留空；用户保存过任意目录源后，默认源不再参与请求。本地 `docs/pack-catalog/index.json` 仍是仓库内的样例，不再作为未配置时的内置获取地址。
 
 设置存于启动器旁的 `PCL/launcher-library.json`：
 

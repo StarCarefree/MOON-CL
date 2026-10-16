@@ -100,6 +100,8 @@ public sealed class RoomV2Test
             if (request.RequestUri.AbsolutePath.EndsWith("/rooms"))
             {
                 Assert.AreEqual(JsonValueKind.Null, body.RootElement.GetProperty("connection").ValueKind);
+                if (body.RootElement.GetProperty("name").GetString() == "probe")
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = JsonContent.Create(new { error = "Invalid game server" }) };
                 return Ok(new RoomTicket(Room(), "host", "local-token"));
             }
             Assert.AreEqual("local-token", request.Headers.Authorization!.Parameter);
@@ -115,7 +117,7 @@ public sealed class RoomV2Test
         await session.RefreshAsync(new RoomPresence("", new("游戏", "1.21.1", "running")), CancellationToken.None);
         Assert.AreEqual(2, session.Room!.EffectiveRoutes.Length);
         Assert.AreEqual("launching", session.Room.Members[0].Game!.State);
-        Assert.AreEqual(3, requests.Count);
+        Assert.AreEqual(4, requests.Count);
     }
     [TestMethod]
     public void AutoSelectionUsesGameReachabilityNotIcmpOrLoopbackSpeed()

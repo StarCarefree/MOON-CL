@@ -59,21 +59,33 @@ public sealed class RoomClientTest
     public async Task RoomExpiryClearsSessionAndOfflineLeaveAlwaysClearsLocalState()
     {
         var count = 0;
-        using var http = new HttpClient(new Handler(_ => ++count == 1 ? Ok(Ticket()) : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = JsonContent.Create(new { error = "room expired" }) }));
+        using var http = new HttpClient(new Handler(request =>
+        {
+            count++;
+            var text = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+            if (text.Contains("\"name\":\"probe\"")) return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = JsonContent.Create(new { error = "JSON 或参数格式错误，请检查字段与类型" }) };
+            return text.Contains("\"name\":\"test\"") ? Ok(Ticket()) : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = JsonContent.Create(new { error = "room expired" }) };
+        }));
         using var session = new RoomSession(new RoomApiClient("https://example.com", http));
         await session.CreateAsync(new CreateRoomRequest("test", "owner", "", null), CancellationToken.None);
         Assert.IsTrue(session.IsHost); Assert.IsTrue(session.IsFresh);
         var ex = await Assert.ThrowsExactlyAsync<RoomApiException>(() => session.RefreshAsync(CancellationToken.None));
         Assert.AreEqual("room expired", ex.Message); Assert.IsNull(session.Room);
         await session.LeaveAsync(CancellationToken.None);
-        Assert.AreEqual(2, count);
+        Assert.AreEqual(3, count);
     }
 
     [TestMethod]
     public async Task LeaveFailureStillDropsTicket()
     {
         var count = 0;
-        using var http = new HttpClient(new Handler(_ => ++count == 1 ? Ok(Ticket()) : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        using var http = new HttpClient(new Handler(request =>
+        {
+            count++;
+            var text = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+            if (text.Contains("\"name\":\"probe\"")) return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = JsonContent.Create(new { error = "JSON 或参数格式错误，请检查字段与类型" }) };
+            return text.Contains("\"name\":\"test\"") ? Ok(Ticket()) : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        }));
         using var session = new RoomSession(new RoomApiClient("https://example.com", http));
         await session.CreateAsync(new CreateRoomRequest("test", "owner", "", null), CancellationToken.None);
         await Assert.ThrowsExactlyAsync<RoomApiException>(() => session.LeaveAsync(CancellationToken.None));

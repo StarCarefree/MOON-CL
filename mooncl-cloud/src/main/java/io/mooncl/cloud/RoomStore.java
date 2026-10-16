@@ -1,5 +1,4 @@
 package io.mooncl.cloud;
-package io.mooncl.cloud;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +36,7 @@ final class RoomStore {
         @Override public String toString() { return "Join[redacted]"; }
     }
     record Game(String name, String version, String state, RoomPackShare pack, String server) {
+        Game(String name, String version, String state) { this(name, version, state, null, ""); }
         Game validated() {
             String n = profileText(name, "game name"), v = profileText(version, "game version");
             String s = state == null ? "stopped" : state;

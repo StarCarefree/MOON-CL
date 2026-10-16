@@ -18,12 +18,10 @@
 const SRE_ID = "starrail-harpy-express";
 const SRE_COVER = "sre-cover.png";
 
-// Shipped default MCL catalog source: the repository-hosted index.json, mirrored
-// for the second entry. Kept in sync with PackCatalogSources.DefaultUrls in PCL.Core.
-const DEFAULT_CATALOG_URLS = [
-  "https://raw.githubusercontent.com/catmoon233/MOON-CL/dev/docs/pack-catalog/index.json",
-  "https://cdn.jsdelivr.net/gh/catmoon233/MOON-CL@dev/docs/pack-catalog/index.json"
-];
+ // Shipped default MCL catalog source. Kept in sync with PackCatalogSources.DefaultUrls in PCL.Core.
+ const DEFAULT_CATALOG_URLS = [
+   "https://gitee.com/canyue_1_0/mcl-index/releases/download/default/index.json"
+ ];
 const OFFLINE_SRE = {
   id: SRE_ID,
   name: "StarRailHarpyExpress",
@@ -77,25 +75,25 @@ const COPY = {
     quarkAuthOff: "未授权。匿名直链会被拒绝；授权后才转存这一个文件并下载。",
     catalogListInvalid: "每行一个完整 HTTP(S) 目录地址，最多 8 个，每个不超过 2048 字符；不能含账号密码或片段。",
     catalogUsing: "上次成功源：", catalogNoSource: "尚未从目录源成功获取预设。",
-    catalogDefaultUse: "使用 GitHub 默认源",
-    catalogDefaultOff: url => `已配置目录源；清空后回到 GitHub 默认源：${url}`,
-    catalogDefaultOn: url => `未配置目录源，启动器改用 GitHub 默认源：${url}`,
-    configOffline: "静态预览不能保存。连接本地启动器后再配置。",
-    configWait: "配置已发送，等待启动器确认。",
-    configOk: "配置已由启动器确认。",
-    configFail: "保存未确认：",
-    phaseOffline: "未连接 · 下载未发送",
-    phaseWait: "等待启动器提供浏览数据",
-    phaseReady: "尚未安装 · 下载会交给本地启动器",
-    phaseInstalled: "已安装 · 开始游戏在原生界面",
-    phaseUpdate: "发现可更新版本",
-    servicesTitle: "服务配置",
-    pageTitle: "资源目录",
-    eyebrow: "MOONCL · DISCOVER"
-  },
-  en: {
-    connection: { offline: "Static preview · launcher not connected", connecting: "Connecting to launcher", live: "Launcher connected", lost: "Connection lost" },
-    search: "Search", placeholder: "Name, version, or description", refresh: "Refresh", services: "Services",
+     catalogDefaultUse: "使用 Gitee 默认源",
+     catalogDefaultOff: url => `已配置目录源；清空后回到 Gitee 默认源：${url}`,
+     catalogDefaultOn: url => `未配置目录源，启动器改用 Gitee 默认源：${url}`,
+     configOffline: "静态预览不能保存。连接本地启动器后再配置。",
+     configWait: "配置已发送，等待启动器确认。",
+     configOk: "配置已由启动器确认。",
+     configFail: "保存未确认：",
+     phaseOffline: "未连接 · 下载未发送",
+     phaseWait: "等待启动器提供浏览数据",
+     phaseReady: "尚未安装 · 下载会交给本地启动器",
+     phaseInstalled: "已安装 · 开始游戏在原生界面",
+     phaseUpdate: "发现可更新版本",
+     servicesTitle: "服务配置",
+     pageTitle: "资源目录",
+     eyebrow: "MOONCL · DISCOVER"
+   },
+   en: {
+     connection: { offline: "Static preview · launcher not connected", connecting: "Connecting to launcher", live: "Launcher connected", lost: "Connection lost" },
+     search: "Search", placeholder: "Name, version, or description", refresh: "Refresh", services: "Services",
     recommend: "MCL modpacks", recommendNote: "Remote index.json and the built-in test pack", catalog: "Discover packs",
     test: "SRE · Test pack", catalogBadge: "Catalog pack", offlineState: "Offline · install state unknown",
     notInstalled: "Not installed", installed: "Installed", update: "Update available", missing: "No source metadata",
@@ -136,9 +134,9 @@ const COPY = {
     quarkAuthOff: "Not authorized. Anonymous links are rejected; authorize to save and download that one file.",
     catalogListInvalid: "One absolute HTTP(S) catalog URL per line; up to 8 URLs, 2048 characters each, without credentials or fragments.",
     catalogUsing: "Last successful source: ", catalogNoSource: "No successful catalog fetch yet.",
-    catalogDefaultUse: "Use the GitHub default",
-    catalogDefaultOff: url => `Catalog configured. Clearing it returns to the GitHub default: ${url}`,
-    catalogDefaultOn: url => `No catalog configured. The launcher uses the GitHub default: ${url}`,
+     catalogDefaultUse: "Use the Gitee default",
+     catalogDefaultOff: url => `Catalog configured. Clearing it returns to the Gitee default: ${url}`,
+     catalogDefaultOn: url => `No catalog configured. The launcher uses the Gitee default: ${url}`,
     configOffline: "Static preview cannot save. Connect the launcher first.",
     configWait: "Configuration sent. Waiting for the launcher to confirm.",
     configOk: "The launcher confirmed the configuration.",
@@ -2156,7 +2154,7 @@ function renderMclExplorer() {
   if (!shown) return;
   const urls = effectiveCatalogUrls(), source = state.launcher?.config?.catalogSource || "";
   const live = state.link === "live";
-  setText("mcl-message", !live ? "MCL · 未连接启动器，目录状态未知" : source ? `MCL · ${packs().length} 个条目 · 上次成功目录：${source}` : urls.length ? (catalogDefaultActive() ? "MCL · 未配置目录源，正在使用 GitHub 默认源；内置测试包仍可用。" : "MCL · 已配置远端 index.json，等待启动器返回目录；内置测试包仍可用。") : "MCL · 请在目录配置中填写远端 index.json；当前仅有内置测试包。");
+   setText("mcl-message", !live ? "MCL · 未连接启动器，目录状态未知" : source ? `MCL · ${packs().length} 个条目 · 上次成功目录：${source}` : urls.length ? (catalogDefaultActive() ? "MCL · 未配置目录源，正在使用 Gitee 默认源；内置测试包仍可用。" : "MCL · 已配置远端 index.json，等待启动器返回目录；内置测试包仍可用。") : "MCL · 请在目录配置中填写远端 index.json；当前仅有内置测试包。");
   ui["mcl-refresh"].disabled = !live || busy();
   ui["mcl-config"].disabled = !live;
 }

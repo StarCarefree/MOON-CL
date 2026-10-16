@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -68,11 +69,13 @@ public sealed class QuarkOwnedDownload
 {
     public QuarkDownload Download { get; }
     public QuarkOpenSession Session { get; }
+    public bool SavedToDrive { get; }
 
-    public QuarkOwnedDownload(QuarkDownload download, QuarkOpenSession session)
+    public QuarkOwnedDownload(QuarkDownload download, QuarkOpenSession session, bool savedToDrive = true)
     {
         Download = download;
         Session = session;
+        SavedToDrive = savedToDrive;
     }
 
     public override string ToString() => Download.FileName;
@@ -81,10 +84,12 @@ public sealed class QuarkOwnedDownload
 public sealed class QuarkOpenException : InvalidOperationException
 {
     public bool SavedToDrive { get; }
+    public int ErrorCode { get; }
 
-    public QuarkOpenException(string message, bool savedToDrive = false) : base(message)
+    public QuarkOpenException(string message, bool savedToDrive = false, int errorCode = 0) : base(message)
     {
         SavedToDrive = savedToDrive;
+        ErrorCode = errorCode;
     }
 }
 
@@ -171,6 +176,7 @@ public sealed class QuarkOpenClient
     public async Task<QuarkOwnedDownload> ResolveOwnedAsync(QuarkOpenSession session, string shareUrl, string sharePath, CancellationToken token)
     {
         if (session is null || !session.HasRefreshableToken) throw new QuarkOpenException("尚未授权夸克网盘，没有转存或下载。");
+        var savedToDrive = false;
         try
         {
             _session = await EnsureFreshAsync(session, token).ConfigureAwait(false);
@@ -178,10 +184,25 @@ public sealed class QuarkOpenClient
             if (file.Size <= 0 || file.Size > MaxSaveBytes)
                 throw new QuarkOpenException("无法确认这是单个可转存的整合包，已停止。没有转存整个分享。");
             var folder = await CreateFolderAsync(token).ConfigureAwait(false);
-            var saved = await SaveOneAsync(file, folder, token).ConfigureAwait(false);
+            JsonElement saved;
+            try
+            {
+                saved = await SaveOneAsync(file, folder, token).ConfigureAwait(false);
+            }
+            catch (QuarkOpenException ex) when (ex.ErrorCode == 41017)
+            {
+                // Quark rejects copying your own share; its selected FID is already owned.
+                var original = await DownloadForAsync(file.Fid, file, token, savedToDrive: false).ConfigureAwait(false);
+                return new QuarkOwnedDownload(original, _session, savedToDrive: false);
+            }
             var ownedFid = await OwnedFidAsync(saved, file, folder, token).ConfigureAwait(false);
+            savedToDrive = true;
             var download = await DownloadForAsync(ownedFid, file, token).ConfigureAwait(false);
             return new QuarkOwnedDownload(download, _session);
+        }
+        catch (QuarkOpenException ex) when (savedToDrive && !ex.SavedToDrive)
+        {
+            throw new QuarkOpenException(ex.Message, savedToDrive: true, errorCode: ex.ErrorCode);
         }
         catch (QuarkOpenException) { throw; }
         catch (OperationCanceledException) { throw; }
@@ -346,22 +367,22 @@ public sealed class QuarkOpenClient
         return type.ValueKind == JsonValueKind.String && type.GetString() == "0";
     }
 
-    private async Task<QuarkDownload> DownloadForAsync(string fid, QuarkShareFile file, CancellationToken token)
+    private async Task<QuarkDownload> DownloadForAsync(string fid, QuarkShareFile file, CancellationToken token, bool savedToDrive = true)
     {
         using var document = await CallAsync(HttpMethod.Post, "/open/v1/file/get_download_url", _session,
             new { fid }, token, null, true).ConfigureAwait(false);
         var data = Data(document);
         if (data.TryGetProperty("size", out var sizeNode) && sizeNode.TryGetInt64(out var size) && size != file.Size)
-            throw new QuarkOpenException("网盘文件大小与分享文件不一致，已停止下载。", savedToDrive: true);
+            throw new QuarkOpenException("网盘文件大小与分享文件不一致，已停止下载。", savedToDrive);
         var name = data.TryGetProperty("file_name", out var nameNode) ? nameNode.GetString() : file.FileName;
         if (!string.Equals(name, file.FileName, StringComparison.Ordinal)) name = file.FileName;
         var url = Text(data, "download_url");
         var uri = PackCatalog.HttpUri(url);
         if (!uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) || uri.Fragment.Length != 0)
-            throw new QuarkOpenException("夸克下载地址无效。", savedToDrive: true);
-        var session = _session ?? throw new QuarkOpenException("夸克授权已丢失。", savedToDrive: true);
+            throw new QuarkOpenException("夸克下载地址无效。", savedToDrive);
+        var session = _session ?? throw new QuarkOpenException("夸克授权已丢失。", savedToDrive);
         if (session.AccessToken.Length == 0 || session.AccessToken.IndexOfAny(";,\r\n ".ToCharArray()) >= 0)
-            throw new QuarkOpenException("夸克授权无效，请重新授权。", savedToDrive: true);
+            throw new QuarkOpenException("夸克授权无效，请重新授权。", savedToDrive);
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["User-Agent"] = UserAgent,
@@ -395,7 +416,6 @@ public sealed class QuarkOpenClient
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) throw new QuarkOpenException("夸克开放平台 HTTP 请求失败（" + (int)response.StatusCode + "）。");
             if (response.Content.Headers.ContentLength > MaxJsonBytes) throw new QuarkOpenException("夸克开放平台响应无效。");
             await using var input = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             using var output = new MemoryStream();
@@ -406,12 +426,25 @@ public sealed class QuarkOpenClient
                 if (output.Length + read > MaxJsonBytes) throw new QuarkOpenException("夸克开放平台响应无效。");
                 output.Write(buffer, 0, read);
             }
-            var document = JsonDocument.Parse(output.ToArray());
+            JsonDocument document;
+            try { document = JsonDocument.Parse(output.ToArray()); }
+            catch (JsonException) when (!response.IsSuccessStatusCode)
+            {
+                throw new QuarkOpenException("夸克开放平台 HTTP 请求失败（" + (int)response.StatusCode + "）。");
+            }
             if (allowRefresh && session is not null && AuthExpired(document))
             {
                 document.Dispose();
                 _session = await RefreshAsync(session, token).ConfigureAwait(false);
                 return await CallAsync(method, path, _session, body, token, extraQuery, false).ConfigureAwait(false);
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                var code = BusinessCode(document.RootElement);
+                var error = code == 0 ? null : BusinessError(document.RootElement, code);
+                document.Dispose();
+                if (error is not null) throw error;
+                throw new QuarkOpenException("夸克开放平台 HTTP 请求失败（" + (int)response.StatusCode + "）。");
             }
             return document;
         }
@@ -428,16 +461,39 @@ public sealed class QuarkOpenClient
     private static bool AuthExpired(JsonDocument document)
     {
         var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) return false;
         if (!root.TryGetProperty("errno", out var errno) || !errno.TryGetInt32(out var code)) return false;
         return code is 11001 or 31001;
+    }
+
+    private static int BusinessCode(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return 0;
+        var errno = Int(root, "errno", 0);
+        return errno != 0 ? errno : Int(root, "status", 0);
+    }
+
+    private static QuarkOpenException BusinessError(JsonElement root, int code)
+    {
+        var message = Map(code);
+        // Extract only the documented numeric limit, never echo server error_info or tokens.
+        if (code == 23018 && root.TryGetProperty("error_info", out var info) && info.ValueKind == JsonValueKind.String)
+        {
+            var match = Regex.Match(info.GetString() ?? "", @"\Adownload file size limit\[([0-9]{1,18})\]\z", RegexOptions.CultureInvariant);
+            if (match.Success && long.TryParse(match.Groups[1].Value, out var limit) && limit > 0)
+            {
+                var size = limit % (1024 * 1024) == 0 ? (limit / (1024 * 1024)) + " MiB" : limit + " 字节";
+                message = "夸克开放平台限制单文件下载大小为 " + size + "，此文件超出限制。请在夸克客户端手动下载后导入。";
+            }
+        }
+        return new QuarkOpenException(message, errorCode: code);
     }
 
     private static JsonElement Data(JsonDocument document)
     {
         var root = document.RootElement;
-        var errno = root.TryGetProperty("errno", out var errnoNode) && errnoNode.TryGetInt32(out var errnoValue) ? errnoValue : 0;
-        var status = root.TryGetProperty("status", out var statusNode) && statusNode.TryGetInt32(out var statusValue) ? statusValue : 0;
-        if (status != 0 || errno != 0) throw new QuarkOpenException(Map(errno != 0 ? errno : status));
+        var code = BusinessCode(root);
+        if (code != 0) throw BusinessError(root, code);
         if (!root.TryGetProperty("data", out var data) || data.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             throw new QuarkOpenException("夸克开放平台响应无效。");
         return data;
@@ -447,10 +503,12 @@ public sealed class QuarkOpenClient
     {
         10001 => "夸克开放平台拒绝了请求签名。",
         11001 or 31001 => "夸克授权已失效，请重新授权。",
+        23018 => "夸克开放平台限制了此文件的下载大小。请在夸克客户端手动下载后导入。",
         32003 or 32004 => "夸克网盘空间不足，未下载文件。",
         41004 => "夸克分享文件列表为空。",
         41007 => "夸克分享不存在或已失效。",
         41008 => "夸克分享令牌无效，未转存整个分享。",
+        41017 => "此分享属于当前账号，无需再次转存。",
         _ => "夸克开放平台拒绝了请求（" + code + "）。"
     };
 

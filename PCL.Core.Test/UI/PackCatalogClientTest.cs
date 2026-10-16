@@ -171,8 +171,8 @@ public sealed class PackCatalogClientTest
     public void ShippedDefaultSourceCarriesTheStarRailPack()
     {
         Assert.IsTrue(File.Exists(ShippedCatalog()), ShippedCatalog());
-        Assert.AreEqual(2, PackCatalogSources.DefaultUrls.Length);
-        foreach (var url in PackCatalogSources.DefaultUrls) StringAssert.Contains(url, "pack-catalog/index.json");
+         Assert.AreEqual(1, PackCatalogSources.DefaultUrls.Length);
+         StringAssert.Contains(PackCatalogSources.DefaultUrls[0], "gitee.com/canyue_1_0/mcl-index/releases/download/default/index.json");
         var packs = PackCatalog.Parse(File.ReadAllText(ShippedCatalog()), new Uri(PackCatalogSources.DefaultUrls[0]));
         var sre = packs.Single(p => p.Id == PackCatalog.StarRailId);
         Assert.AreEqual("StarRailHarpyExpress", sre.Name);

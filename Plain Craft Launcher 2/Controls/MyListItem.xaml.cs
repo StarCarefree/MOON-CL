@@ -306,12 +306,11 @@ public partial class MyListItem : IMyRadio
                     Margin = new Thickness(4d, 0d, 0d, 0d),
                     Opacity = 0.6d
                 };
-                SetColumn(lab, 4);
+                SetColumn(lab, 3);
+                SetColumnSpan(lab, 2);
                 SetRow(lab, 2);
                 PanBack.Children.Add(lab);
                 field = lab;
-                // <TextBlock Grid.Row="2" SnapsToDevicePixels="False" UseLayoutRounding="False" HorizontalAlignment="Left" x:Name = "LabInfo" IsHitTestVisible="False" Grid.Column="2" 
-                // TextTrimming = "CharacterEllipsis" Visibility="Collapsed" FontSize="12" Foreground="{StaticResource ColorBrushGray2}" Margin="4,0,0,0" />
             }
 
             return field;
@@ -647,7 +646,7 @@ public partial class MyListItem : IMyRadio
 
         // 改变行距
         var hasLogo = IsUsingSvgIcon || !string.IsNullOrEmpty(logo);
-        ColumnLogo.Width = new GridLength((hasLogo ? 34 : 0) + (Height < 40d ? 0 : 4));
+        ColumnLogo.Width = new GridLength(hasLogo ? 34 : 0);
     }
 
     public double LogoScale
@@ -693,7 +692,7 @@ public partial class MyListItem : IMyRadio
             _Type = value;
             // 切换左栏大小
             ColumnCheck.Width =
-                new GridLength(_Type == CheckType.None || _Type == CheckType.Clickable ? Height < 40d ? 4 : 2 : 6);
+                new GridLength(_Type == CheckType.None || _Type == CheckType.Clickable ? 4 : 6);
             // 切换竖条控件
             if (_Type == CheckType.None || _Type == CheckType.Clickable)
             {
@@ -732,12 +731,8 @@ public partial class MyListItem : IMyRadio
     {
         var logo = Logo;
         var hasLogo = IsUsingSvgIcon || !string.IsNullOrEmpty(logo);
-        ColumnCheck.Width = new GridLength(_Type is CheckType.None or CheckType.Clickable
-            ? Height < 40d
-                ? 4
-                : 2
-            : 6);
-        ColumnLogo.Width = new GridLength((hasLogo ? 34 : 0) + (Height < 40d ? 0 : 4));
+        ColumnCheck.Width = new GridLength(_Type is CheckType.None or CheckType.Clickable ? 4 : 6);
+        ColumnLogo.Width = new GridLength(hasLogo ? 34 : 0);
 
         if (pathLogo is not null)
         {
@@ -746,10 +741,10 @@ public partial class MyListItem : IMyRadio
                                     logo.EndsWithF(".webp", true)))
                 pathLogo.Margin = new Thickness(4d, 5d, 3d, 5d);
             else
-                pathLogo.Margin = new Thickness(Height < 40d ? 6 : 8, 8d, Height < 40d ? 4 : 6, 8d);
+                pathLogo.Margin = new Thickness(6d, 8d, 4d, 8d);
         }
 
-        LabTitle.Margin = new Thickness(4d, 0d, 0d, Height < 40d ? 0 : 2);
+        LabTitle.Margin = new Thickness(4d, 0d, 0d, 0d);
     }
 
     // 勾选状态
@@ -1049,7 +1044,7 @@ public partial class MyListItem : IMyRadio
     // 触发点击事件
     private void Button_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (!isMouseDown)
+        if (!isMouseDown || IsIconButton(e.OriginalSource as DependencyObject))
             return;
         Click?.Invoke(sender, e);
         if (e.Handled)
@@ -1106,6 +1101,16 @@ public partial class MyListItem : IMyRadio
         isMouseDown = false;
         if (buttonStack is not null)
             buttonStack.IsHitTestVisible = true;
+    }
+
+    private static bool IsIconButton(DependencyObject source)
+    {
+        while (source is not null and not MyListItem)
+        {
+            if (source is MyIconButton) return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
     }
 
     #endregion

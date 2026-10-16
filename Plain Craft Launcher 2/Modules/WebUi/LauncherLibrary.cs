@@ -397,7 +397,7 @@ internal sealed class LauncherLibrary : IDisposable
             {
                 if (operation != "checkUpdates")
                 {
-                    // No configured source means the shipped GitHub default, never "no catalog".
+                     // No configured source means the shipped Gitee default, never "no catalog."
                     var sources = PackCatalogSources.Effective(_settings.CatalogUrls);
                     _phase = "获取预设目录";
                     var result = await _catalogClient.FetchAsync(sources, token,
@@ -672,7 +672,7 @@ internal sealed class LauncherLibrary : IDisposable
         var owned = await client.ResolveOwnedAsync(session, pack.ShareUrl, pack.SharePath, token).ConfigureAwait(false);
         _quarkSessions.Save(owned.Session);
         var archive = PackCatalog.SafePath(temp, owned.Download.FileName);
-        _phase = "下载已转存的整合包";
+        _phase = "下载已授权的整合包";
         try
         {
             await _transfer.DownloadAsync(owned.Download.Url, archive, "", HashAlgorithmName.SHA256,
@@ -680,7 +680,7 @@ internal sealed class LauncherLibrary : IDisposable
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
         {
-            throw new QuarkOpenException("目标整合包已转存到网盘目录 MOONCL，但下载仍被拒绝。请在夸克网盘中下载该文件后再导入。没有转存整个分享。", true);
+            throw new QuarkOpenException("夸克拒绝了目标文件的下载。请在夸克客户端手动下载后导入。没有转存整个分享。", owned.SavedToDrive);
         }
         setArchive(archive);
         return true;
@@ -772,13 +772,10 @@ internal sealed class LauncherLibrary : IDisposable
                         if (!await TryOwnedDownloadAsync(pack, temp, token, path => ownedArchive = path).ConfigureAwait(false))
                             throw new InvalidOperationException(OpenShareFallback(pack.ShareUrl, false));
                     }
-                    catch (QuarkOpenException owned) when (owned.SavedToDrive)
-                    {
-                        throw new InvalidOperationException(owned.Message);
-                    }
                     catch (QuarkOpenException owned)
                     {
-                        throw new InvalidOperationException(OpenShareFallback(pack.ShareUrl, true) + owned.Message);
+                        // Keep the precise API failure in this operation; don't open another window.
+                        throw new InvalidOperationException(owned.Message);
                     }
                     archive = ownedArchive ?? throw new InvalidOperationException("夸克下载没有产生目标文件。");
                 }

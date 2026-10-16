@@ -23,6 +23,7 @@ public sealed class RoomApiClient : IDisposable
     private readonly bool _ownsHttp;
     private readonly Uri _root;
     private readonly bool _official;
+    private bool? _legacyCoordinator;
 
     public RoomApiClient(string serviceUrl, HttpClient? http = null)
     {
@@ -37,15 +38,42 @@ public sealed class RoomApiClient : IDisposable
     }
 
     public Task<RoomTicket> CreateAsync(CreateRoomRequest request, CancellationToken ct) =>
-        SendAsync<RoomTicket>(HttpMethod.Post, "", request, null, ct);
+        SendProfileAsync<RoomTicket>(HttpMethod.Post, "", request, null, () => request with { Game = Legacy(request.Game) }, ct);
     public Task<RoomTicket> JoinAsync(string code, JoinRoomRequest request, CancellationToken ct) =>
-        SendAsync<RoomTicket>(HttpMethod.Post, "/" + Code(code) + "/join", request, null, ct);
+        SendProfileAsync<RoomTicket>(HttpMethod.Post, "/" + Code(code) + "/join", request, null, () => request with { Game = Legacy(request.Game) }, ct);
     public Task<RoomSnapshot> HeartbeatAsync(RoomTicket ticket, CancellationToken ct) =>
         SendAsync<RoomSnapshot>(HttpMethod.Post, MemberPath(ticket) + "/heartbeat", null, ticket.Token, ct);
     public Task<RoomSnapshot> HeartbeatAsync(RoomTicket ticket, RoomPresence presence, CancellationToken ct)
     {
         presence.Validate();
-        return SendAsync<RoomSnapshot>(HttpMethod.Post, MemberPath(ticket) + "/heartbeat", presence, ticket.Token, ct);
+        return SendProfileAsync<RoomSnapshot>(HttpMethod.Post, MemberPath(ticket) + "/heartbeat", presence, ticket.Token,
+            () => presence with { Game = Legacy(presence.Game) }, ct);
+    }
+    private static RoomGameStatus? Legacy(RoomGameStatus? game) => game is null ? null : game with { Pack = null, Server = "" };
+    private async Task<T> SendProfileAsync<T>(HttpMethod method, string suffix, object body, string? token, Func<object> legacy, CancellationToken ct)
+    {
+        if (await UsesLegacyAsync(ct).ConfigureAwait(false)) body = legacy();
+        return await SendAsync<T>(method, suffix, body, token, ct).ConfigureAwait(false);
+    }
+    private readonly SemaphoreSlim _legacyGate = new(1, 1);
+    private async Task<bool> UsesLegacyAsync(CancellationToken ct)
+    {
+        if (_legacyCoordinator is { } known) return known;
+        await _legacyGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_legacyCoordinator is { } raced) return raced;
+            var probe = new CreateRoomRequest("probe", "probe", "", null, "", new RoomGameStatus(Server: "not a server"));
+            try { await SendAsync<RoomTicket>(HttpMethod.Post, "", probe, null, ct).ConfigureAwait(false); }
+            catch (RoomApiException ex) when (ex.Status == HttpStatusCode.BadRequest)
+            {
+                if (ex.Message.Contains("Unrecognized", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("参数格式错误"))
+                    _legacyCoordinator = true;
+            }
+            _legacyCoordinator ??= false;
+            return _legacyCoordinator.Value;
+        }
+        finally { _legacyGate.Release(); }
     }
     public Task<RoomSnapshot> PublishRoutesAsync(RoomTicket ticket, RoomRoute[] routes, CancellationToken ct)
     {

@@ -100,6 +100,22 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 
 浏览下载任务使用 `task.scope=browseQuark`，错误只在对应夸克版本面板显示；`catalog` 任务错误才进入 MCL 来源统计，`library`/无 scope 的旧协议任务保留原任务提示区域。关闭夸克面板或切换资源类型不会把下载错误带进首页和目录统计。
 
+### HTTP 400 业务错误与下载上限
+
+HTTP 400 不能在读取 JSON 前直接丢弃响应；应保留安全的 `errno`，对鉴权过期继续执行既有的单次刷新流程。`41017` 表示禁止转存当前账号自己的分享：此时只尝试使用选中文件的原 FID 请求直链，不查找新副本，下载结果标记为未产生转存。其他错误不会触发此分支。
+
+内置 SRE 文件（93,571,003 字节）的 `/open/v1/file/get_download_url` 曾返回 HTTP 400、`errno=23018`、`error_info=download file size limit[52428800]`。这只能证明**单文件直链接口**在该请求下返回 50 MiB 限制，不能据此判断所有下载端点都限制 50 MiB；下面的 1.0.24 批量接口实测已证实存在可用路径。512 MiB 本地转存保护阈值也不等于下载权限或保证。错误中的上限只从严格匹配的数字字段生成，不回显任意服务端文本或令牌。授权后的接口失败只显示在当前下载操作区域，不再自动打开分享窗口。
+
+### quarkclouddrive 1.0.24 大文件下载实测
+
+静态检查用户提供的 `G:\download\quarkclouddrive-1.0.24\scripts\quark-drive.cjs`：该版本公开实现了 `POST /open/v1/file/multi_get_download_url`，请求体为 `{"fids":["已拥有文件FID"]}`；签名算法及默认客户端与现有实现相同，其网络层还附带当前账号的 `Authorization: Bearer`。下载直链仍使用该账号的 `x_pan_client_id` / `x_pan_access_token` Cookie；可选 clientToken 本次未使用。
+
+使用现有 DPAPI 授权，只读取 `MOONCL` 中已转存的 `【最新】Sword Strange Tales v2.1.11.zip`（235,008,058 字节，约 224 MiB），不新增转存、不安装 CLI、不读取浏览器 Cookie。同一编码 FID：单文件接口返回 HTTP 400 / 23018 / 52,428,800 字节限制（附带 Bearer 也一样）；批量接口仅传一个 FID，返回 HTTP 200 / status=0 / errno=0 及可用直链。该批量请求仅带 req_id/access_token 查询参数、签名头及 Bearer，未带 device_id。
+
+验证不仅生成直链：在偏移 52,428,800 字节读取 1 字节返回 HTTP 206；完整 GET 返回 HTTP 200，实际下载 235,008,058 字节，与网盘元数据一致。ZIP 全量 CRC 校验通过，6,587 个条目；本地 SHA256 为 `F1212EF8A29999EA8429A4AB47728D6F060A2A1AB504DE91CEF9E4F32EBF77A3`（仅本地摘要，未与服务端摘要比对）。测试文件保存在会话临时目录，没有导入或运行。
+
+结论：当前账号通过此版本提供的批量接口可以下载这份超过 50 MiB 的已拥有文件；不能保证其他账号或文件无权限/配额限制。本轮仅完成验证，启动器尚未接入批量直链接口。
+
 ## 验证命令
 
 ```powershell
