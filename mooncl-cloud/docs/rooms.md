@@ -1,6 +1,6 @@
 # Ephemeral room coordination (v2, compatible `/api/v1` paths)
 
-Rooms run on the **public connector** (default 8080), under `/api/v1/rooms`.
+Rooms run on the **public connector** (default 6664), under `/api/v1/rooms`.
 The admin connector (8081) rejects these routes, even with an admin token.
 No database, game relay, frpc/frps process, DNS lookup or connectivity probe is involved.
 Restarting the service loses every room/session. Deploy one instance; do not load-balance rooms across independent instances.
@@ -195,5 +195,5 @@ header rewriting to work around this: use trusted edge enforcement/design before
 Keep the public backend firewalled to your proxy and preserve the existing socket-port
 admin isolation. No new environment variables or dependencies are required.
 
-Tests: `./gradlew test` (Windows: `.\gradlew.bat test`) with JDK 21. Room unit/MockMvc
+Tests: `./gradlew test` (Windows: `.\gradlew.bat test`) with JDK 17 or later (compiled with `--release 17`, runnable on Java 17+). Room unit/MockMvc
 tests use a controllable Clock, no sleeps, game server, database or external network.

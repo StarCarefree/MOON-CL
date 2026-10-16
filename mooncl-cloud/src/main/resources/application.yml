@@ -1,5 +1,5 @@
 server:
-  port: ${MOONCL_PUBLIC_PORT:8080}
+  port: ${MOONCL_PUBLIC_PORT:6664}
   address: ${MOONCL_PUBLIC_BIND:0.0.0.0}
   shutdown: graceful
   max-http-request-header-size: 8KB

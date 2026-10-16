@@ -39,7 +39,8 @@ class PackStoreTest {
 
     @Test
     void simultaneousWritersCannotOverwriteEachOther() throws Exception {
-        try (var factory = Validation.buildDefaultValidatorFactory(); var executor = Executors.newFixedThreadPool(2)) {
+        var executor = Executors.newFixedThreadPool(2);
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
             PackStore store = new PackStore(properties(), new ObjectMapper(), factory.getValidator());
             try {
                 Callable<Integer> one = () -> { try { store.create(pack("one"), "\"0\""); return 200; } catch (ApiException exception) { return exception.status; } };
@@ -48,6 +49,9 @@ class PackStoreTest {
                 assertThat(List.of(results.get(0).get(), results.get(1).get())).containsExactlyInAnyOrder(200, 412);
                 assertThat(store.current().admin().packs()).hasSize(1);
             } finally { store.close(); }
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
     }
 

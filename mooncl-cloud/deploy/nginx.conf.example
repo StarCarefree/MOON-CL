@@ -3,7 +3,7 @@ limit_req_zone $binary_remote_addr zone=mooncl_rate:10m rate=20r/s;
 limit_conn_zone $binary_remote_addr zone=mooncl_connections:10m;
 
 upstream mooncl_public {
-    server 127.0.0.1:8080;
+    server 127.0.0.1:6664;
     keepalive 32;
 }
 

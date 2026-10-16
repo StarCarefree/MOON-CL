@@ -191,14 +191,14 @@ class RoomStoreTest {
         var update = new RoomStore.Presence("", new RoomStore.Game("", "", "failed"));
         status(403, () -> store.heartbeat(code, host.memberId(), guest.token(), update));
         var room = store.heartbeat(code, guest.memberId(), guest.token(), update);
-        assertThat(room.members().getFirst()).isEqualTo(host.room().members().getFirst());
+        assertThat(room.members().get(0)).isEqualTo(host.room().members().get(0));
         assertThat(room.members().get(1).name()).isEqualTo("Guest");
         assertThat(room.members().get(1).avatar()).isEmpty();
         assertThat(room.members().get(1).game().state()).isEqualTo("failed");
         assertThat(store.heartbeat(code, guest.memberId(), guest.token()).members()).isEqualTo(room.members());
         assertThat(store.heartbeat(code, guest.memberId(), guest.token(), new RoomStore.Presence(null, null)).members()).isEqualTo(room.members());
         assertThat(guest.room().members().get(1).game().state()).isEqualTo("running");
-        var defaultMember = create().room().members().getFirst();
+        var defaultMember = create().room().members().get(0);
         assertThat(defaultMember.avatar()).isEmpty();
         assertThat(defaultMember.game()).isEqualTo(new RoomStore.Game("", "", "stopped"));
     }
@@ -217,7 +217,7 @@ class RoomStoreTest {
 
     @Test void avatarAndGameBoundsAreValidatedAtAllEntryPoints() {
         var maximum = store.create(new RoomStore.Create("Room", "Host", null, null, png(64, 64, 6144), null));
-        assertThat(maximum.room().members().getFirst().avatar()).hasSize(8192);
+        assertThat(maximum.room().members().get(0).avatar()).hasSize(8192);
         byte[] corrupt = Base64.getDecoder().decode(png(1, 1, 68));
         corrupt[29] ^= 1;
         status(400, () -> store.join(maximum.room().code(), new RoomStore.Join("Guest", null,
@@ -236,7 +236,7 @@ class RoomStoreTest {
         for (String state : List.of("stopped", "launching", "running", "failed")) {
             var room = store.heartbeat(host.room().code(), host.memberId(), host.token(),
                     new RoomStore.Presence(null, new RoomStore.Game("x".repeat(80), "v".repeat(80), state)));
-            assertThat(room.members().getFirst().game().state()).isEqualTo(state);
+            assertThat(room.members().get(0).game().state()).isEqualTo(state);
         }
         assertThat(store.get(host.room().code(), host.token()).members()).hasSize(1);
     }

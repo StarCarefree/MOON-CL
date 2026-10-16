@@ -4,7 +4,7 @@
 
 - 仓库内：`mooncl-cloud/build/libs/mooncl-cloud-1.0.0.jar`
 - 当前工作区完整路径：`D:\pcl-cy\PCL-CY\mooncl-cloud\build\libs\mooncl-cloud-1.0.0.jar`
-- 构建：在 `mooncl-cloud` 运行 `./gradlew bootJar`，需要 JDK 21。协议和反向代理配置见 [中控接口](../mooncl-cloud/docs/rooms.md)。
+- 构建：在 `mooncl-cloud` 运行 `./gradlew bootJar`，构建需要 JDK 17 或更高版本，生成的 JAR 支持 Java 17+（class 61）。协议和反向代理配置见 [中控接口](../mooncl-cloud/docs/rooms.md)。
 
 此 JAR 已包含房间 v2 API，不需要额外数据库、Redis 或消息队列。房间为有界内存状态，重启清空；请部署单实例。中控只交换成员、游戏状态和线路配置，**不转发游戏流量**，也不是 frps、ZeroTier 控制器或 EasyTier 引导节点。
 
