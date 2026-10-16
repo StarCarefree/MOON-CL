@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace PCL.Core.Minecraft.Server;
 
-public enum ServerLoader { NeoForge, Fabric }
+public enum ServerLoader { NeoForge, Fabric, Vanilla, Paper, Purpur }
 
 public sealed class ServerProfile
 {
@@ -16,6 +17,10 @@ public sealed class ServerProfile
     public ServerLoader Loader { get; set; }
     public string MinecraftVersion { get; set; } = "";
     public string LoaderVersion { get; set; } = "";
+    /// <summary>Major Java version recorded from install metadata, when the source provides one.</summary>
+    public int? RequiredJavaMajor { get; set; }
+    [JsonIgnore]
+    public bool SupportsPlugins => ServerCommands.SupportsPlugins(Loader);
     public string JavaPath { get; set; } = "java";
     public int MinMemoryMb { get; set; } = 1024;
     public int MaxMemoryMb { get; set; } = 4096;
@@ -40,6 +45,7 @@ public static class ServerCommands
             throw new ArgumentException("内存必须满足 256 ≤ 最小内存 ≤ 最大内存 ≤ 1048576 MiB。");
         foreach (var version in new[] { profile.MinecraftVersion, profile.LoaderVersion })
             if (version is null || !Regex.IsMatch(version, @"\A[0-9A-Za-z.+_-]*\z")) throw new ArgumentException("版本号不能包含路径或空格。");
+        if (profile.RequiredJavaMajor is < 8 or > 64) throw new ArgumentException("所需 Java 主版本无效。");
         _ = ParseJvmArguments(profile.JvmArguments);
     }
 
@@ -89,12 +95,67 @@ public static class ServerCommands
 
     public static ProcessStartInfo Installer(ServerProfile profile, string directory, string jar)
     {
+        if (IsDirectCore(profile.Loader)) throw new ArgumentException("原版、Paper、Purpur 直接下载 server.jar，不会执行 Fabric 或 NeoForge 安装器。");
         if (string.IsNullOrWhiteSpace(profile.MinecraftVersion) || string.IsNullOrWhiteSpace(profile.LoaderVersion))
             throw new ArgumentException("请填写精确的 Minecraft 和加载器版本。");
         var info = Java(profile, directory); info.ArgumentList.Add("-jar"); info.ArgumentList.Add(jar);
         if (profile.Loader == ServerLoader.NeoForge) info.ArgumentList.Add("--installServer");
-        else foreach (var arg in new[] { "server", "-mcversion", profile.MinecraftVersion, "-loader", profile.LoaderVersion, "-downloadMinecraft", "-dir", directory }) info.ArgumentList.Add(arg);
+        else if (profile.Loader == ServerLoader.Fabric)
+            foreach (var arg in new[] { "server", "-mcversion", profile.MinecraftVersion, "-loader", profile.LoaderVersion, "-downloadMinecraft", "-dir", directory }) info.ArgumentList.Add(arg);
+        else throw new ArgumentException("不支持的服务端加载器。");
         return info;
+    }
+
+    public static bool IsDirectCore(ServerLoader loader) => loader is ServerLoader.Vanilla or ServerLoader.Paper or ServerLoader.Purpur;
+
+    public static bool SupportsPlugins(ServerLoader loader) => loader is ServerLoader.Paper or ServerLoader.Purpur;
+
+    public static int? ParseJavaMajor(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var match = Regex.Match(text, @"version\s+""(?<v>\d+(?:\.\d+)*)""");
+        if (!match.Success) match = Regex.Match(text, @"\b(?<v>\d+(?:\.\d+)*)\b");
+        if (!match.Success || !int.TryParse(match.Groups["v"].Value.Split('.')[0], out var major)) return null;
+        var parts = match.Groups["v"].Value.Split('.');
+        if (major == 1 && parts.Length > 1 && int.TryParse(parts[1], out var legacy)) return legacy;
+        return major;
+    }
+
+    public static int? ProbeJavaMajor(string javaPath)
+    {
+        try
+        {
+            var info = new ProcessStartInfo(javaPath)
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
+            };
+            info.ArgumentList.Add("-version");
+            using var process = Process.Start(info);
+            if (process is null) return null;
+            var error = process.StandardError.ReadToEndAsync();
+            var output = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(8000)) { try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } return null; }
+            return ParseJavaMajor(error.GetAwaiter().GetResult() + "\n" + output.GetAwaiter().GetResult());
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception) { return null; }
+    }
+
+    public static void EnsureJava(ServerProfile profile, Action<string>? log = null)
+    {
+        if (profile.RequiredJavaMajor is not int required) return;
+        var actual = ProbeJavaMajor(profile.JavaPath);
+        if (actual is null)
+        {
+            var message = $"无法确认 Java 版本。此服务端需要 Java {required} 或更高。请在运行环境中选择对应的 java.exe，不要使用 javaw.exe。";
+            log?.Invoke(message); throw new InvalidOperationException(message);
+        }
+        if (actual < required)
+        {
+            var message = $"当前 Java {actual} 低于所需 Java {required}。请更换 java.exe 后重试。";
+            log?.Invoke(message); throw new InvalidOperationException(message);
+        }
+        log?.Invoke($"Java {actual} 满足所需 Java {required}。");
     }
 
     public static ProcessStartInfo Script(ServerProfile profile, string directory, string script)

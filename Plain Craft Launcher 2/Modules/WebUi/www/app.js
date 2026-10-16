@@ -198,7 +198,7 @@ Object.defineProperties(platform, {
   totalPages: { get: () => platformPosition().totalPages, set: value => { platformPosition().totalPages = value; } }
 });
 const categoryState = { items: new Map(), pending: new Map(), errors: new Map(), requests: new Map(), sequence: 0 };
-const RESOURCE_TYPES = { datapack: "数据包", world: "地图", modpack: "整合包", shader: "光影包", resourcepack: "材质包" };
+const RESOURCE_TYPES = { modpack: "整合包", datapack: "数据包", world: "地图", shader: "光影包", resourcepack: "材质包", plugin: "服务器插件" };
 function resourceTypeOf(item) { return item?.resourceType || (/^mcmod-datapack-/.test(item?.id || "") ? "datapack" : "modpack"); }
 function resourcePayload(type = browse.resourceType) { return type === "modpack" ? {} : { resourceType: type }; }
 function resourceLabel(type = browse.resourceType) { return RESOURCE_TYPES[type] || "资源"; }
@@ -701,6 +701,7 @@ function receive(data) {
     else if (data.type === "browse" || data.type === "page") applySnapshot(data);
     else if (data.type === "error") showHostError(data.message);
     else if (data.type === "presentation") applyPresentation(data.visible);
+    else if (data.type === "browsePlugins") openPluginBrowser(data.minecraft);
     else if (data.type === "platformCategories" || data.type === "mcmodCategories" || data.operation === "categories" && ["platformError", "mcmodError"].includes(data.type)) receiveCategories(data);
     else if (["mcmodList", "mcmodDetail", "mcmodLinks", "mcmodError"].includes(data.type)) receiveMcmod(data);
     else if (["platformList", "platformDetail", "platformError"].includes(data.type)) receivePlatform(data);
@@ -1259,6 +1260,7 @@ function renderDetail() {
   ui["detail-import"].disabled = mutatingLocked();
   ui["detail-import"].hidden = resourceTypeOf(item) !== "modpack";
   setText("detail-guidance", platformItem ? "在启动器中选择版本并下载，也可访问项目网站查看说明。" : !remote ? "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。" : !loaded ? "完整详情加载后显示实际下载来源。" : cf || mr ? `在启动器的 ${cf ? "CurseForge" : "Modrinth"} 文件列表中选择实际版本下载。` : resourceTypeOf(item) === "datapack" ? "请从作者链接下载，按说明放入存档的 datapacks 目录。" : "暂无平台下载入口，请从作者链接手动下载后导入。");
+  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 PCL CE 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
   const links = remote && loaded && Array.isArray(item.links) ? item.links.filter(link => externalUrl(link?.url)) : [];
   const linkKey = JSON.stringify([links, live]);
   if (ui["detail-links"].dataset.key !== linkKey) {
@@ -1689,3 +1691,16 @@ function renderSourceSummary() {
   for (const id of ["mcl-status", "platform-status", "modrinth-status", "mcmod-status", "association-status"]) ui[id].hidden = true;
 }
 ui["category-retry"].addEventListener("click", () => { ensureCategories(true); render(); });
+
+function openPluginBrowser(minecraft) {
+  selectResourceType("plugin");
+  if (!isRemoteBrowse()) selectBrowseSource("modrinth", true);
+  if (typeof minecraft === "string" && /^[0-9A-Za-z.\-_]+$/.test(minecraft)) {
+    const select = ui["filter-mc"];
+    if (![...select.options].some(option => option.value === minecraft)) {
+      const option = document.createElement("option"); option.value = minecraft; option.textContent = minecraft; select.append(option);
+    }
+    select.value = minecraft; changeSiteFilters();
+  }
+  ui["type-plugin"].focus();
+}

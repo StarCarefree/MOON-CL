@@ -117,7 +117,8 @@ public static class PlatformPackCatalog
         var cf = source == "curseforge";
         var actualType = Str(item, "project_type");
         var legacyDatapack = resourceType == "datapack" && actualType == "mod" && Strings(item["categories"]).Concat(Strings(item["loaders"])).Contains("datapack");
-        if (cf ? item["classId"]?.ToString() != BrowseResourceTypes.CurseForgeClass(resourceType).ToString() : actualType != resourceType && !legacyDatapack)
+        var legacyPlugin = resourceType == "plugin" && actualType == "mod" && Strings(item["categories"]).Concat(Strings(item["loaders"])).Any(s => new[] { "paper", "purpur", "bukkit", "spigot", "folia" }.Contains(s));
+        if (cf ? item["classId"]?.ToString() != BrowseResourceTypes.CurseForgeClass(resourceType).ToString() : actualType != resourceType && !legacyDatapack && !legacyPlugin)
             throw new InvalidDataException("平台返回的资源类型与当前列表不符。");
         var id = cf ? Str(item, "id") : Str(item, "project_id", Str(item, "id"));
         ValidateId(source, id);
@@ -147,7 +148,7 @@ public static class PlatformPackCatalog
     internal static string[] Unique(IEnumerable<string> values) => values.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Take(256).ToArray();
     internal static string LoaderName(string value) => Loaders.TryGetValue(value, out var known) ? known.Name : value.ToLowerInvariant() switch
     {
-        "iris" => "Iris", "optifine" => "OptiFine", "canvas" => "Canvas", "minecraft" => "Minecraft", "datapack" => "数据包", _ => ""
+        "iris" => "Iris", "optifine" => "OptiFine", "canvas" => "Canvas", "minecraft" => "Minecraft", "datapack" => "数据包", "paper" => "Paper", "purpur" => "Purpur", "bukkit" => "Bukkit", "spigot" => "Spigot", "folia" => "Folia", _ => ""
     };
     internal static string SafeUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" && string.IsNullOrEmpty(uri.UserInfo) ? uri.AbsoluteUri : "";
     internal static string PlainText(string value, int limit)

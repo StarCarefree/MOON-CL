@@ -1159,6 +1159,7 @@ public static class ModComp
                     "datapack" => CompType.DataPack,
                     "resourcepack" => CompType.ResourcePack,
                     "shader" => CompType.Shader,
+                    "plugin" => CompType.Plugin,
                     _ => CompType.Mod // Modrinth 将数据包标为 Mod
                 }
             };
@@ -1212,6 +1213,7 @@ public static class ModComp
                 }
             }
 
+            if (((data["loaders"] as JsonArray) ?? []).Concat((data["categories"] as JsonArray) ?? []).Any(n => new[] { "bukkit", "spigot", "paper", "purpur", "folia" }.Contains(n?.ToString()?.ToLowerInvariant()))) result.Type = CompType.Plugin;
             return result;
         }
 
@@ -1219,6 +1221,7 @@ public static class ModComp
         {
             var websiteLower = (website ?? "").ToLowerInvariant();
 
+            if (websiteLower.Contains("/bukkit-plugins/") || websiteLower.Contains("/plugins/")) return CompType.Plugin;
             if (websiteLower.Contains("/mc-mods/") || websiteLower.Contains("/mod/"))
                 return CompType.Mod;
             if (websiteLower.Contains("/modpacks/"))
@@ -2024,6 +2027,11 @@ public static class ModComp
                     address.Append("&classId=12");
                     break;
                 }
+                case CompType.Plugin:
+                {
+                    address.Append("&classId=5");
+                    break;
+                }
                 case CompType.World:
                 {
                     address.Append("&classId=17");
@@ -2208,6 +2216,7 @@ public static class ModComp
         { "worlds", "17" },
         { "data-packs", "6945" },
         { "datapacks", "6945" },
+        { "bukkit-plugins", "5" },
         { "shaders", "6552" }
     };
 
@@ -2784,6 +2793,8 @@ public static class ModComp
         ///     支持的 Mod 加载器列表。可能为空。
         /// </summary>
         public readonly List<CompLoaderType> ModLoaders = new();
+        /// <summary>Modrinth plugin environments for per-file server compatibility checks.</summary>
+        public readonly List<string> PluginLoaders = new();
 
         /// <summary>
         ///     该文件的所有可选依赖工程的 Project.Id。
@@ -2855,6 +2866,8 @@ public static class ModComp
                 #region CompJson
 
                 FromCurseForge = data["FromCurseForge"].ToObject<bool>();
+                if (data.ContainsKey("FileType")) Type = (CompType)data["FileType"].ToObject<int>();
+                if (data.ContainsKey("PluginLoaders")) PluginLoaders.AddRange(data["PluginLoaders"].ToObject<List<string>>());
                 Id = data["Id"].ToString();
                 DisplayName = data["DisplayName"].ToString();
                 if (data.ContainsKey("Version"))
@@ -2980,7 +2993,7 @@ public static class ModComp
                     DownloadCount = (int)data["downloads"];
                     if (((JsonArray)data["files"]).Any()) // 可能为空
                     {
-                        var file = data["files"][0];
+                        var file = data["files"].AsArray().FirstOrDefault(f => f?["primary"]?.GetValue<bool>() == true) ?? data["files"][0];
                         FileName = (string)file["filename"];
                         DownloadUrls = ModDownload.DlSourceModDownloadGet(file["url"].ToString()); // 同时添加了镜像源
                         Hash = (string)file["hashes"]["sha1"];
@@ -2989,6 +3002,7 @@ public static class ModComp
                     // ModLoaders
                     // 结果可能混杂着 Mod、数据包和服务端插件
                     var rawLoaders = data["loaders"].AsArray().Select(v => v.ToString()).ToList();
+                    PluginLoaders.AddRange(rawLoaders.Where(v => v is "bukkit" or "folia" or "paper" or "purpur" or "spigot"));
                     ModLoaders = new List<CompLoaderType>();
                     if (Type == CompType.Mod) // 以尽量宽容的方式检测加载器，以免同时兼容两种的项被删除
                     {
@@ -3050,6 +3064,11 @@ public static class ModComp
 
                         if (rawLoaders.Contains("datapack"))
                             Type = CompType.DataPack;
+                    }
+                    else if (Type == CompType.Plugin && PluginLoaders.Count == 0)
+                    {
+                        // Mixed projects may also publish Fabric mods and datapacks: never install those as plugins.
+                        Type = rawLoaders.Contains("datapack") ? CompType.DataPack : CompType.Mod;
                     }
 
                     // Dependencies
@@ -3227,6 +3246,8 @@ public static class ModComp
         {
             var json = new JsonObject();
             json.Add("FromCurseForge", FromCurseForge);
+            json.Add("FileType", (int)Type);
+            json.Add("PluginLoaders", new JsonArray(PluginLoaders.Select(s => (JsonNode)s).ToArray()));
             json.Add("Id", Id);
             if (Version is not null)
                 json.Add("Version", Version);

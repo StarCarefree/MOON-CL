@@ -130,8 +130,17 @@ internal static class ServerUi
 
     internal static FrameworkElement Icon(ServerLoader loader, double size = 44)
     {
+        var block = loader switch
+        {
+            ServerLoader.NeoForge => "pack://application:,,,/Images/Blocks/NeoForge.png",
+            ServerLoader.Fabric => "pack://application:,,,/Images/Blocks/Fabric.png",
+            ServerLoader.Vanilla => "pack://application:,,,/Images/Blocks/Grass.png",
+            ServerLoader.Paper => "pack://application:,,,/Images/Blocks/Anvil.png",
+            ServerLoader.Purpur => "pack://application:,,,/Images/Icons/DefaultServer.png",
+            _ => "pack://application:,,,/Images/Blocks/Grass.png"
+        };
         var grid = new Grid { Width = size, Height = size, Margin = new Thickness(0, 0, 14, 0) };
-        grid.Children.Add(new Image { Source = new BitmapImage(new Uri($"pack://application:,,,/Images/Blocks/{loader}.png")), Stretch = Stretch.Uniform });
+        grid.Children.Add(new Image { Source = new BitmapImage(new Uri(block)), Stretch = Stretch.Uniform });
         var badge = new Border
         {
             Width = size * .47, Height = size * .47, HorizontalAlignment = HorizontalAlignment.Right,

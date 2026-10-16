@@ -61,6 +61,17 @@ internal sealed class ServerControlWindow : Window
         _retry = ServerUi.Button("重试安装", (_, _) => new ServerInstallWindow(Update, _profile).Show());
         actions.Children.Add(_start); actions.Children.Add(_stop); actions.Children.Add(_kill); actions.Children.Add(_retry);
         actions.Children.Add(ServerUi.Button("打开目录", (_, _) => { try { ServerUi.Folder(ServerUi.Manager.GetDirectory(_profile)); } catch (Exception ex) { ServerUi.Error(ex); } }));
+        if (ServerPluginTargets.SupportsPlugins(profile))
+        {
+            actions.Children.Add(ServerUi.Button("下载插件", async (_, _) =>
+            {
+                try { await ModMain.frmMain.OpenServerPluginsAsync(_profile); } catch (Exception ex) { ServerUi.Error(ex); }
+            }));
+            actions.Children.Add(ServerUi.Button("打开插件目录", (_, _) =>
+            {
+                try { ServerUi.Folder(ServerPluginTargets.PluginsDirectory(ServerUi.Manager, _profile)); } catch (Exception ex) { ServerUi.Error(ex); }
+            }));
+        }
         DockPanel.SetDock(actions, Dock.Top); root.Children.Add(actions);
         var tabs = new TabControl();
         var console = new DockPanel { Margin = new Thickness(10) };

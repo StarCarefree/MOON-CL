@@ -266,6 +266,12 @@ public partial class PageDownloadCompDetail
             FrameworkElement Element when Element.Parent is FrameworkElement Parent && Parent.Parent is FrameworkElement GrandParent && GrandParent.Tag is ModComp.CompFile CompFile => CompFile,
             _ => null
         };
+        if (file is null) return;
+        if (file.Type == ModComp.CompType.Plugin || _project.Type == ModComp.CompType.Plugin)
+        {
+            ServerPluginDownloads.Download(file, _project, ModMain.frmMain.pageCurrent.additional?.SavePath);
+            return;
+        }
 
         ModBase.RunInNewThread(() =>
         {
@@ -760,6 +766,10 @@ public partial class PageDownloadCompDetail
         if (_pageType == ModComp.CompType.Any)
         {
             results = results.Where(r => r.Type != ModComp.CompType.Plugin).ToList();
+        }
+        else if (_pageType == ModComp.CompType.Plugin)
+        {
+            results = results.Where(r => r.Type == ModComp.CompType.Plugin || r.PluginLoaders.Count > 0).ToList();
         }
         else if (_pageType == ModComp.CompType.Shader || _pageType == ModComp.CompType.ResourcePack)
         {

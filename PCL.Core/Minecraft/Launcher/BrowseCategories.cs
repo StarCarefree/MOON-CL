@@ -67,7 +67,7 @@ public static class BrowseCategories
     {
         if (root is not JsonArray data) throw new InvalidDataException("Modrinth 分类响应不是数组。");
         var exact = CollectModrinth(data, type, type);
-        if (type == "datapack" && exact.Count == 0) exact = CollectModrinth(data, type, "mod");
+        if (type is "datapack" or "plugin" && exact.Count == 0) exact = CollectModrinth(data, type, "mod");
         return exact;
     }
 

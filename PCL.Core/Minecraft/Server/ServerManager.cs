@@ -18,12 +18,30 @@ public sealed class ServerManager
 {
     private const string MetadataFile = ".mooncl-server.json";
     private static readonly ConcurrentDictionary<string, ServerSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(15) };
+    private static readonly HttpClient SharedHttp = CreateHttp();
+    private readonly HttpClient _http;
     public string RootDirectory { get; }
     /// <summary>Same ordering as launcher FileSource: 0 mirror first, 1 official first, 2 official only.</summary>
     public int DownloadSource { get; set; } = 1;
 
-    public ServerManager(string rootDirectory) => RootDirectory = Path.GetFullPath(rootDirectory);
+    public ServerManager(string rootDirectory, HttpClient? http = null)
+    {
+        RootDirectory = Path.GetFullPath(rootDirectory);
+        _http = http ?? SharedHttp;
+    }
+
+    public Task<IReadOnlyList<string>> ListCoreVersionsAsync(ServerLoader loader, CancellationToken cancellationToken = default)
+        => ServerCoreCatalog.ListVersionsAsync(_http, loader, DownloadSource, cancellationToken);
+
+    public Task<ServerCoreArtifact> ResolveCoreAsync(ServerProfile profile, CancellationToken cancellationToken = default)
+        => ServerCoreCatalog.ResolveAsync(_http, profile, DownloadSource, cancellationToken);
+
+    private static HttpClient CreateHttp()
+    {
+        var http = new HttpClient { Timeout = TimeSpan.FromMinutes(15) };
+        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", ServerCoreCatalog.UserAgent);
+        return http;
+    }
 
     public string GetDirectory(ServerProfile profile)
     {
@@ -140,8 +158,18 @@ public sealed class ServerManager
                     script = new[] { "install.bat", "install.cmd", "install.ps1" }.Select(name => ServerPaths.Inside(directory, name)).FirstOrDefault(File.Exists);
                     if (script is not null && !trustScript) throw new InvalidOperationException("包内存在 install 脚本，请检查来源并勾选信任后重试；或手动选择加载器安装器。");
                 }
-                if (script is not null)
+                var direct = ServerCommands.IsDirectCore(profile.Loader);
+                if (direct && script is null && installerJar is not null)
+                    ImportDirectJar(directory, installerJar, trustScript, session, token);
+                else if (script is not null)
                     await session.RunInstallerAsync(ServerCommands.Script(profile, directory, script), token).ConfigureAwait(false);
+                else if (direct && DetectLoaderEntry(profile, directory) is not null)
+                {
+                    ServerCoreTransfer.ValidateJar(ServerPaths.Inside(directory, "server.jar"));
+                    session.Log("使用已有 server.jar（只校验归档，不执行，不对照官方校验和）。");
+                }
+                else if (direct)
+                    await DownloadDirectCoreAsync(profile, directory, session, token).ConfigureAwait(false);
                 else if (installerJar is not null || packZip is null || DetectLoaderEntry(profile, directory) is null)
                 {
                     var jar = ServerPaths.Inside(directory, "mooncl-loader-installer.jar");
@@ -156,13 +184,15 @@ public sealed class ServerManager
                 }
                 token.ThrowIfCancellationRequested();
                 var entry = (script is not null ? DetectEntry(profile, directory, trustScript) : DetectLoaderEntry(profile, directory))
-                    ?? throw new IOException("安装程序未生成所选加载器的服务端入口，请检查日志及服务端包。");
+                    ?? throw new IOException(direct ? "未生成 server.jar。直接核心不会执行安装器，请检查整合包或下载日志。" : "安装程序未生成所选加载器的服务端入口，请检查日志及服务端包。");
                 _ = ServerPaths.Inside(directory, entry);
                 // Neither imported ZIPs nor scripts may silently accept the user's EULA.
                 AtomicWrite(ServerPaths.Inside(directory, "eula.txt"), "eula=false\n");
                 profile.EntryPoint = entry;
                 lock (session.SyncRoot) SaveCore(profile);
                 originalProfile.EntryPoint = entry;
+                originalProfile.LoaderVersion = profile.LoaderVersion;
+                originalProfile.RequiredJavaMajor = profile.RequiredJavaMajor;
                 session.Log("服务端入口：" + entry);
             }, timeout.Token).ConfigureAwait(false);
             status = "安装完成，等待启动";
@@ -174,13 +204,20 @@ public sealed class ServerManager
 
     public static string? DetectLoaderEntry(ServerProfile profile, string directory)
     {
-        if (profile.Loader == ServerLoader.NeoForge)
+        switch (profile.Loader)
         {
-            var args = ServerPaths.Inside(directory, $"libraries/net/neoforged/neoforge/{profile.LoaderVersion}/win_args.txt");
-            if (File.Exists(args)) return Path.GetRelativePath(directory, args);
+            case ServerLoader.NeoForge:
+                var args = ServerPaths.Inside(directory, $"libraries/net/neoforged/neoforge/{profile.LoaderVersion}/win_args.txt");
+                return File.Exists(args) ? Path.GetRelativePath(directory, args) : null;
+            case ServerLoader.Fabric:
+                return File.Exists(ServerPaths.Inside(directory, "fabric-server-launch.jar")) ? "fabric-server-launch.jar" : null;
+            case ServerLoader.Vanilla:
+            case ServerLoader.Paper:
+            case ServerLoader.Purpur:
+                return File.Exists(ServerPaths.Inside(directory, "server.jar")) ? "server.jar" : null;
+            default:
+                return null;
         }
-        else if (File.Exists(ServerPaths.Inside(directory, "fabric-server-launch.jar"))) return "fabric-server-launch.jar";
-        return null;
     }
 
     public static string? DetectEntry(ServerProfile profile, string directory, bool allowScripts)
@@ -235,11 +272,13 @@ public sealed class ServerManager
     public static string[] InstallerUrls(ServerProfile profile, int source, string? fabricInstallerVersion = null)
     {
         ServerCommands.Validate(profile);
+        if (ServerCommands.IsDirectCore(profile.Loader)) throw new ArgumentException("该核心不使用加载器安装器。");
         if (profile.Loader == ServerLoader.Fabric)
         {
             if (string.IsNullOrWhiteSpace(fabricInstallerVersion) || !Regex.IsMatch(fabricInstallerVersion, @"\A[0-9.]+\z")) throw new ArgumentException("Fabric 安装器版本无效。");
             return [$"https://maven.fabricmc.net/net/fabricmc/fabric-installer/{fabricInstallerVersion}/fabric-installer-{fabricInstallerVersion}.jar"];
         }
+        if (profile.Loader != ServerLoader.NeoForge) throw new ArgumentException("不支持的服务端加载器。");
         if (string.IsNullOrWhiteSpace(profile.LoaderVersion)) throw new ArgumentException("请填写 NeoForge 版本。");
         var path = $"net/neoforged/neoforge/{profile.LoaderVersion}/neoforge-{profile.LoaderVersion}-installer.jar";
         var official = "https://maven.neoforged.net/releases/" + path;
@@ -253,7 +292,7 @@ public sealed class ServerManager
         if (profile.Loader == ServerLoader.Fabric)
         {
             session.Log("读取 Fabric 官方安装器版本…");
-            var xml = XDocument.Parse(await Http.GetStringAsync("https://maven.fabricmc.net/net/fabricmc/fabric-installer/maven-metadata.xml", token).ConfigureAwait(false));
+            var xml = XDocument.Parse(await _http.GetStringAsync("https://maven.fabricmc.net/net/fabricmc/fabric-installer/maven-metadata.xml", token).ConfigureAwait(false));
             fabricVersion = xml.Root?.Element("versioning")?.Element("release")?.Value;
         }
         Exception? last = null;
@@ -263,7 +302,7 @@ public sealed class ServerManager
             try
             {
                 session.Log("下载安装器：" + new Uri(url).Host);
-                using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+                using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
                 if (response.Content.Headers.ContentLength > 512L * 1024 * 1024) throw new IOException("安装器文件过大。");
                 await using (var input = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false))
@@ -285,6 +324,39 @@ public sealed class ServerManager
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         throw new IOException("无法下载服务端加载器安装器。", last);
+    }
+
+    private static void ImportDirectJar(string directory, string installerJar, bool trustScript, ServerSession session, CancellationToken token)
+    {
+        if (!trustScript) throw new InvalidOperationException("必须明确确认信任，才能把本地 JAR 复制为服务端核心。该文件不会被执行。");
+        if (!Path.GetExtension(installerJar).Equals(".jar", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("直接核心请选择服务端 JAR。该文件不会被当作安装器执行。");
+        var destination = ServerPaths.Inside(directory, "server.jar");
+        session.Log("导入本地服务端 JAR（仅复制并校验归档，不执行）：" + Path.GetFileName(installerJar));
+        ServerCoreTransfer.CopyValidatedJar(installerJar, destination, token);
+        session.Log("本地 JAR 未对照官方校验和，只检查了 ZIP/JAR 文件头。");
+    }
+
+    private async Task DownloadDirectCoreAsync(ServerProfile profile, string directory, ServerSession session, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(profile.MinecraftVersion)) throw new ArgumentException("请填写精确的 Minecraft 版本。");
+        var notice = ServerCoreCatalog.MirrorNotice(profile.Loader, DownloadSource);
+        if (notice.Length > 0) session.Log(notice);
+        if (ServerCoreCatalog.IsStableDefault(profile.LoaderVersion))
+            session.Log(profile.Loader == ServerLoader.Vanilla ? "原版未填写构建，将安装所填的精确 Minecraft 版本。" : "构建留空，将选择稳定版或最新构建，并在完成后写入实际构建号。");
+        session.Log("正在读取服务端元数据…");
+        var artifact = await ServerCoreCatalog.ResolveAsync(_http, profile, DownloadSource, token).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(artifact.MirrorNotice)) session.Log(artifact.MirrorNotice);
+        var jar = ServerPaths.Inside(directory, "server.jar");
+        session.Log($"下载 {artifact.Loader} {artifact.MinecraftVersion}{(string.IsNullOrEmpty(artifact.Build) ? "" : " 构建 " + artifact.Build)} 到 server.jar（不执行）");
+        await ServerCoreTransfer.DownloadVerifiedAsync(_http, artifact.Urls, jar, artifact.ChecksumAlgorithm, artifact.Checksum, artifact.Size, session.Log, token).ConfigureAwait(false);
+        if (profile.Loader != ServerLoader.Vanilla && !string.IsNullOrEmpty(artifact.Build)) profile.LoaderVersion = artifact.Build;
+        if (artifact.JavaMajor is int major)
+        {
+            profile.RequiredJavaMajor = major;
+            session.Log($"已记录所需 Java 主版本 {major}。启动时会检查 java.exe。");
+        }
+        else session.Log("元数据未提供 Java 主版本，启动时不会强制检查。");
     }
 
     private static void AtomicWrite(string path, string text)

@@ -12,6 +12,7 @@ internal sealed class ServerInstallWindow : Window
     private readonly Action _refresh;
     private readonly ServerProfileEditor _editor;
     private readonly TextBox _pack, _installer, _script;
+    private readonly TextBlock _installerLabel;
     private readonly CheckBox _trust;
     private readonly FrameworkElement _sources;
     private readonly Button _install, _cancel;
@@ -32,7 +33,7 @@ internal sealed class ServerInstallWindow : Window
         var header = new StackPanel { Margin = new Thickness(26, 20, 26, 10) };
         var title = ServerUi.Text(profile is null ? "创建服务端" : "继续安装服务端", 25); title.FontWeight = FontWeights.SemiBold;
         header.Children.Add(title);
-        header.Children.Add(ServerUi.Text("NeoForge / Fabric   ·   独立安装，不影响客户端", 12, muted: true));
+        header.Children.Add(ServerUi.Text("Vanilla / Paper / Purpur / NeoForge / Fabric   ·   独立安装，不影响客户端", 12, muted: true));
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
 
         var footer = new StackPanel { Margin = new Thickness(26, 12, 26, 14) };
@@ -53,14 +54,17 @@ internal sealed class ServerInstallWindow : Window
 
         var panel = new StackPanel { Margin = new Thickness(26, 0, 26, 4) };
         _editor = new ServerProfileEditor(_profile, installing: true); panel.Children.Add(_editor);
-        var sources = ServerUi.Section("安装来源", "可以全部留空，自动下载所选加载器的安装器；导入整合包时请选择服务端包。");
+        var sources = ServerUi.Section("安装来源", "可以全部留空。NeoForge / Fabric 会下载安装器；原版 / Paper / Purpur 会下载 server.jar，安装时不执行。导入整合包时请选择服务端包。");
         _pack = ServerUi.FileField(sources, "服务端整合包 ZIP · 可选", "服务端整合包 (*.zip)|*.zip");
-        _installer = ServerUi.FileField(sources, "本地 installer JAR · 可选，优先使用", "Java 安装器 (*.jar)|*.jar");
+        _installer = ServerUi.FileField(sources, "本地 JAR · 可选", "Java 归档 (*.jar)|*.jar");
+        _installerLabel = (TextBlock)sources.Children[sources.Children.Count - 2];
+        _editor.LoaderChanged += UpdateSourceLabels;
+        UpdateSourceLabels();
         var scripts = new StackPanel();
         _script = ServerUi.FileField(scripts, "安装脚本 BAT / CMD / PS1", "安装脚本 (*.bat;*.cmd;*.ps1)|*.bat;*.cmd;*.ps1");
         scripts.Children.Add(ServerUi.Text("选择后由脚本负责安装。请使用无需交互输入的脚本；包内 install 脚本也需要下方的信任确认。", 12, muted: true));
         sources.Children.Add(new Expander { Header = ServerUi.Text("使用整合包安装脚本", 13), Content = scripts, Margin = new Thickness(0, 0, 0, 6) });
-        _trust = new CheckBox { Content = ServerUi.Text("我信任所选安装器及脚本的来源，允许执行（拥有当前用户权限）。", 12), Margin = new Thickness(0, 8, 0, 0) };
+        _trust = new CheckBox { Content = ServerUi.Text("我信任所选安装器、本地 JAR 及脚本的来源。允许执行安装器/脚本，或把本地 JAR 复制为服务端核心（该 JAR 不会被自动执行）。", 12), Margin = new Thickness(0, 8, 0, 0) };
         sources.Children.Add(_trust);
         _sources = ServerUi.Card(sources); panel.Children.Add(_sources);
         root.Children.Add(ServerUi.Scroll(panel)); Content = root;
@@ -83,7 +87,8 @@ internal sealed class ServerInstallWindow : Window
             _status.Text = "正在安装，可在控制面板查看实时日志；此窗口可取消。";
             ServerUi.Open(_profile); _refresh();
             await ServerUi.Manager.InstallAsync(_profile, Optional(_pack.Text), Optional(_installer.Text), Optional(_script.Text), _trust.IsChecked == true, _work.Token);
-            _status.Text = "安装成功。请在控制面板确认 EULA 后启动服务端。";
+            var build = string.IsNullOrWhiteSpace(_profile.LoaderVersion) ? "" : "实际构建 " + _profile.LoaderVersion + "。";
+            _status.Text = "安装成功。" + build + "请在控制面板确认 EULA 后启动服务端。";
         }
         catch (OperationCanceledException) { _status.Text = "安装已取消，可检查日志后重试。"; }
         catch (Exception ex) { _status.Text = "安装失败：" + ex.Message; ServerUi.Error(ex); }
@@ -99,6 +104,9 @@ internal sealed class ServerInstallWindow : Window
     }
 
     private static string? Optional(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private void UpdateSourceLabels() => _installerLabel.Text = ServerCommands.IsDirectCore(_editor.SelectedLoader)
+        ? "本地服务端 JAR · 可选，确认信任后复制为 server.jar，不会执行"
+        : "本地 installer JAR · 可选，优先使用";
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
@@ -115,19 +123,34 @@ internal sealed class ServerProfileEditor : StackPanel
 {
     private readonly TextBox _name, _minecraft, _version, _java, _min, _max, _jvm, _entry;
     private readonly ComboBox _loader;
-    private readonly TextBlock _runtimeSummary;
+    private readonly TextBlock _versionLabel, _help, _mirror, _runtimeSummary;
+    private TextBlock? _versions;
+    internal event Action? LoaderChanged;
+    internal ServerLoader SelectedLoader => _loader.SelectedItem is LoaderItem item ? item.Loader : ServerLoader.Vanilla;
 
     internal ServerProfileEditor(ServerProfile profile, bool installing = false)
     {
         var identity = ServerUi.Section("版本信息");
         _name = ServerUi.Field(identity, "服务端名称", profile.Name);
         var loader = new StackPanel(); loader.Children.Add(ServerUi.Text("加载器", 12, muted: true));
-        _loader = new ComboBox { ItemsSource = Enum.GetValues<ServerLoader>(), SelectedItem = profile.Loader, Margin = new Thickness(0, 0, 0, 10), IsEnabled = installing };
+        _loader = new ComboBox { Margin = new Thickness(0, 0, 0, 10), IsEnabled = installing };
+        foreach (ServerLoader item in Enum.GetValues<ServerLoader>()) _loader.Items.Add(new LoaderItem(item));
+        _loader.SelectedItem = FindLoader(profile.Loader);
         loader.Children.Add(_loader);
         var minecraft = new StackPanel(); _minecraft = ServerUi.Field(minecraft, "Minecraft 版本", profile.MinecraftVersion);
         var version = new StackPanel(); _version = ServerUi.Field(version, "加载器版本", profile.LoaderVersion);
+        _versionLabel = (TextBlock)version.Children[0];
         identity.Children.Add(Columns(loader, minecraft, version));
-        identity.Children.Add(ServerUi.Text("例如 Minecraft 1.21.1，NeoForge 21.1.172 或 Fabric 0.16.14。", 11, muted: true));
+        _help = ServerUi.Text("", 11, muted: true); _mirror = ServerUi.Text("", 11, muted: true);
+        identity.Children.Add(_help); identity.Children.Add(_mirror);
+        if (installing)
+        {
+            identity.Children.Add(ServerUi.Button("查询可用版本", QueryVersions));
+            _versions = ServerUi.Text("", 11, muted: true); identity.Children.Add(_versions);
+        }
+        _loader.SelectionChanged += (_, _) => UpdateLoaderHelp();
+        _version.TextChanged += (_, _) => UpdateLoaderHelp();
+        UpdateLoaderHelp();
         _minecraft.IsReadOnly = _version.IsReadOnly = !installing;
         Children.Add(ServerUi.Card(identity));
 
@@ -138,7 +161,7 @@ internal sealed class ServerProfileEditor : StackPanel
             var picker = new Microsoft.Win32.OpenFileDialog { Filter = "Java (java.exe)|java.exe|可执行文件 (*.exe)|*.exe" };
             if (picker.ShowDialog() == true) _java.Text = picker.FileName;
         }));
-        runtime.Children.Add(ServerUi.Text("Minecraft 1.20.5+ 通常需要 Java 21。使用 java.exe，不是 javaw.exe。", 11, muted: true));
+        runtime.Children.Add(ServerUi.Text("Java 要求以核心元数据为准：1.20.5–1.21.x 通常为 Java 21，26.x 可能需要 Java 25。使用 java.exe 而非 javaw.exe；记录最低版本后会在启动前检查。", 11, muted: true));
         var min = new StackPanel(); _min = ServerUi.Field(min, "最小内存 MiB", profile.MinMemoryMb.ToString());
         var max = new StackPanel(); _max = ServerUi.Field(max, "最大内存 MiB", profile.MaxMemoryMb.ToString());
         runtime.Children.Add(Columns(min, max));
@@ -169,10 +192,11 @@ internal sealed class ServerProfileEditor : StackPanel
 
     internal void Reload(ServerProfile profile)
     {
-        _name.Text = profile.Name; _loader.SelectedItem = profile.Loader;
+        _name.Text = profile.Name; _loader.SelectedItem = FindLoader(profile.Loader);
         _minecraft.Text = profile.MinecraftVersion; _version.Text = profile.LoaderVersion;
         _java.Text = profile.JavaPath; _min.Text = profile.MinMemoryMb.ToString(); _max.Text = profile.MaxMemoryMb.ToString();
         _jvm.Text = profile.JvmArguments; _entry.Text = profile.EntryPoint;
+        UpdateLoaderHelp();
     }
 
     internal void Apply(ServerProfile profile)
@@ -180,9 +204,67 @@ internal sealed class ServerProfileEditor : StackPanel
         if (string.IsNullOrWhiteSpace(_name.Text) || string.IsNullOrWhiteSpace(_java.Text)) throw new InvalidOperationException("名称和 Java 不能为空。");
         if (!int.TryParse(_min.Text, out var min) || !int.TryParse(_max.Text, out var max) || min < 256 || max < min || max > 1048576)
             throw new InvalidOperationException("内存需要是有效整数：256 ≤ 最小内存 ≤ 最大内存 ≤ 1048576 MiB。");
-        profile.Name = _name.Text.Trim(); profile.Loader = (ServerLoader)_loader.SelectedItem;
+        if (_loader.SelectedItem is not LoaderItem loader) throw new InvalidOperationException("请选择加载器。");
+        profile.Name = _name.Text.Trim(); profile.Loader = loader.Loader;
         profile.MinecraftVersion = _minecraft.Text.Trim(); profile.LoaderVersion = _version.Text.Trim();
         profile.JavaPath = _java.Text.Trim(); profile.MinMemoryMb = min; profile.MaxMemoryMb = max;
         profile.JvmArguments = _jvm.Text.Trim(); profile.EntryPoint = _entry.Text.Trim();
+    }
+    private LoaderItem FindLoader(ServerLoader loader)
+    {
+        foreach (LoaderItem item in _loader.Items) if (item.Loader == loader) return item;
+        return (LoaderItem)_loader.Items[0]!;
+    }
+
+    private void UpdateLoaderHelp()
+    {
+        var loader = SelectedLoader;
+        var blank = string.IsNullOrWhiteSpace(_version.Text);
+        _versionLabel.Text = loader switch
+        {
+            ServerLoader.Vanilla => "构建 · 原版可留空",
+            ServerLoader.Paper => "Paper 构建 · 留空为稳定版",
+            ServerLoader.Purpur => "Purpur 构建 · 留空为最新",
+            ServerLoader.NeoForge => "NeoForge 版本",
+            _ => "Fabric 版本"
+        };
+        _help.Text = loader switch
+        {
+            ServerLoader.Vanilla => "填写精确 Minecraft 版本，例如 1.21.1。构建可留空。安装只下载 server.jar，不启动服务端，也不自动同意 EULA。",
+            ServerLoader.Paper or ServerLoader.Purpur => (blank ? "构建留空将选择稳定版/最新构建，安装后写入实际构建号。" : "将安装所填构建号。") + "安装只下载 server.jar，不执行。",
+            _ => "例如 Minecraft 1.21.1，NeoForge 21.1.172 或 Fabric 0.16.14。"
+        };
+        _mirror.Text = loader == ServerLoader.Vanilla
+            ? "原版可使用 BMCLAPI 镜像，顺序跟随下载源：镜像优先 / 官方优先 / 仅官方。"
+            : ServerCoreCatalog.MirrorNotice(loader, 1);
+        LoaderChanged?.Invoke();
+    }
+
+    private async void QueryVersions(object sender, RoutedEventArgs e)
+    {
+        if (_versions is null) return;
+        try
+        {
+            ServerUi.Manager.DownloadSource = ServerUi.DownloadSource();
+            _versions.Text = "正在查询版本…";
+            var versions = await ServerUi.Manager.ListCoreVersionsAsync(SelectedLoader);
+            var count = Math.Min(24, versions.Count);
+            var shown = new string[count];
+            for (var i = 0; i < count; i++) shown[i] = versions[i];
+            _versions.Text = count == 0 ? "没有查询到版本。" : "可用版本：" + string.Join("、", shown);
+        }
+        catch (Exception ex) { _versions.Text = "版本查询失败：" + ex.Message; }
+    }
+
+    private sealed class LoaderItem(ServerLoader loader)
+    {
+        public ServerLoader Loader { get; } = loader;
+        public override string ToString() => loader switch
+        {
+            ServerLoader.Vanilla => "Vanilla 原版",
+            ServerLoader.Paper => "Paper",
+            ServerLoader.Purpur => "Purpur",
+            _ => loader.ToString()
+        };
     }
 }

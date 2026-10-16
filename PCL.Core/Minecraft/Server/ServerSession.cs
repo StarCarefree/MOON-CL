@@ -58,6 +58,7 @@ public sealed class ServerSession
             RequireIdle();
             var profile = _manager.Load(_id);
             if (!_manager.IsEulaAccepted(profile)) throw new InvalidOperationException("请先阅读并明确同意 Minecraft EULA。");
+            ServerCommands.EnsureJava(profile, Log);
             var info = ServerCommands.Start(profile, _manager.GetDirectory(profile));
             _process = Launch(info);
             _stopping = false; _status = "运行中（启动输出见控制台）";

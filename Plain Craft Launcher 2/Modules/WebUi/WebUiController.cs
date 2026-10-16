@@ -118,6 +118,7 @@ internal sealed partial class WebUiController : IDisposable
                 _lastPresentation = null;
                 UpdatePresentation();
                 Refresh(force: true);
+                SendPendingPluginBrowse();
                 if (IsPresented && form.PanMsgBackground.Visibility != Visibility.Visible) view.Focus();
             };
             _timer = new DispatcherTimer(DispatcherPriority.Background, form.Dispatcher) { Interval = TimeSpan.FromMilliseconds(500) };

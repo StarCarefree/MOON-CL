@@ -17,6 +17,7 @@ internal sealed partial class WebUiController
         "world" => ModComp.CompType.World,
         "shader" => ModComp.CompType.Shader,
         "resourcepack" => ModComp.CompType.ResourcePack,
+        "plugin" => ModComp.CompType.Plugin,
         _ => ModComp.CompType.ModPack
     };
 
@@ -81,6 +82,19 @@ internal sealed partial class WebUiController
                 var project = projects.FirstOrDefault(p => p.Id == pack.ProjectId && p.Type == ResourceCompType(resourceType) && p.FromCurseForge == (source == "curseforge"));
                 if (project is null) throw new InvalidDataException("平台未返回对应资源的下载信息，请打开项目网站查看。");
                 if (!Current() || !IsPresented || form.PanMsgBackground.Visibility == System.Windows.Visibility.Visible) return;
+                if (resourceType == "plugin")
+                {
+                    var selected = ServerPluginDownloads.Pick(pack.MinecraftVersions);
+                    if (selected is null) return;
+                    ServerPluginDownloads.PreferredServerId = selected.Id;
+                    Hide();
+                    form.PageChange(new FormMain.PageStackData
+                    {
+                        page = FormMain.PageType.CompDetail,
+                        additional = (project, new List<string>(), selected.MinecraftVersion, ModComp.CompLoaderType.Any, ModComp.CompType.Plugin, PCL.Core.Minecraft.Server.ServerPluginTargets.PluginsDirectory(ServerUi.Manager, selected))
+                    });
+                    return;
+                }
                 Hide();
                 form.PageChange(new FormMain.PageStackData
                 {

@@ -19,7 +19,7 @@ try {
  const listReply=(req,items)=>send({type:'platformList',source:req.source,resourceType:req.resourceType||'modpack',requestId:req.requestId,page:req.page,totalPages:2,items});
  const snap={type:'browse',launcher:{presets:[{id:'starrail-harpy-express',name:'SRE DEMO fixture',version:'DEMO',installed:false}],selected:'starrail-harpy-express',task:{},config:{}}};
  await send(snap); let request=await last(); await listReply(request,[item('modpack')]);
- assert.equal(await page.locator('[aria-label="资源类型"] button').count(),5);
+ assert.equal(await page.locator('[aria-label="资源类型"] button').count(),6);
  let stale;
  for(const kind of ['datapack','world','shader','resourcepack']) {
   await page.locator(`#type-${kind}`).click(); request=await last(); assert.equal(request.resourceType,kind);
