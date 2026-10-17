@@ -1,0 +1,3 @@
+files:
+  - source: /PCL.Core/App/Localization/Languages/zh-CN.xaml
+    translation: /%original_path%/%locale_with_underscore%.xaml
