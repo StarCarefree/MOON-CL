@@ -13,6 +13,9 @@
     <AssemblyAttribute Include="System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute" />
     <Compile Include="..\..\PCL.Core\Multiplayer\*.cs" />
     <Compile Include="..\..\PCL.Core.Test\Multiplayer\*.cs" />
+    <Compile Include="..\..\Plain Craft Launcher 2\Modules\HybridUi\RoomFlowPresentation.cs" />
+    <Compile Include="..\..\PCL.Core\Minecraft\Launcher\GameLinkSession.cs" />
+    <Compile Include="..\..\PCL.Core.Test\UI\RoomFlowPresentationTest.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="4.3.0" />
     <PackageReference Include="MSTest.TestFramework" Version="4.3.0" />

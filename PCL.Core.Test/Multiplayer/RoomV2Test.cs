@@ -67,6 +67,8 @@ public sealed class RoomV2Test
     {
         var pack = new RoomPackShare("starrail-harpy-express", "SRE", "4.4.0", "1.21.1", "pack.mrpack", "https://example.com/pack.mrpack", new string('a', 64), "", "folder/pack.mrpack");
         pack.Validate();
+        new RoomPackShare("modrinth-abcd1234", "Simply Optimized", "1.21.11", "1.21.11", "Simply-Optimized.mrpack", "https://cdn.modrinth.com/data/AbCd1234/versions/x/Simply-Optimized.mrpack", new string('a', 128)).Validate();
+        Assert.ThrowsExactly<ArgumentException>(() => (pack with { Sha256 = new string('a', 32) }).Validate());
         new RoomGameStatus("实例", "1.21.1", "running", pack).Validate();
         Assert.ThrowsExactly<ArgumentException>(() => (pack with { DownloadUrl = "file:///C:/packs/a.mrpack", ShareUrl = "" }).Validate());
         Assert.ThrowsExactly<ArgumentException>(() => (pack with { DownloadUrl = "https://user:secret@example.com/a.mrpack" }).Validate());

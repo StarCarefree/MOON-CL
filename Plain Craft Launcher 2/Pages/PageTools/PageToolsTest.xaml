@@ -25,6 +25,8 @@
                                     Margin="0,0,15,15" Click="BtnLaunchCount_Click" />
                     <local:MyButton MinWidth="140" Text="{DynamicResource Tools.Test.WebUi.Title}"
                                     Margin="0,0,15,15" Click="BtnWebUi_Click" />
+                    <local:MyButton MinWidth="120" Text="{DynamicResource Tools.Test.McNav.Title}"
+                                    Margin="0,0,15,15" Click="BtnMcNav_Click" />
                 </WrapPanel>
             </local:MyCard>
             <local:MyCard Margin="0,0,0,15" Title="{DynamicResource Tools.Test.CustomDownload.Title}">

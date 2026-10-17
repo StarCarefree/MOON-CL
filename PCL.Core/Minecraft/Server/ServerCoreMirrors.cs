@@ -15,7 +15,7 @@ public static class ServerCoreMirrors
 
     public static async Task<ServerCoreArtifact> AddAsync(HttpClient http, ServerCoreArtifact artifact, int source, bool latestRequested, CancellationToken token)
     {
-        if (artifact.Loader is not (ServerLoader.Paper or ServerLoader.Purpur) || source == 2) return artifact;
+         if (artifact.Loader is not (ServerLoader.Paper or ServerLoader.Purpur or ServerLoader.Folia) || source == 2) return artifact;
         var core = artifact.Loader.ToString();
         var mirror = await ReadAsync("build" + artifact.Build).ConfigureAwait(false);
         if (mirror is null && artifact.Loader == ServerLoader.Purpur && latestRequested)

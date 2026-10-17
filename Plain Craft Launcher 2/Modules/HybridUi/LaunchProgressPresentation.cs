@@ -15,6 +15,7 @@ internal sealed class LaunchProgressPresentation : IDisposable
 {
     internal LaunchProgressState State { get; } = new();
     private readonly MlsProgressChannel _channel;
+    private readonly string _name;
     private readonly HybridLaunchWindow _window;
     private readonly DispatcherTimer _timer;
     private readonly Action _cancel;
@@ -27,6 +28,7 @@ internal sealed class LaunchProgressPresentation : IDisposable
     internal LaunchProgressPresentation(string name, Action cancel)
     {
         _cancel = cancel;
+        _name = name;
         _channel = new MlsProgressChannel(Paths.Temp);
         _window = new HybridLaunchWindow(); // Intentionally not owned by the launcher window.
         _timer = new DispatcherTimer(DispatcherPriority.Background, _window.Dispatcher) { Interval = TimeSpan.FromMilliseconds(150) };
@@ -61,7 +63,7 @@ internal sealed class LaunchProgressPresentation : IDisposable
     {
         if (!supportsMls)
         {
-            State.GameStarted("mod-loading-screen 仅支持 Fabric/Quilt，此实例将按游戏窗口状态交接");
+            State.GameStarted("此实例没有 Fabric/Quilt 模组清单，将按游戏窗口状态交接");
             return;
         }
         try
@@ -79,7 +81,7 @@ internal sealed class LaunchProgressPresentation : IDisposable
                 var pending = jar + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 File.WriteAllBytes(pending, bytes); File.Move(pending, jar, true);
             }
-            _channel.Configure(info, jar);
+            _channel.Configure(info, jar, _name);
             _bridgePrepared = true;
         }
         catch (Exception ex)

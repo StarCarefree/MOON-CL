@@ -20,18 +20,32 @@ public sealed class ServerManager
     private static readonly ConcurrentDictionary<string, ServerSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
     private static readonly HttpClient SharedHttp = CreateHttp();
     private readonly HttpClient _http;
-    public string RootDirectory { get; }
-    /// <summary>Same ordering as launcher FileSource: 0 mirror first, 1 official first, 2 official only.</summary>
-    public int DownloadSource { get; set; } = 1;
+     public string RootDirectory { get; private set; }
+     /// <summary>Java temp directory for installer and server processes. Null keeps the process default.</summary>
+     public string? JavaTempDirectory { get; set; }
+     /// <summary>Same ordering as launcher FileSource: 0 mirror first, 1 official first, 2 official only.</summary>
+     public int DownloadSource { get; set; } = 1;
 
     public ServerManager(string rootDirectory, HttpClient? http = null)
     {
-        RootDirectory = Path.GetFullPath(rootDirectory);
-        _http = http ?? SharedHttp;
-    }
+         RootDirectory = Path.GetFullPath(rootDirectory);
+         _http = http ?? SharedHttp;
+     }
+ 
+     public void UseRoot(string rootDirectory)
+     {
+         var next = Path.GetFullPath(rootDirectory);
+         if (next.Equals(RootDirectory, StringComparison.OrdinalIgnoreCase)) return;
+         if (Sessions.Values.Any(session => session.IsRunning || session.IsInstalling))
+             throw new InvalidOperationException("服务端正在运行或安装，不能切换保存目录。");
+         RootDirectory = next;
+     }
 
-    public Task<IReadOnlyList<string>> ListCoreVersionsAsync(ServerLoader loader, CancellationToken cancellationToken = default)
-        => ServerCoreCatalog.ListVersionsAsync(_http, loader, DownloadSource, cancellationToken);
+     public Task<IReadOnlyList<string>> ListCoreVersionsAsync(ServerLoader loader, CancellationToken cancellationToken = default)
+         => ServerCoreCatalog.ListVersionsAsync(_http, loader, DownloadSource, cancellationToken);
+ 
+     public Task<IReadOnlyList<string>> ListLoaderVersionsAsync(ServerLoader loader, string minecraftVersion, CancellationToken cancellationToken = default)
+         => ServerCoreCatalog.ListLoaderVersionsAsync(_http, loader, minecraftVersion, DownloadSource, cancellationToken);
 
     public Task<ServerCoreArtifact> ResolveCoreAsync(ServerProfile profile, CancellationToken cancellationToken = default)
         => ServerCoreCatalog.ResolveAsync(_http, profile, DownloadSource, cancellationToken);
@@ -43,41 +57,77 @@ public sealed class ServerManager
         return http;
     }
 
-    public string GetDirectory(ServerProfile profile)
+     public string GetDirectory(ServerProfile profile)
+     {
+         if (!ServerCommands.IsFolderId(profile.Id)) throw new ArgumentException("服务端 ID 无效。");
+         return ServerPaths.Inside(RootDirectory, profile.Id);
+     }
+ 
+     public ServerSession GetSession(ServerProfile profile) => Sessions.GetOrAdd(GetDirectory(profile), _ => new ServerSession(this, profile.Id));
+ 
+     public IReadOnlyList<ServerProfile> List()
+     {
+         if (!Directory.Exists(RootDirectory)) return [];
+         return Directory.EnumerateDirectories(RootDirectory).Where(path => ServerCommands.IsFolderId(Path.GetFileName(path)))
+             .Where(path => File.Exists(Path.Combine(path, MetadataFile))).Select(path => Load(Path.GetFileName(path)))
+             .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+     }
+ 
+     internal ServerProfile Load(string id)
+     {
+         var path = ServerPaths.Inside(GetDirectory(new ServerProfile { Id = id }), MetadataFile);
+         var profile = JsonSerializer.Deserialize<ServerProfile>(File.ReadAllText(path)) ?? throw new IOException("服务端配置为空：" + id);
+         if (profile.Id != id) throw new IOException("服务端配置 ID 与目录不匹配：" + id);
+         ServerCommands.Validate(profile); return profile;
+     }
+ 
+    private void AssignFolder(ServerProfile profile)
     {
-        if (!Guid.TryParseExact(profile.Id, "N", out _)) throw new ArgumentException("服务端 ID 无效。");
-        return ServerPaths.Inside(RootDirectory, profile.Id);
-    }
-
-    public ServerSession GetSession(ServerProfile profile) => Sessions.GetOrAdd(GetDirectory(profile), _ => new ServerSession(this, profile.Id));
-
-    public IReadOnlyList<ServerProfile> List()
-    {
-        if (!Directory.Exists(RootDirectory)) return [];
-        return Directory.EnumerateDirectories(RootDirectory).Where(path => Guid.TryParseExact(Path.GetFileName(path), "N", out _))
-            .Where(path => File.Exists(Path.Combine(path, MetadataFile))).Select(path => Load(Path.GetFileName(path)))
-            .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
-    }
-
-    internal ServerProfile Load(string id)
-    {
-        var path = ServerPaths.Inside(GetDirectory(new ServerProfile { Id = id }), MetadataFile);
-        var profile = JsonSerializer.Deserialize<ServerProfile>(File.ReadAllText(path)) ?? throw new IOException("服务端配置为空：" + id);
-        if (profile.Id != id) throw new IOException("服务端配置 ID 与目录不匹配：" + id);
-        ServerCommands.Validate(profile); return profile;
+        var folder = ServerCommands.FolderName(profile.Name);
+        if (ServerCommands.IsFolderId(profile.Id) && Directory.Exists(Path.Combine(RootDirectory, profile.Id)))
+        {
+            if (profile.Id.Equals(folder, StringComparison.OrdinalIgnoreCase)) return;
+            if (File.Exists(Path.Combine(RootDirectory, profile.Id, MetadataFile)) && !string.IsNullOrWhiteSpace(Load(profile.Id).EntryPoint)) return;
+        }
+        var candidate = folder;
+        for (var index = 2; Directory.Exists(Path.Combine(RootDirectory, candidate)); index++) candidate = folder + "-" + index;
+        profile.Id = candidate;
     }
 
     public void Save(ServerProfile profile)
     {
+        if (!ServerCommands.IsFolderId(profile.Id)) profile.Id = Guid.NewGuid().ToString("N");
+        var previousId = profile.Id;
+        var previousDirectory = GetDirectory(profile);
+        AssignFolder(profile);
         ServerCommands.Validate(profile);
-        var session = GetSession(profile);
+        var directory = GetDirectory(profile);
+        var session = Sessions.GetOrAdd(directory, _ => Sessions.TryRemove(previousDirectory, out var moved) ? moved : new ServerSession(this, profile.Id));
+        session.Bind(profile.Id);
         lock (session.SyncRoot)
         {
             session.RequireIdle();
             if (File.Exists(Path.Combine(GetDirectory(profile), MetadataFile)) && !string.IsNullOrEmpty(Load(profile.Id).EntryPoint) && string.IsNullOrWhiteSpace(profile.EntryPoint))
                 throw new InvalidOperationException("已安装服务端的启动入口不能清空；更换版本请新建服务端。");
             SaveCore(profile);
+            if (!previousDirectory.Equals(directory, StringComparison.OrdinalIgnoreCase)) RemoveAbandonedFolder(previousDirectory, previousId);
         }
+    }
+
+    private static void RemoveAbandonedFolder(string directory, string id)
+    {
+        try
+        {
+            if (!Directory.Exists(directory)) return;
+            var metadata = Path.Combine(directory, MetadataFile);
+            if (File.Exists(metadata))
+            {
+                var stored = JsonSerializer.Deserialize<ServerProfile>(File.ReadAllText(metadata));
+                if (stored is null || stored.Id != id || !string.IsNullOrWhiteSpace(stored.EntryPoint)) return;
+            }
+            Directory.Delete(directory, true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
     }
 
     private void SaveCore(ServerProfile profile)
@@ -162,7 +212,7 @@ public sealed class ServerManager
                 if (direct && script is null && installerJar is not null)
                     ImportDirectJar(directory, installerJar, trustScript, session, token);
                 else if (script is not null)
-                    await session.RunInstallerAsync(ServerCommands.Script(profile, directory, script), token).ConfigureAwait(false);
+                     await session.RunInstallerAsync(ServerCommands.Script(profile, directory, script, JavaTempDirectory), token).ConfigureAwait(false);
                 else if (direct && DetectLoaderEntry(profile, directory) is not null)
                 {
                     ServerCoreTransfer.ValidateJar(ServerPaths.Inside(directory, "server.jar"));
@@ -180,7 +230,7 @@ public sealed class ServerManager
                         if (!Path.GetFullPath(installerJar).Equals(jar, StringComparison.OrdinalIgnoreCase)) File.Copy(installerJar, jar, true);
                     }
                     else await DownloadInstallerAsync(profile, jar, session, token).ConfigureAwait(false);
-                    await session.RunInstallerAsync(ServerCommands.Installer(profile, directory, jar), token).ConfigureAwait(false);
+                     await session.RunInstallerAsync(ServerCommands.Installer(profile, directory, jar, JavaTempDirectory), token).ConfigureAwait(false);
                 }
                 token.ThrowIfCancellationRequested();
                 var entry = (script is not null ? DetectEntry(profile, directory, trustScript) : DetectLoaderEntry(profile, directory))
@@ -197,10 +247,27 @@ public sealed class ServerManager
             }, timeout.Token).ConfigureAwait(false);
             status = "安装完成，等待启动";
         }
-        catch (OperationCanceledException) { status = cancellationToken.IsCancellationRequested ? "安装已取消" : "安装超时"; throw; }
-        catch (Exception ex) { session.Log(ex.Message); throw; }
-        finally { session.EndInstall(status); }
-    }
+         catch (OperationCanceledException) { status = cancellationToken.IsCancellationRequested ? "安装已取消" : "安装超时"; throw; }
+         catch (Exception ex) { session.Log(ex.Message); throw; }
+         finally
+         {
+             session.EndInstall(status);
+             if (cancellationToken.IsCancellationRequested) DeleteIncomplete(profile, session);
+         }
+     }
+ 
+     private void DeleteIncomplete(ServerProfile profile, ServerSession session)
+     {
+         var directory = GetDirectory(profile);
+         try
+         {
+             if (File.Exists(Path.Combine(directory, MetadataFile)) && !string.IsNullOrWhiteSpace(Load(profile.Id).EntryPoint)) return;
+             if (Directory.Exists(directory)) Directory.Delete(directory, true);
+             profile.EntryPoint = "";
+             session.Log("已删除未完成的服务端目录。");
+         }
+         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { session.Log("取消后删除安装文件失败：" + ex.Message); }
+     }
 
     public static string? DetectLoaderEntry(ServerProfile profile, string directory)
     {
@@ -211,12 +278,14 @@ public sealed class ServerManager
                 return File.Exists(args) ? Path.GetRelativePath(directory, args) : null;
             case ServerLoader.Fabric:
                 return File.Exists(ServerPaths.Inside(directory, "fabric-server-launch.jar")) ? "fabric-server-launch.jar" : null;
-            case ServerLoader.Vanilla:
-            case ServerLoader.Paper:
-            case ServerLoader.Purpur:
-                return File.Exists(ServerPaths.Inside(directory, "server.jar")) ? "server.jar" : null;
-            default:
-                return null;
+             case ServerLoader.Vanilla:
+             case ServerLoader.Paper:
+             case ServerLoader.Purpur:
+             case ServerLoader.Spigot:
+             case ServerLoader.Folia:
+                 return File.Exists(ServerPaths.Inside(directory, "server.jar")) ? "server.jar" : null;
+             default:
+                 return null;
         }
     }
 
@@ -339,11 +408,13 @@ public sealed class ServerManager
 
     private async Task DownloadDirectCoreAsync(ServerProfile profile, string directory, ServerSession session, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(profile.MinecraftVersion)) throw new ArgumentException("请填写精确的 Minecraft 版本。");
-        var notice = ServerCoreCatalog.MirrorNotice(profile.Loader, DownloadSource);
-        if (notice.Length > 0) session.Log(notice);
-        if (ServerCoreCatalog.IsStableDefault(profile.LoaderVersion))
-            session.Log(profile.Loader == ServerLoader.Vanilla ? "原版未填写构建，将安装所填的精确 Minecraft 版本。" : "构建留空，将选择稳定版或最新构建，并在完成后写入实际构建号。");
+         if (string.IsNullOrWhiteSpace(profile.MinecraftVersion)) throw new ArgumentException("请填写精确的 Minecraft 版本。");
+         if (profile.Loader == ServerLoader.Spigot && string.IsNullOrWhiteSpace(profile.LoaderVersion))
+             throw new ArgumentException("请选择 Spigot 版本。");
+         var notice = ServerCoreCatalog.MirrorNotice(profile.Loader, DownloadSource);
+         if (notice.Length > 0) session.Log(notice);
+         if (profile.Loader != ServerLoader.Spigot && ServerCoreCatalog.IsStableDefault(profile.LoaderVersion))
+             session.Log(profile.Loader == ServerLoader.Vanilla ? "原版未填写构建，将安装所填的精确 Minecraft 版本。" : "构建留空，将选择稳定版或最新构建，并在完成后写入实际构建号。");
         session.Log("正在读取服务端元数据…");
         var artifact = await ServerCoreCatalog.ResolveAsync(_http, profile, DownloadSource, token).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(artifact.MirrorNotice)) session.Log(artifact.MirrorNotice);

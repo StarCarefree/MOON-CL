@@ -4,7 +4,7 @@ using System.Windows.Controls.Primitives;
 using PCL.Core.UI;
 using PCL.Core.UI.Theme;
 using PCL.Core.App.Localization;
-
+using PCL.Core.Minecraft.Launcher;
 namespace PCL;
 
 public partial class ServerCard
@@ -38,6 +38,7 @@ public partial class ServerCard
 
     public event EventHandler? RemoveServer;
     public event EventHandler? EditServer;
+    public event EventHandler? PublishServer;
 
     private void BtnSkin_Click(object sender, EventArgs eventArgs)
     {
@@ -212,6 +213,20 @@ public partial class ServerCard
         catch (Exception ex)
         {
             HintService.Hint(Lang.Text("Instance.Server.Card.EditFailed", ex.Message), HintType.Error);
+        }
+    }
+
+    private async void BtnPublish_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var minecraft = PageInstanceLeft.McInstance?.Info.VanillaName ?? "";
+            var saved = await BrowseServerStore.AddFromInstanceAsync(server.Name, server.Address, minecraft);
+            HintService.Hint(saved.Updated ? "已更新浏览中的本地服务器" : "已添加到浏览，仅保存在本机", HintType.Success);
+        }
+        catch (Exception ex)
+        {
+            HintService.Hint("添加到浏览失败：" + ex.Message, HintType.Error);
         }
     }
 

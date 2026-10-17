@@ -31,7 +31,7 @@ public partial class HybridRooms
             if (GameLinkClients.SelectedIndex < 0 && sessions.Length == 1) GameLinkClients.SelectedIndex = 0;
         }
         var current = sessions.FirstOrDefault(s => s.SessionId == GameLinkClients.SelectedValue as string);
-        var available = !_gameLinkSending && current is { State: "ready" or "connected" or "disconnected" or "error" };
+        var available = !_busy && !_gameLinkSending && current is { State: "ready" or "connected" or "disconnected" or "error" };
         GameLinkConnect.IsEnabled = available;
         GameLinkRoom.IsEnabled = !_gameLinkSending && !_busy && GetLaunchTarget() is not null && (available || sessions.Length == 0);
         GameLinkDisconnect.IsEnabled = available;
@@ -52,25 +52,16 @@ public partial class HybridRooms
     private void GameLinkClient_Changed(object sender, SelectionChangedEventArgs e) => RefreshGameLink();
     private async void GameLinkConnect_Click(object sender, RoutedEventArgs e) => await SendGameLinkAsync(GameLinkAddress.Text.Trim());
     private async void GameLinkDisconnect_Click(object sender, RoutedEventArgs e) => await SendGameLinkAsync(null);
-    private async void GameLinkRoom_Click(object sender, RoutedEventArgs e)
-    {
-        if (_closed || !_initialized || _busy) return;
-        if (GetLaunchTarget() is not { } target) { Status.Text = "请先检测并选择可用的房间线路。"; return; }
-        var address = RoomConnection.FormatEndpoint(target.Host, target.Port);
-        try
-        {
-            if (GameLinkSession.Snapshot().Length == 0) LaunchGameLink(address);
-            else await SendGameLinkAsync(address);
-        }
-        catch (Exception ex) { if (!_closed) Status.Text = "游戏联动：" + ex.Message; }
-    }
+    private void GameLinkRoom_Click(object sender, RoutedEventArgs e) => PrimaryAction_Click(sender, e);
 
     private async Task SendGameLinkAsync(string? address)
     {
-        if (_closed || !_initialized || _gameLinkSending) return;
+        if (_closed || !_initialized || _busy || _gameLinkSending) return;
         try
         {
             var id = GameLinkClients.SelectedValue as string ?? throw new InvalidOperationException("请选择运行中的游戏实例。");
+            var current = GameLinkSession.Snapshot().FirstOrDefault(s => s.SessionId == id);
+            if (address is not null && current?.State == "connected" && !RoomFlowPresentation.SameAddress(current.Address, address) && !ConfirmSwitch(current.Address, address)) return;
             _gameLinkSending = true; RefreshGameLink();
             await GameLinkSession.SendAsync(id, address);
             if (!_closed) Status.Text = "命令已发送，等待游戏确认；实际连接状态显示在游戏联动栏。";
@@ -92,8 +83,11 @@ public partial class HybridRooms
     private void LaunchGameLink(string address)
     {
         GameLinkSession.ValidateAddress(address);
+        if (_busy || _gameLinkSending) throw new InvalidOperationException("请先完成或取消当前操作。");
         var instance = _selectedInstance ?? ModInstanceList.McMcInstanceSelected
             ?? throw new InvalidOperationException("请先在我的游戏中选择一个版本。");
+        if (RoomPresentation.IsLaunchingOrRunning(instance) || GameLinkSession.Snapshot().Any(s => s.Instance == instance.Name))
+            throw new InvalidOperationException("所选游戏已经在启动或运行；请使用进入 / 切服，避免重复启动。");
         Status.Text = ModLaunch.McLaunchStart(new ModLaunch.McLaunchOptions { instance = instance, ServerIp = address })
             ? "正在启动 " + instance.Name + "，游戏启动后自动进入 " + address + "。"
             : "未开始启动，请检查登录状态和游戏版本。";

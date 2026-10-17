@@ -3438,6 +3438,7 @@
     <sys:String x:Key="Tools.Test.LaunchCount.Title">檢視啟動計數</sys:String>
     <sys:String x:Key="Tools.Test.WebUi.Failed">系統 WebView2 頁面打不開。請確認 Windows 已安裝 WebView2 執行階段。</sys:String>
     <sys:String x:Key="Tools.Test.WebUi.Title">系統 WebView2 頁面</sys:String>
+    <sys:String x:Key="Tools.Test.McNav.Title">MC導航網</sys:String>
     <sys:String x:Key="WebUi.Page.Host">頁面宿主</sys:String>
     <sys:String x:Key="Tools.Test.ServerQuery.Title">看眼伺服器</sys:String>
     <sys:String x:Key="Tools.Test.Title">百寶箱</sys:String>

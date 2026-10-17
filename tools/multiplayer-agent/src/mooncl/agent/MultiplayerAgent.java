@@ -32,7 +32,13 @@ public final class MultiplayerAgent {
                     } catch (Throwable t) { System.err.println("[MoonCL agent] Disabled: " + Protocol.message(t)); }
                 }
             }, "MoonCL-multiplayer-link");
-            worker.setDaemon(true); worker.start();
+            worker.setDaemon(true);
+            worker.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                public void uncaughtException(Thread thread, Throwable error) {
+                    System.err.println("[MoonCL agent] Disabled: " + Protocol.message(error));
+                }
+            });
+            worker.start();
         } catch (Throwable t) {
             System.err.println("[MoonCL agent] Disabled: " + Protocol.message(t));
         }

@@ -20,10 +20,11 @@
   "servers": [
     {
       "id": "mclists",
+      "kind": "directory",
       "name": "MCLists",
       "description": "公开 Minecraft 服务器目录。具体地址与版本以原站为准。",
-      "address": "www.mclists.cn",
-      "minecraft": "1.21.1",
+      "address": "",
+      "minecraft": "",
       "vanilla": false,
       "icon": "",
       "website": "https://www.mclists.cn/",

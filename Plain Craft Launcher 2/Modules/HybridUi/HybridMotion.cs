@@ -173,4 +173,34 @@ internal static class HybridMotion
             ModAnimation.AaOpacity(surface, (over ? 1d : 0d) - surface.Opacity, time, ease: ease)
         }, name);
     }
+
+    private const string VersionListGroup = "Hybrid Version List";
+
+    /// <summary>Hide the local-version block while its list loads, then slide it in once finished.</summary>
+    public static void VersionList(FrameworkElement element, bool loaded)
+    {
+        if (element is null) return;
+        if (!loaded)
+        {
+            ModAnimation.AniStop(VersionListGroup);
+            element.BeginAnimation(UIElement.OpacityProperty, null);
+            element.Visibility = Visibility.Collapsed;
+            element.Opacity = 0;
+            element.IsHitTestVisible = false;
+            element.RenderTransform = Transform.Identity;
+            return;
+        }
+        if (element.Visibility == Visibility.Visible && element.Opacity >= 1 && element.RenderTransform is not TranslateTransform) return;
+        element.Visibility = Visibility.Visible;
+        element.IsHitTestVisible = true;
+        element.Opacity = 0;
+        element.RenderTransform = new TranslateTransform(0, -12);
+        ModAnimation.AniStart(new[]
+        {
+            ModAnimation.AaOpacity(element, 1, 140, 0, new ModAnimation.AniEaseOutFluent(ModAnimation.AniEasePower.Weak)),
+            ModAnimation.AaTranslateY(element, 4, 220, 0, new ModAnimation.AniEaseOutFluent()),
+            ModAnimation.AaTranslateY(element, 8, 320, 0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak))
+        }, VersionListGroup, true);
+    }
+
 }

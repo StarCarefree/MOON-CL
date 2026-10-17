@@ -122,12 +122,20 @@ internal sealed class LauncherLibrary : IDisposable
                 _avatar = "data:image/png;base64," + Convert.ToBase64String(stream.ToArray());
             }
         }
+        var sessions = GameLinkSession.Snapshot();
         var instances = new JsonArray();
         foreach (var instance in Instances())
+        {
+            var session = sessions.FirstOrDefault(item => string.Equals(item.Instance, instance.Name, StringComparison.Ordinal));
             instances.Add(new JsonObject { ["id"] = "instance:" + instance.Name, ["name"] = instance.Name,
                 ["version"] = instance.Desc, ["minecraft"] = instance.Info.VanillaName ?? "",
                 ["vanilla"] = IsVanilla(instance),
+                ["running"] = session is not null,
+                ["session"] = session?.SessionId ?? "",
+                ["linkState"] = session?.State ?? "",
+                ["linkAddress"] = session?.Address ?? "",
                 ["selected"] = _selected == "instance:" + instance.Name });
+        }
         var presets = new JsonArray();
         foreach (var pack in _packs)
         {
@@ -146,7 +154,7 @@ internal sealed class LauncherLibrary : IDisposable
             });
         }
         var servers = new JsonArray();
-        foreach (var server in _servers) servers.Add(ServerJson(server));
+        foreach (var server in BrowseServerStore.Load().Concat(_servers.Where(item => !item.Directory && !item.Local))) servers.Add(ServerJson(server));
         var type = account?.ProfileType switch
         {
             ProfileType.Microsoft => "Microsoft / Mojang",
@@ -435,6 +443,12 @@ internal sealed class LauncherLibrary : IDisposable
             await JoinServerAsync(message, form);
             return;
         }
+        if (operation is "addLocalServer" or "removeLocalServer")
+        {
+            if (operation == "removeLocalServer") BrowseServerStore.Remove(message["id"]?.GetValue<string>() ?? "");
+            else await BrowseServerStore.AddAsync(message["name"]?.GetValue<string>() ?? "", message["address"]?.GetValue<string>() ?? "", message["minecraft"]?.GetValue<string>() ?? "", message["description"]?.GetValue<string>() ?? "", "");
+            return;
+        }
         if (operation is not ("primary" or "installQuark")) return;
         if (!(operation == "primary" && _selected.StartsWith("instance:")) && (ModWatcher.hasRunningMinecraft || ModLaunch.isLaunching)) throw new InvalidOperationException("请先关闭游戏，再执行下载、更新或切换启动。");
         ScanInstalled(true);
@@ -518,26 +532,34 @@ internal sealed class LauncherLibrary : IDisposable
         {
             ["id"] = server.Id, ["name"] = server.Name, ["description"] = server.Description, ["address"] = server.Address,
             ["minecraft"] = server.Minecraft, ["vanilla"] = server.Vanilla, ["icon"] = server.Icon,
-            ["website"] = server.Website, ["source"] = server.Source, ["packs"] = packs
+            ["website"] = server.Website, ["source"] = server.Source, ["directory"] = server.Directory, ["local"] = server.Local, ["packs"] = packs
         };
     }
 
     private async Task JoinServerAsync(JsonObject message, FormMain form)
     {
-        if (ModWatcher.hasRunningMinecraft || ModLaunch.isLaunching) throw new InvalidOperationException("请先关闭正在运行或启动中的游戏。");
         var id = message["id"]?.GetValue<string>() ?? "";
         var address = (message["address"]?.GetValue<string>() ?? "").Trim();
         var minecraft = (message["minecraft"]?.GetValue<string>() ?? "").Trim();
         var choice = message["choice"]?.GetValue<string>() ?? "";
-        var server = _servers.FirstOrDefault(item => item.Id == id);
+        var server = _servers.FirstOrDefault(item => item.Id == id) ?? BrowseServerStore.Load().FirstOrDefault(item => item.Id == id);
         if (server is not null)
         {
             address = server.Address;
             minecraft = server.Minecraft;
         }
-        else if (!PackCatalog.IsAddress(address) || minecraft.Length == 0)
+        else if (!PackCatalog.IsAddress(address))
             throw new InvalidOperationException("服务器信息不完整。");
         if (!PackCatalog.IsAddress(address)) throw new InvalidDataException("服务器地址无效。");
+        var sessionId = message["session"]?.GetValue<string>() ?? "";
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            await JoinRunningAsync(sessionId, address);
+            return;
+        }
+        if (ModWatcher.hasRunningMinecraft || ModLaunch.isLaunching) throw new InvalidOperationException("请先关闭正在运行或启动中的游戏，或选择已启动且未进服的游戏。");
+        if (string.IsNullOrWhiteSpace(minecraft) && server is null)
+            throw new InvalidOperationException("服务器信息不完整。");
         var instanceName = message["instance"]?.GetValue<string>() ?? "";
         var instance = string.IsNullOrWhiteSpace(instanceName) ? null : Instances().FirstOrDefault(item => item.Name == instanceName);
         if (choice == "vanilla")
@@ -553,11 +575,27 @@ internal sealed class LauncherLibrary : IDisposable
             OpenPackDownload(form, offer, message["packName"]?.GetValue<string>() ?? "", message["loader"]?.GetValue<string>() ?? "");
             return;
         }
-        if (instance is null || !VersionMatches(instance, minecraft))
-            throw new InvalidOperationException("没有与服务器版本 " + minecraft + " 匹配的可启动实例。");
+        if (instance is null)
+            throw new InvalidOperationException("请选择一个已有游戏实例。");
+        if (!string.IsNullOrWhiteSpace(minecraft) && !VersionMatches(instance, minecraft) && message["mismatch"]?.GetValue<bool>() != true)
+            throw new InvalidOperationException("所选游戏不是服务器版本 " + minecraft + "。确认后可仍使用该实例进入。");
         SelectInstance(instance);
         Launch(form, address);
     }
+
+    private static async Task JoinRunningAsync(string sessionId, string address)
+    {
+        var session = GameLinkSession.Snapshot().FirstOrDefault(item => item.SessionId == sessionId)
+            ?? throw new InvalidOperationException("这个游戏已经退出，请重新选择。");
+        if (session.State is "connected" or "connecting")
+            throw new InvalidOperationException("这个游戏已经在服务器里，请先退出当前服务器。");
+        if (session.State is not ("ready" or "disconnected" or "error"))
+            throw new InvalidOperationException(session.State == "unsupported"
+                ? "这个游戏的 MoonCL javaagent 没有适配成功，游戏会继续运行，但不能自动进入。"
+                : "游戏还在加载，请等主菜单出现后再进入。");
+        await GameLinkSession.SendAsync(sessionId, address);
+    }
+
 
     private static bool VersionMatches(McInstance instance, string minecraft) =>
         string.Equals(instance.Info.VanillaName, minecraft, StringComparison.OrdinalIgnoreCase);

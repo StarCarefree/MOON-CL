@@ -134,9 +134,6 @@
         <EmbeddedResource Include="Modules\WebUi\www\app.js">
             <LogicalName>PCL.WebUi.www.app.js</LogicalName>
         </EmbeddedResource>
-        <EmbeddedResource Include="Modules\WebUi\www\sre-cover.png">
-            <LogicalName>PCL.WebUi.www.sre-cover.png</LogicalName>
-        </EmbeddedResource>
         <EmbeddedResource Include="Modules\WebUi\www\starcarefree-banner.png">
             <LogicalName>PCL.WebUi.www.starcarefree-banner.png</LogicalName>
         </EmbeddedResource>

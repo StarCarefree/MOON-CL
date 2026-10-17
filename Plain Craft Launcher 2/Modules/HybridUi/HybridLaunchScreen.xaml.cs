@@ -105,15 +105,15 @@ public partial class HybridLaunchScreen : UserControl
         }
         DetailText.Text = string.IsNullOrWhiteSpace(snapshot.Detail) ? _phase switch
         {
-            LaunchProgressPhase.Game => "游戏进度由加载模组提供；未收到进度时不估算百分比",
+            LaunchProgressPhase.Game => "游戏进度由整合包入口点声明提供；未收到进度时不估算百分比",
             LaunchProgressPhase.Ready => "启动流程已完成，可以切换至游戏窗口",
             LaunchProgressPhase.Failed => "请返回启动器查看错误详情与日志",
             _ => "正在准备 Java、依赖与启动参数"
         } : snapshot.Detail;
         NoticeText.Text = !string.IsNullOrWhiteSpace(snapshot.Warning) ? snapshot.Warning : _phase switch
         {
-            LaunchProgressPhase.Game when snapshot.TelemetryConnected => "MOD 实时进度 · 仅显示游戏加载阶段",
-            LaunchProgressPhase.Game => "等待加载模组连接 · 不使用计时估算进度",
+            LaunchProgressPhase.Game when snapshot.TelemetryConnected => "入口点进度 · 仅显示游戏加载阶段",
+            LaunchProgressPhase.Game => "等待加载模组清单 · 不使用计时估算进度",
             LaunchProgressPhase.Ready => "此窗口可关闭，不会退出游戏",
             LaunchProgressPhase.Failed => "此窗口可关闭，不会退出启动器",
             _ => "启动器准备与游戏加载分别计量"

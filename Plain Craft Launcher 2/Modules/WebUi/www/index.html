@@ -66,7 +66,7 @@
             <label class="explorer-option" title="CurseForge 平台源"><input id="source-curseforge" type="checkbox" checked /> <span>CurseForge</span></label>
             <label class="explorer-option" title="Modrinth 平台源"><input id="source-modrinth" type="checkbox" /> <span>Modrinth</span></label>
             <label id="source-mcmod" class="explorer-option" title="MC百科平台源"><input id="include-mcmod" type="checkbox" checked /> <span>MC百科</span></label>
-          </div>
+            <label class="explorer-option" title="MCLists 是服务器目录来源，不是可进入的服务器"><input id="source-mclists" type="checkbox" /> <span>MCLists</span></label>
         </div>
         <form id="filters" class="filters" aria-label="筛选资源">
           <label for="filter-mc">MC 版本<select id="filter-mc"><option value="">全部版本</option></select></label>
@@ -171,7 +171,17 @@
       </section>
       <section id="servers" class="catalog" hidden aria-labelledby="servers-title">
         <div class="section-head"><h2 id="servers-title">服务器</h2><p id="servers-count" aria-live="polite">0 个服务器</p></div>
-        <div id="servers-status" class="source-status" role="status"><p id="servers-message">MCLists 与 MCL 服务器目录</p><button id="servers-refresh" type="button">刷新服务器</button></div>
+        <div id="servers-status" class="source-status" role="status"><p id="servers-message">MCLists 与 MCL 服务器目录</p><button id="servers-add" type="button">添加本地服务器</button><button id="servers-refresh" type="button">刷新服务器</button></div>
+        <dialog id="local-server" class="pack-detail" aria-labelledby="local-server-title">
+          <div class="panel-heading"><div><p class="eyebrow">仅保存在本机</p><h2 id="local-server-title">添加本地服务器</h2></div><button id="close-local-server" type="button" aria-label="关闭添加服务器">×</button></div>
+          <p class="panel-description">不会写入任何游戏实例的服务器列表。</p>
+          <form id="local-server-form" class="local-server-fields">
+            <label class="field">名称<input id="local-server-name" maxlength="120" required /></label>
+            <label class="field">地址<input id="local-server-address" maxlength="253" placeholder="play.example.com 或 play.example.com:25565" required spellcheck="false" /></label>
+            <label class="field">MC 版本<input id="local-server-version" maxlength="32" placeholder="1.21.1" /></label>
+            <div class="panel-actions"><button type="submit">保存到本机</button><button id="local-server-cancel" type="button">取消</button></div>
+          </form>
+        </dialog>
         <div id="server-cards" class="cards" role="group" aria-label="服务器"></div>
         <p id="servers-empty" class="empty" hidden>没有匹配的服务器</p>
         <dialog id="server-join" class="pack-detail" aria-labelledby="server-join-title">

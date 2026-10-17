@@ -1,4 +1,5 @@
 "use strict";
+"use strict";
 /* Browse bridge. Host owns the native shell. This page never draws it and never
    posts projection/navigate/window/action messages.
    Uplink: {type:'launcher', operation, ...params}, {type:'native', page},
@@ -16,7 +17,6 @@
    launcher; its control tree is ignored. Every platform reply must echo requestId. */
 
 const SRE_ID = "starrail-harpy-express";
-const SRE_COVER = "sre-cover.png";
 
  // Shipped default MCL catalog source. Kept in sync with PackCatalogSources.DefaultUrls in PCL.Core.
  const DEFAULT_CATALOG_URLS = [
@@ -246,7 +246,7 @@ Object.defineProperties(platform, {
 const translation = { page: false, text: new Map(), pending: new Map(), missing: new Set(), errors: new Map(), requests: new Map(), sequence: 0, autoDetail: "" };
 const RESOURCE_TYPES = { modpack: "整合包", datapack: "数据包", world: "地图", shader: "光影包", resourcepack: "材质包", plugin: "服务器插件", server: "服务器" };
 const MCLISTS = "https://www.mclists.cn/";
-const servers = { items: [], error: "", loading: false, selected: null };
+const servers = { items: [], error: "", loading: false, selected: null, includeMclists: false };
 function resourceTypeOf(item) { return item?.resourceType || (/^mcmod-datapack-/.test(item?.id || "") ? "datapack" : "modpack"); }
 function resourcePayload(type = browse.resourceType) { return type === "modpack" ? {} : { resourceType: type }; }
 function resourceLabel(type = browse.resourceType) { return RESOURCE_TYPES[type] || "资源"; }
@@ -269,6 +269,8 @@ function renderResourceTypes() {
     const label = input.closest("label");
     label.hidden = !supportsResource(source);
   }
+  const mclists = ui["source-mclists"]?.closest("label");
+  if (mclists) mclists.hidden = browse.resourceType !== "server";
   for (const type of Object.keys(RESOURCE_TYPES)) ui[`type-${type}`].setAttribute("aria-selected", String(type === browse.resourceType));
   const serverPage = browse.resourceType === "server";
   document.querySelector("section.catalog").hidden = serverPage;
@@ -313,7 +315,6 @@ function setText(id, value) {
 function imageUrl(value) {
   if (typeof value !== "string") return "";
   if (/^data:image\/(?:png|jpe?g|gif|webp|bmp|avif|svg\+xml|x-icon|vnd\.microsoft\.icon)[;,]/i.test(value)) return value;
-  if (value === SRE_COVER) return value;
   try {
     const url = new URL(value);
     return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";
@@ -422,7 +423,7 @@ function featuredPack(items = catalogItems().filter(matchesFilters)) {
 function isSre(item) { return item?.id === SRE_ID; }
 function packArt(item, field) {
   const value = item?.[field];
-  return typeof value === "string" && value ? value : isSre(item) ? SRE_COVER : "";
+  return typeof value === "string" && value ? value : "";
 }
 function statusLabel(item) {
   if (isMcmod(item)) return "MC百科";
@@ -1066,6 +1067,7 @@ function renderCatalogStatus() {
   const live = state.link === "live";
   const remote = isRemoteBrowse();
   for (const source of ["mcl", "curseforge", "modrinth"]) ui[`source-${source}`].checked = sourceEnabled(source);
+  if (ui["source-mclists"]) ui["source-mclists"].checked = servers.includeMclists;
   ui["include-mcmod"].checked = catalog.include;
   ui["filter-category"].disabled = categoryOptions().length === 0;
   ui["filter-sort-label"].hidden = !remote;
@@ -2571,19 +2573,24 @@ function openPluginBrowser(minecraft) {
 
 function hostServers() {
   const list = Array.isArray(state.launcher?.servers) ? state.launcher.servers : [];
-  return list.filter(item => item && typeof item.address === "string" && typeof item.name === "string")
-    .map(item => ({ ...item, source: item.source || "mcl", packs: Array.isArray(item.packs) ? item.packs : [] }));
+  return list.filter(item => item && typeof item.name === "string")
+    .map(item => ({ ...item, source: item.source || "mcl", local: item.local === true, directory: item.directory === true || item.kind === "directory", packs: Array.isArray(item.packs) ? item.packs : [] }));
+}
+function isDirectory(item) {
+  const host = String(item?.address || "").replace(/:\d+$/, "");
+  return item?.directory === true || item?.kind === "directory" || /(?:^|\.)mclists\.cn$/i.test(host);
 }
 function visibleServers() {
   const query = queryText();
   const merged = new Map();
-  for (const item of [...hostServers(), ...servers.items]) {
-    if (!item.address || query && ![item.name, item.address, item.minecraft, item.description].some(part => String(part || "").toLocaleLowerCase().includes(query))) continue;
-    merged.set(`${item.source}:${item.address}`, item);
+  for (const item of [...hostServers(), ...(servers.includeMclists ? servers.items : [])]) {
+    if (isDirectory(item) || !item.address || query && ![item.name, item.address, item.minecraft, item.description].some(part => String(part || "").toLocaleLowerCase().includes(query))) continue;
+    merged.set(`${item.source || "mcl"}:${item.address || item.id || item.name}`, item);
   }
   return [...merged.values()];
 }
 function loadServers() {
+  if (!servers.includeMclists) { servers.loading = false; servers.error = ""; renderServers(); return; }
   servers.loading = true; servers.error = "";
   renderServers();
   if (!postLauncher("servers", {})) { servers.loading = false; servers.error = "连接启动器后加载 MCLists。"; renderServers(); }
@@ -2598,7 +2605,7 @@ function renderServers() {
   if (!ui.servers) return;
   const items = visibleServers();
   setText("servers-count", `${items.length} 个服务器`);
-  setText("servers-message", servers.loading ? "正在读取 MCLists…" : servers.error || "来源：MCLists 与 MCL index.json");
+  setText("servers-message", !servers.includeMclists ? "MCLists 是资源来源，默认不作为服务器。勾选后只用来源站查找，仍不会被当成可进入服务器。" : servers.loading ? "正在读取 MCLists…" : servers.error || "来源：MCLists 与 MCL index.json");
   ui["servers-empty"].hidden = items.length > 0;
   ui["server-cards"].replaceChildren(...items.map(serverCard));
 }
@@ -2607,18 +2614,34 @@ function serverCard(item) {
   card.className = "card";
   const body = document.createElement("div");
   body.className = "card-body";
+  if (item.local && typeof item.icon === "string" && item.icon.startsWith("data:image/")) {
+    const icon = document.createElement("img");
+    icon.alt = "";
+    icon.width = 48;
+    icon.height = 48;
+    icon.referrerPolicy = "no-referrer";
+    icon.src = item.icon;
+    body.append(icon);
+  }
   const title = document.createElement("strong");
   title.textContent = item.name;
   const summary = document.createElement("p");
   summary.className = "card-summary";
   summary.textContent = item.description || item.address || "未提供简介";
   const meta = document.createElement("small");
-  meta.textContent = [item.source === "mclists" ? "MCLists" : "MCL", item.minecraft, item.vanilla ? "原版" : "", item.address].filter(Boolean).join(" · ");
+  meta.textContent = [item.local ? "本地" : item.source === "mclists" ? "MCLists" : "MCL", item.minecraft, item.vanilla ? "原版" : "", item.address].filter(Boolean).join(" · ");
   const join = document.createElement("button");
   join.type = "button";
   join.textContent = item.address ? "一键进入" : "查看来源";
   join.addEventListener("click", () => item.address ? openServerJoin(item) : post({ type: "openExternal", url: item.website || MCLISTS }));
   body.append(title, summary, meta, join);
+  if (item.local) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "删除";
+    remove.addEventListener("click", () => postLauncher("removeLocalServer", { id: item.id || "" }));
+    body.append(remove);
+  }
   card.append(body);
   return card;
 }
@@ -2631,21 +2654,40 @@ function instanceMatches(entry, minecraft) {
 function openServerJoin(item) {
   servers.selected = item;
   setText("server-join-title", item.name);
-  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 支持原版客户端" : ""}`);
+  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 支持原版客户端" : ""} · 使用 MoonCL javaagent 进入；加载失败时游戏继续启动，不会因此崩溃`);
   const box = ui["server-choices"];
   box.replaceChildren();
   const instances = Array.isArray(state.launcher?.instances) ? state.launcher.instances : [];
-  const matching = instances.filter(entry => instanceMatches(entry, item.minecraft));
+  const idle = instances.filter(entry => entry.running && entry.session && entry.linkState !== "connected" && entry.linkState !== "connecting");
+  const busy = instances.filter(entry => entry.running && (entry.linkState === "connected" || entry.linkState === "connecting"));
+  appendJoinGroup(box, "已启动且未进服", idle.map(entry => ({
+    title: entry.name,
+    detail: `MC ${entry.minecraft || "版本未知"} · ${linkStateText(entry.linkState)}${entry.linkAddress ? " · " + entry.linkAddress : ""} · 直接进入，不重新启动`,
+    action: "进入",
+    run: () => joinServer(item, { session: entry.session })
+  })));
+  appendJoinGroup(box, "已在服务器中", busy.map(entry => ({
+    title: entry.name,
+    detail: `${linkStateText(entry.linkState)}${entry.linkAddress ? " · " + entry.linkAddress : ""} · 请先在游戏里退出当前服务器`,
+    action: "不可用",
+    disabled: true
+  })));
+  const matching = instances.filter(entry => !entry.running && instanceMatches(entry, item.minecraft));
   const packs = matching.filter(entry => entry.vanilla !== true);
   const vanilla = matching.filter(entry => entry.vanilla === true);
+  const others = instances.filter(entry => !entry.running && !instanceMatches(entry, item.minecraft));
   appendJoinGroup(box, "已安装客户端整合包", packs.map(entry => ({
-    title: entry.name, detail: `MC ${entry.minecraft || item.minecraft}`, action: "进入",
+    title: entry.name, detail: `MC ${entry.minecraft || item.minecraft} · 启动时注入 javaagent`, action: "启动",
     run: () => joinServer(item, { instance: entry.name })
   })));
   appendJoinGroup(box, "原版客户端", [
-    ...vanilla.map(entry => ({ title: entry.name, detail: `MC ${entry.minecraft}`, action: "进入", run: () => joinServer(item, { instance: entry.name }) })),
+    ...vanilla.map(entry => ({ title: entry.name, detail: `MC ${entry.minecraft} · 启动时注入 javaagent`, action: "启动", run: () => joinServer(item, { instance: entry.name }) })),
     ...(item.vanilla && item.minecraft ? [{ title: `原版 ${item.minecraft}`, detail: "没有原版实例时自动下载", action: "下载", run: () => joinServer(item, { choice: "vanilla" }) }] : [])
   ]);
+  appendJoinGroup(box, "其他已有游戏", others.map(entry => ({
+    title: entry.name, detail: `MC ${entry.minecraft || "版本未知"} · 与服务器版本不同，仍可启动进入`, action: "启动",
+    run: () => joinServer(item, { instance: entry.name, mismatch: true })
+  })));
   const seen = new Set();
   const offers = [...(item.packs || []), { id: "fabulously-optimized", name: "Fabulously Optimized", minecraft: item.minecraft, loader: "Fabric" }]
     .filter(offer => {
@@ -2685,7 +2727,8 @@ function joinRow(row) {
   const action = document.createElement("em");
   action.textContent = row.action;
   button.append(copy, action);
-  button.addEventListener("click", () => { ui["server-join"].close(); row.run(); });
+  if (row.disabled) button.disabled = true;
+  else button.addEventListener("click", () => { ui["server-join"].close(); row.run(); });
   return button;
 }
 function choiceButton(label, action) {
@@ -2695,10 +2738,23 @@ function choiceButton(label, action) {
   button.addEventListener("click", () => { ui["server-join"].close(); action(); });
   return button;
 }
+function linkStateText(state) {
+  return { waiting: "正在加载", ready: "在主菜单", connecting: "正在连接", connected: "已在服务器", disconnected: "未进服", unsupported: "javaagent 未适配，游戏继续运行", error: "上次进入失败，可重试" }[state] || "已启动";
+}
 function joinServer(item, extra) {
   postLauncher("joinServer", { id: item.id || "", address: item.address, minecraft: item.minecraft || "", vanilla: !!item.vanilla, ...extra });
 }
 ui["servers-refresh"]?.addEventListener("click", loadServers);
+ui["servers-add"]?.addEventListener("click", () => { if (!ui["local-server"].open) ui["local-server"].showModal(); ui["local-server-name"].focus(); });
+ui["local-server-cancel"]?.addEventListener("click", () => ui["local-server"].close());
+ui["close-local-server"]?.addEventListener("click", () => ui["local-server"].close());
+ui["local-server-form"]?.addEventListener("submit", event => {
+  event.preventDefault();
+  postLauncher("addLocalServer", { name: ui["local-server-name"].value.trim(), address: ui["local-server-address"].value.trim(), minecraft: ui["local-server-version"].value.trim() });
+  ui["local-server-form"].reset();
+  ui["local-server"].close();
+});
+ui["source-mclists"]?.addEventListener("change", () => { servers.includeMclists = ui["source-mclists"].checked; loadServers(); });
 ui["close-server-join"]?.addEventListener("click", () => ui["server-join"].close());
 ui["server-join-cancel"]?.addEventListener("click", () => ui["server-join"].close());
 loadServers();

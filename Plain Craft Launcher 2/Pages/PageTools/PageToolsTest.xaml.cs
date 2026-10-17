@@ -491,6 +491,11 @@ public partial class PageToolsTest
     {
         _ = ModMain.frmMain.ShowWebUiAsync();
     }
+    private void BtnMcNav_Click(object sender, MouseButtonEventArgs e)
+    {
+        ModBase.OpenWebsite("https://www.mcnav.net/");
+    }
+
 
 
     private async void BtnAchievementPreview_Click(object sender, MouseButtonEventArgs e)

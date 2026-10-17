@@ -74,11 +74,21 @@ public sealed class RunningInstanceCard : Border
         log.HorizontalAlignment = HorizontalAlignment.Left;
         log.Click += (_, _) => OpenLog();
         body.Children.Add(log);
-        var close = QuietButton("×");
-        close.Width = 28;
-        close.Height = 28;
-        close.FontSize = 16;
-        close.VerticalAlignment = VerticalAlignment.Top;
+        var close = new Button
+        {
+            Content = "×",
+            Width = 28,
+            Height = 28,
+            FontSize = 18,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            Foreground = new SolidColorBrush(Color.FromRgb(182, 187, 193)),
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Top,
+            ToolTip = "关闭游戏",
+            Template = IconButtonTemplate()
+        };
         close.Click += (_, _) => CloseGame();
         Grid.SetColumn(close, 1);
         grid.Children.Add(body);
@@ -96,6 +106,16 @@ public sealed class RunningInstanceCard : Border
         BorderThickness = new Thickness(1),
         Cursor = Cursors.Hand
     };
+    private static ControlTemplate IconButtonTemplate()
+    {
+        var template = new ControlTemplate(typeof(Button));
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        template.VisualTree = presenter;
+        return template;
+    }
+
 
     private static TextBlock Stat(string label) => new()
     {

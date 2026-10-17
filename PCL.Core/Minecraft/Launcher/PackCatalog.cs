@@ -30,8 +30,10 @@ public sealed record ServerDefinition
     public string Minecraft { get; init; } = "";
     public bool Vanilla { get; init; }
     public string Icon { get; init; } = "";
+    public bool Directory { get; init; }
     public string Website { get; init; } = "";
     public string Source { get; init; } = "";
+    public bool Local { get; init; }
     public IReadOnlyList<CatalogPackOffer> Packs { get; init; } = [];
 }
 
@@ -117,7 +119,7 @@ public static class PackCatalog
             {
                 ["id"] = server.Id, ["name"] = server.Name, ["description"] = server.Description, ["address"] = server.Address,
                 ["minecraft"] = server.Minecraft, ["vanilla"] = server.Vanilla, ["icon"] = server.Icon,
-                ["website"] = server.Website, ["source"] = server.Source,
+                ["website"] = server.Website, ["source"] = server.Source, ["kind"] = server.Directory ? "directory" : "server",
                 ["packs"] = server.Packs.Select(offer => new Dictionary<string, string>
                 {
                     ["id"] = offer.Id, ["name"] = offer.Name, ["minecraft"] = offer.Minecraft, ["loader"] = offer.Loader,
@@ -169,8 +171,14 @@ public static class PackCatalog
             string Url(string key) => Get(key) is { Length: > 0 } url ? HttpUri(url, source).AbsoluteUri : "";
             var id = RequireId(Get("id"), "服务器");
             if (result.Any(server => server.Id == id)) throw new InvalidDataException("服务器 ID 重复。");
+            var directory = item.TryGetProperty("kind", out var kind) && kind.ValueKind == JsonValueKind.String
+                && string.Equals(kind.GetString(), "directory", StringComparison.OrdinalIgnoreCase);
             var address = Get("address").Trim();
-            if (!IsAddress(address)) throw new InvalidDataException("服务器地址无效。");
+            if (directory)
+            {
+                if (address.Length > 0 && !IsAddress(address)) throw new InvalidDataException("资源来源地址无效。");
+            }
+            else if (!IsAddress(address)) throw new InvalidDataException("服务器地址无效。");
             var minecraft = Get("minecraft").Trim();
             if (minecraft.Length > 32 || minecraft.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_')))
                 throw new InvalidDataException("服务器 MC 版本无效。");
@@ -180,7 +188,7 @@ public static class PackCatalog
             {
                 Id = id, Name = RequireText(Get("name"), "服务器名称"), Description = Get("description"),
                 Address = address, Minecraft = minecraft, Vanilla = vanilla, Icon = Url("icon"),
-                Website = Url("website"), Source = Get("source"), Packs = offers
+                Website = Url("website"), Source = Get("source"), Directory = directory, Packs = offers
             });
         }
         return result;

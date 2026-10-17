@@ -35,6 +35,22 @@ internal static class RoomPackShareResolver
         pack!.Id, Bound(pack.Name, 80), Bound(pack.Version, 80), Bound(pack.Minecraft, 40), pack.FileName,
         pack.DownloadUrl, pack.Sha256, pack.ShareUrl, pack.SharePath) : null;
 
+    internal static RoomPackShare? FromPublicVersion(PackIdentity? identity, PackDownloadVersion? version)
+    {
+        if (identity is null || version is null) return null;
+        var source = version.Source == "modrinth" ? "modrinth" : version.Source == "curseforge" ? "curseforge" : "";
+        if (source.Length == 0) return null;
+        var id = source + "-" + version.ProjectId.ToLowerInvariant();
+        if (id.Length > 64) id = id[..64];
+        var minecraft = version.Minecraft.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? identity.MinecraftVersion;
+        return From(new PackDefinition
+        {
+            Id = id, Name = identity.Name, Version = version.Version, Minecraft = minecraft,
+            FileName = version.FileName, DownloadUrl = version.Url,
+            Sha256 = version.Algorithm == System.Security.Cryptography.HashAlgorithmName.SHA256 ? version.Hash : ""
+        });
+    }
+
     internal static bool Shareable(PackDefinition? pack)
     {
         if (pack is null || string.IsNullOrWhiteSpace(pack.DownloadUrl) && string.IsNullOrWhiteSpace(pack.ShareUrl)) return false;

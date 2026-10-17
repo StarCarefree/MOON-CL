@@ -305,26 +305,55 @@ internal sealed partial class WebUiController : IDisposable
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-            using var request = new HttpRequestMessage(HttpMethod.Get, "https://www.mclists.cn/");
-            request.Headers.TryAddWithoutValidation("Accept", "text/html");
-            using var response = await http.SendAsync(request);
+            http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+            http.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
+            http.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://www.mclists.cn/");
+            using var response = await http.GetAsync("https://www.mclists.cn/api/v2/servers?page=1&limit=50&sort=recommended");
             response.EnsureSuccessStatusCode();
-            var html = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("MCLists 没有返回服务器数组。");
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(html, @"href=[""'](?<url>[^""']+)[""'][^>]*>(?<name>[^<]{2,80})</a>", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            foreach (var item in data.EnumerateArray())
             {
-                var name = System.Net.WebUtility.HtmlDecode(match.Groups["name"].Value).Trim();
-                var url = match.Groups["url"].Value;
-                if (name.Length is < 2 or > 80 || !seen.Add(name) || url.StartsWith('#')) continue;
-                if (name.Contains("登录") || name.Contains("注册") || name.Contains("首页")) continue;
-                var website = Uri.TryCreate(new Uri("https://www.mclists.cn/"), url, out var absolute) ? absolute.AbsoluteUri : "https://www.mclists.cn/";
-                items.Add(new JsonObject { ["id"] = "mclists-" + items.Count, ["name"] = name, ["description"] = "来自 MCLists", ["website"] = website, ["address"] = "", ["minecraft"] = "", ["vanilla"] = false });
-                if (items.Count >= 60) break;
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var name = Text(item, "name");
+                var address = Text(item, "endpoint");
+                if (address.Length == 0) address = Text(item, "address");
+                var website = Text(item, "url");
+                if (name.Length is < 1 or > 120 || address.Length is < 1 or > 253 || !seen.Add(address)) continue;
+                if (!website.StartsWith("https://www.mclists.cn/", StringComparison.OrdinalIgnoreCase)) website = "https://www.mclists.cn/";
+                var version = Text(item, "version");
+                var category = item.TryGetProperty("category", out var categoryNode) && categoryNode.ValueKind == JsonValueKind.Object ? Text(categoryNode, "name") : "";
+                var description = Text(item, "description");
+                if (description.Length == 0) description = string.Join(" · ", new[] { category, version }.Where(part => part.Length > 0));
+                items.Add(new JsonObject
+                {
+                    ["id"] = "mclists-" + Text(item, "sid"),
+                    ["name"] = name,
+                    ["description"] = description,
+                    ["website"] = website,
+                    ["address"] = address,
+                    ["minecraft"] = version,
+                    ["vanilla"] = false,
+                    ["source"] = "mclists"
+                });
             }
-            if (items.Count == 0) message = "MCLists 页面没有解析出服务器，仍可使用 MCL 目录。";
+            var total = document.RootElement.TryGetProperty("meta", out var meta) && meta.TryGetProperty("total", out var totalNode) && totalNode.TryGetInt32(out var count) ? count : items.Count;
+            message = items.Count == 0 ? "MCLists 没有返回可进入的服务器。" : $"MCLists 推荐服务器 {items.Count} 个，目录共 {total} 个。";
         }
         catch (Exception ex) { message = "MCLists 暂时不可用：" + ex.Message; }
         core.PostWebMessageAsJson(new JsonObject { ["type"] = "serverList", ["items"] = items, ["message"] = message }.ToJsonString());
+    }
+    private static string Text(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value)) return "";
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => (value.GetString() ?? "").Trim(),
+            JsonValueKind.Number => value.GetRawText(),
+            _ => ""
+        };
     }
     private static string? ReadString(JsonObject message, string name) => message[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
     private static void OpenExternal(string? url)

@@ -11,6 +11,23 @@ namespace PCL;
 internal static class ServerUi
 {
     internal static readonly ServerManager Manager = new(Path.Combine(AppContext.BaseDirectory, "servers"));
+     internal static string SelectedGameDirectory()
+     {
+         var selected = ModFolder.mcFolderSelected;
+         if (string.IsNullOrWhiteSpace(selected)) throw new InvalidOperationException("请先在版本列表选择 Minecraft 文件夹。");
+         var root = Path.GetFullPath(selected.TrimEnd('\\', '/'));
+         Directory.CreateDirectory(root);
+         return root;
+     }
+ 
+     internal static void UseSelectedGameDirectory()
+     {
+         var root = Path.Combine(SelectedGameDirectory(), "servers");
+         Directory.CreateDirectory(root);
+         Manager.UseRoot(root);
+         Manager.JavaTempDirectory = Path.Combine(SelectedGameDirectory(), "tmp");
+         Directory.CreateDirectory(Manager.JavaTempDirectory);
+     }
     internal static Func<int> DownloadSource = () => 1;
     private static readonly Dictionary<string, ServerControlWindow> Windows = new();
 
@@ -66,10 +83,11 @@ internal static class ServerUi
         if (Windows.TryGetValue(profile.Id, out var window)) window.ReloadProfile();
     }
 
-    internal static ServerControlWindow Open(ServerProfile profile)
-    {
-        if (Windows.TryGetValue(profile.Id, out var existing)) { existing.Show(); existing.Activate(); return existing; }
-        Sessions.Add(Manager.GetSession(profile));
+     internal static ServerControlWindow Open(ServerProfile profile)
+     {
+         UseSelectedGameDirectory();
+         if (Windows.TryGetValue(profile.Id, out var existing)) { existing.Show(); existing.Activate(); return existing; }
+         Sessions.Add(Manager.GetSession(profile));
         var window = new ServerControlWindow(profile);
         Windows[profile.Id] = window;
         window.Closed += (_, _) => Windows.Remove(profile.Id);

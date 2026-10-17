@@ -4,6 +4,7 @@ using PCL.Core.App;
 using PCL.Core.App.Essentials;
 using PCL.Core.App.IoC;
 using PCL.Core.Utils.OS;
+using PCL.Core.Utils.Secret;
 
 namespace PCL;
 
@@ -23,6 +24,9 @@ internal static class Program
             while (!Debugger.IsAttached) Thread.Sleep(50);
         }
 #endif
+        // 识别码依赖 WMI 查询，首次调用可能明显耗时。尽早丢到后台，
+        // 让它与生命周期加载并行，而不是在启动线程上干等。
+        Identify.Prewarm();
         // Preloading tasks
         ApplicationService.Loading = static () =>
         {

@@ -73,7 +73,7 @@ public partial class HybridRooms
         if (!_initialized || _closed) return;
         var opening = Overlay.Visibility != Visibility.Visible;
         if (Overlay.Visibility != Visibility.Visible) _overlayFocus = Keyboard.FocusedElement;
-        foreach (var panel in new FrameworkElement[] { CreateForm, JoinForm, SettingsForm, RouteEditor, ToolsForm })
+        foreach (var panel in new FrameworkElement[] { CreateForm, JoinForm, SettingsForm, RouteEditor, ToolsForm, ConnectionForm, GameChoiceForm, ExitForm })
             panel.Visibility = Show(ReferenceEquals(panel, form));
         OverlayTitle.Text = title;
         Overlay.Visibility = Visibility.Visible;
@@ -85,6 +85,7 @@ public partial class HybridRooms
     private void CloseOverlay()
     {
         if (!_initialized || _closed) return;
+        if (_choiceCompletion is { Task.IsCompleted: false }) { _operation?.Cancel(); _choiceCompletion.TrySetCanceled(); }
         Overlay.Visibility = Visibility.Collapsed;
         LobbyContent.IsEnabled = true;
         SaveSettings();
@@ -113,6 +114,7 @@ public partial class HybridRooms
     {
         if (_session?.IsHost != true || _busy || _closed) return;
         PrepareRouteDefaults();
+        _nextLanCheck = DateTime.MinValue; RefreshHostLan();
         RouteBasic.Visibility = Visibility.Visible; RouteAdvanced.Visibility = Visibility.Collapsed;
         OpenOverlay(RouteEditor, "发布游戏线路", RouteName);
     }
@@ -142,6 +144,7 @@ public partial class HybridRooms
     {
         if (_session?.IsHost == true) OpenOverlay(RouteEditor, "发布游戏线路", RouteName);
         else OpenOverlay(SettingsForm, "玩家与房间服务", PlayerName);
+        RenderFlow();
     }
     private void Lobby_SizeChanged(object sender, SizeChangedEventArgs e)
     {

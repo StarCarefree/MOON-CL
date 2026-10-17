@@ -15,7 +15,11 @@
   双击 scripts\Publish-SingleExe.bat
   或 .\scripts\Publish-SingleExe.ps1 -Architecture x64 -Configuration Release
 .EXAMPLE
-  .\scripts\Publish-SingleExe.ps1 -Architecture x64 -FixedRuntimeDirectory D:\wv2\fixed-x64 -ReadyToRun
+  .\scripts\Publish-SingleExe.ps1 -Architecture x64 -NoReadyToRun
+ .EXAMPLE
+   双击 scripts\Publish-SingleExe-NoR2R.bat
+   或 .\scripts\Publish-SingleExe.ps1 -Architecture x64 -NoReadyToRun
+   ReadyToRun 关闭，单 exe 更小，首次启动会 JIT。
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +36,9 @@ param(
 
     [string]$FixedRuntimeDirectory = '',
 
-    [switch]$ReadyToRun,
+    # ReadyToRun 默认开启：预先 AOT 编译，避免用户首次启动时 JIT 造成的卡顿。
+    # 仅在需要排查 JIT 相关问题时才用 -NoReadyToRun 关掉（会显著增加启动耗时）。
+    [switch]$NoReadyToRun,
 
     # Troubleshooting: restore the old transient build output / server behavior.
     [switch]$NoBuildCache,
@@ -169,15 +175,14 @@ function Get-BuildOutputDirectory {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $repoKey = ([System.BitConverter]::ToString($sha.ComputeHash($repoBytes))).Replace('-', '').Substring(0, 16) }
     finally { $sha.Dispose() }
-    $mode = if ($ReadyToRun) { 'r2r' } else { 'il' }
+    $mode = if ($NoReadyToRun) { 'il' } else { 'r2r' }
     return (Join-Path $script:ScratchRoot "pcl-cy-single-exe-cache\$repoKey\$Architecture\$Configuration\$mode\build\")
 }
 
 function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
     $rid = "win-$Architecture"
     $platform = Get-MsbuildPlatform $Architecture
-    $readyToRunValue = 'false'
-    if ($ReadyToRun) { $readyToRunValue = 'true' }
+    $readyToRunValue = if ($NoReadyToRun) { 'false' } else { 'true' }
     $publishArgs = @(
         'publish', $script:ProjectFile,
         '-c', $Configuration,
@@ -197,6 +202,7 @@ function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
         '-p:SatelliteResourceLanguages=zh-CN%3Bzh-Hans%3Bzh-TW%3Bzh-Hant%3Ben%3Ben-US%3Ben-GB',
         '-p:TieredCompilation=true',
         '-p:TieredCompilationQuickJit=true',
+        '-p:TieredCompilationQuickJitForLoops=true',
         '-p:TieredPGO=true',
         '-p:ServerGarbageCollection=false',
         '-p:DebuggerSupport=false',

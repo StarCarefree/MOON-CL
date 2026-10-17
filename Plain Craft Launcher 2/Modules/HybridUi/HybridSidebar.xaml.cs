@@ -65,6 +65,7 @@ public partial class HybridSidebar : UserControl
     private bool _versionListHover;
     public event EventHandler<HybridNavigationEventArgs>? NavigationRequested;
     private bool _synchronising;
+    private bool? _versionsLoaded;
     private string _versionsSignature = "";
     private readonly HashSet<string> _seenLaunching = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, ImageSource> Icons = new(StringComparer.OrdinalIgnoreCase);
@@ -117,6 +118,13 @@ public partial class HybridSidebar : UserControl
     }
 
     public void PlayEntrance() => HybridMotion.SlideIn(Nav.Children.OfType<FrameworkElement>().Append(AccountButton).ToArray());
+
+    public void SetVersionsLoaded(bool loaded)
+    {
+        if (_versionsLoaded == loaded) return;
+        _versionsLoaded = loaded;
+        HybridMotion.VersionList(VersionBlock, loaded);
+    }
 
     private void Navigate_Click(object sender, RoutedEventArgs e)
     {
@@ -195,6 +203,7 @@ public partial class HybridSidebar : UserControl
             Empty.Visibility = instances.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         finally { _synchronising = false; }
+        SetVersionsLoaded(true);
         RefreshActivity();
         if (newlyLaunching && Versions.Items.Count > 0)
             Versions.Dispatcher.BeginInvoke(ScrollVersionsToTop, DispatcherPriority.Loaded);

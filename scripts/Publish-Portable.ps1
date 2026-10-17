@@ -616,6 +616,12 @@ function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
         '-p:IncludeNativeLibrariesForSelfExtract=true'
         '-p:PublishTrimmed=false'
         '-p:EnableTrimAnalyzer=false'
+        '-p:PublishReadyToRun=true'
+        '-p:TieredCompilation=true'
+        '-p:TieredCompilationQuickJit=true'
+        '-p:TieredCompilationQuickJitForLoops=true'
+        '-p:TieredPGO=true'
+        '-p:ServerGarbageCollection=false'
         "-p:RuntimeIdentifier=$rid"
         "-p:Platform=$platform"
         ('-p:OutputPath=' + (Join-Path $script:WorkRoot 'build\'))

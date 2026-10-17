@@ -64,24 +64,13 @@ public sealed record PackIdentity
         "modrinth" => "Modrinth",
         _ => "本地整合包"
     };
-    public string SidebarLine
+    public string SidebarLine => IntroLine(FirstLine(Description), 72, " · ");
+    public string HeroText => IntroLine(Regex.Replace(Description.Trim(), @"[ \t]+", " "), 420, "\n");
+    private string IntroLine(string text, int limit, string join)
     {
-        get
-        {
-            var text = FirstLine(Description);
-            if (text.Length == 0) text = Name;
-            if (text.Length > 72) text = text[..72].Trim() + "…";
-            return text.Length == 0 ? SourceLabel : SourceLabel + " · " + text;
-        }
-    }
-    public string HeroText
-    {
-        get
-        {
-            var text = Regex.Replace(Description.Trim(), @"[ \t]+", " ");
-            if (text.Length > 420) text = text[..420].Trim() + "…";
-            return text.Length == 0 ? SourceLabel : SourceLabel + "\n" + text;
-        }
+        if (text.Length == 0) return "";
+        if (text.Length > limit) text = text[..limit].Trim() + "…";
+        return SourceLabel + join + text;
     }
     private static string FirstLine(string value)
     {
@@ -195,7 +184,6 @@ public static class PackIdentityResolver
         var source = winner.Item is null ? "local" : winner.Item.Source is "mcmod" or "curseforge" or "modrinth" ? winner.Item.Source : "local";
         var description = winner.Item?.Description ?? "";
         if (description.Length == 0) description = FirstText(cf.Item?.Description, mr.Item?.Description, clues.Summary);
-        if (description.Length == 0) description = "未在 MC百科、CurseForge 或 Modrinth 找到匹配介绍。";
         var ids = new[] { mc.Item, cf.Item, mr.Item }.Where(item => item is not null && Score(clues, item) >= AcceptScore).Cast<PackCandidate>().ToArray();
         return new PackIdentity
         {

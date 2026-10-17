@@ -91,6 +91,10 @@ public sealed class PackCatalogTest
         Assert.AreEqual("1.21.1", document.Servers[0].Minecraft);
         Assert.IsTrue(document.Servers[0].Vanilla);
         Assert.AreEqual(PackCatalog.FabulouslyOptimizedUrl, document.Servers[0].Packs[0].Modrinth);
+        Assert.IsFalse(document.Servers[0].Directory);
+        var directory = PackCatalog.ParseDocument("""{"servers":[{"id":"mclists","kind":"directory","name":"MCLists","address":"www.mclists.cn","website":"https://www.mclists.cn/","source":"mclists"}]}""", new Uri("https://example.com/index.json"));
+        Assert.IsTrue(directory.Servers[0].Directory);
+        Assert.AreEqual("www.mclists.cn", directory.Servers[0].Address);
         Assert.ThrowsExactly<InvalidDataException>(() => PackCatalog.ParseDocument("""{"servers":[{"id":"bad","name":"Bad","address":"javascript:alert(1)","minecraft":"1.21.1"}]}""", new Uri("https://example.com/index.json")));
     }
 

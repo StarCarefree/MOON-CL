@@ -51,6 +51,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PCL.Core\PCL.Core.csproj" />
+    <Compile Include="..\Plain Craft Launcher 2\Modules\HybridUi\RoomFlowPresentation.cs" Link="UI\RoomFlowPresentation.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Net\**" />

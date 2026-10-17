@@ -32,10 +32,10 @@ try {
     Invoke-DotNetPublish 'Invoke-TestDotNet' (Join-Path $testRoot 'publish')
     Assert-True 'configurations-isolated' ($script:CapturedArgs -notcontains $first)
     $script:Configuration = 'Release'
-    $script:ReadyToRun = $true
+    $script:NoReadyToRun = $true
     Invoke-DotNetPublish 'Invoke-TestDotNet' (Join-Path $testRoot 'publish')
     Assert-True 'ready-to-run-isolated' ($script:CapturedArgs -notcontains $first)
-    $script:ReadyToRun = $false
+    $script:NoReadyToRun = $false
     $script:RepoRoot = Join-Path $testRoot 'other-repo'
     Invoke-DotNetPublish 'Invoke-TestDotNet' (Join-Path $testRoot 'publish')
     Assert-True 'repositories-isolated' ($script:CapturedArgs -notcontains $first)

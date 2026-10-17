@@ -3438,6 +3438,7 @@
     <sys:String x:Key="Tools.Test.LaunchCount.Title">View launch count</sys:String>
     <sys:String x:Key="Tools.Test.WebUi.Failed">The system WebView2 page failed to open. Install the WebView2 Runtime and try again.</sys:String>
     <sys:String x:Key="Tools.Test.WebUi.Title">System WebView2 pages</sys:String>
+    <sys:String x:Key="Tools.Test.McNav.Title">MC Nav</sys:String>
     <sys:String x:Key="WebUi.Page.Host">Page host</sys:String>
     <sys:String x:Key="Tools.Test.ServerQuery.Title">Check server</sys:String>
     <sys:String x:Key="Tools.Test.Title">Utilities</sys:String>

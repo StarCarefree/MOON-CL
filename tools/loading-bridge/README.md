@@ -1,39 +1,15 @@
-# MOONCL / Mod Loading Screen native progress bridge
+# MOONCL loading progress
 
-A 9 KiB Java 8 agent plus headless IPC relay. Sources are maintained here; the generated JAR is embedded as a launcher WPF resource. No Fabric/ASM dependency is shipped by this bridge.
+The launcher owns this progress. It does not load, connect to, or rewrite `mod-loading-screen`.
 
-## Integration
+For Fabric/Quilt the launcher prepends this Java agent. The agent reads `mods/*.jar` metadata (`fabric.mod.json` or `quilt.mod.json`) and reports every entrypoint type as its own phase, in Fabric/Quilt order:
 
-Compatible producer: `G:\exmo\mod-loading-screen`, Gaming32 Mod Loading Screen derivative, local built version 1.0.5. Only Fabric/Quilt are supported by that producer. The producer must already be installed as a mod or configured as a Java agent. MOONCL does not install or replace it automatically.
+`preLaunch` -> `main` -> `client` / `server` -> `client_init` / `server_init` -> other declared types.
 
-When the native loading window is enabled, MOONCL prepends `-javaagent:<bridge.jar>` for Fabric/Quilt and provides two process-scoped environment variables:
+Each phase reports the real entrypoint count (`current/total`) and the entrypoint identifier with its mod id, then a final `ready`. Unknown types are appended rather than dropped, so a pack never hides a startup phase.
 
-- `MOONCL_MLS_PROGRESS_FILE`: unique temporary snapshot file.
-- `MOONCL_MLS_PROGRESS_TOKEN`: random per-launch identity.
+The launcher passes `MOONCL_MLS_TARGET` (instance name) for the title, `MOONCL_MLS_PROGRESS_FILE` for the snapshot and `MOONCL_MLS_PROGRESS_TOKEN` as the per-launch identity.
 
-The agent changes the `CONSTANT_String` holding MLS's **display subprocess main class**, not the class definition or game entrypoints. It adds the bridge JAR to the `java.class.path` property used by MLS to build that child's command. The original game's class loader/classpath is not replaced. Original MLS still produces and owns the pipe. The replacement child consumes all packets, including after the user dismisses MOONCL's window, so a closed native window cannot break the producer's pipe and terminate the game.
+This is a declaration-driven walk: the phase order and every entrypoint come from the pack, but the pacing follows the walk rather than the loader's own callbacks. Forge and NeoForge are unchanged and still finish from the game window without an invented percentage.
 
-Unknown class variants fail open. Headless, Android or `mod-loading-screen.disableIpc=true` do not produce the compatible display pipe; no game percentage is claimed. The bridge does not alter PeerGuard, updater, checksums, authentication, or mod transformations. Packs with policies forbidding additional Java agents must permit the bridge themselves; no integrity policy is bypassed.
-
-## Original private IPC
-
-Java `DataOutputStream`: byte packet ID, byte argument count, then `writeUTF` strings (modified UTF-8). It is NOT normal UTF-8, a socket, or game log text.
-
-Handled: 0 entrypoint begin/count, 1 mod entrypoint invocation, 2 entrypoint end, 4 custom bar creation, 5 custom bar operations, 6 target title, 7 updater activity, 255 final-entrypoint completion. Packet 6 is the MLS window title (`StarRailExpress` plus the first non-builtin mod name and version) and stays separate from the current bar. Packet 3 memory and 8 source dates do not advance loading percentages. Unknown totals are indeterminate. Each entrypoint type/custom bar has its own percentage, not an invented whole-game estimate.
-
-The relay atomically writes bounded JSON protocol 1 snapshots with `token`, `status` (`loading`, `ready`, `unavailable`), `stage`, `detail`, `target`, `current`, `total`. It publishes a 1 s heartbeat while the pipe is open. EOF is a disconnected feed, not successful completion. MLS's packet 255 means its final entrypoint completed; MOONCL also waits for its existing game-window readiness signal. This does not measure subsequent world loading or guarantee all resource reload work has completed.
-
-## Build / verify
-
-From the repository root:
-
-```powershell
-.\scripts\Build-LoadingBridge.ps1 -JavaHome 'C:\Program Files\Zulu\zulu-21'
-.\scripts\Test-LoadingBridge.ps1 -JavaHome 'C:\Program Files\Zulu\zulu-21' `
-  -MlsJar 'G:\exmo\mod-loading-screen\build\libs\mod-loading-screen-1.0.5.jar' `
-  -FabricLoaderJar '<path to compatible fabric-loader.jar>'
-```
-
-JDK 9+ is required to build with `--release 8`; the result runs on Java 8+. Test calls the real producer JAR's own IPC methods in a scratch working directory, checks 1/4 entrypoint and 42/100 custom progress, modified UTF Unicode/NUL, and completion. It does not start Minecraft or run the reference agent's updater/guard.
-
-Protocol reference: `src/main/java/io/github/gaming32/modloadingscreen/ActualLoadingScreen.java` in the supplied MIT-licensed reference project (Gaming32 Mod Loading Screen). No reference JAR or third-party bytecode library is bundled here.
+The agent never changes loader methods, mod jars, PeerGuard, checksums, or the game classpath. Closing the launcher window only stops reading the temporary progress file.

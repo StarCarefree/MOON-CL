@@ -21,14 +21,15 @@ public sealed class MlsProgressChannel : IDisposable
         Directory.CreateDirectory(DirectoryPath);
     }
 
-    public void Configure(ProcessStartInfo startInfo, string bridgeJar)
+    public void Configure(ProcessStartInfo startInfo, string bridgeJar, string? target = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MlsProgressChannel));
         if (!File.Exists(bridgeJar) || bridgeJar.Contains('"')) throw new IOException("Invalid progress bridge JAR");
-        // Must precede an existing MLS agent so its display class has not been loaded yet.
         startInfo.Arguments = "-javaagent:\"" + bridgeJar + "\" " + startInfo.Arguments;
         startInfo.Environment["MOONCL_MLS_PROGRESS_FILE"] = SnapshotPath;
         startInfo.Environment["MOONCL_MLS_PROGRESS_TOKEN"] = Token;
+        if (string.IsNullOrWhiteSpace(target)) startInfo.Environment.Remove("MOONCL_MLS_TARGET");
+        else startInfo.Environment["MOONCL_MLS_TARGET"] = target;
     }
 
     public bool Poll(LaunchProgressState state)

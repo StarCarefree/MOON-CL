@@ -9,7 +9,7 @@ namespace PCL.Core.Minecraft.Server;
 /// <summary>Plugin targets are launcher-managed server identities, never paths supplied by a web page.</summary>
 public static class ServerPluginTargets
 {
-    public static bool SupportsPlugins(ServerProfile profile) => profile.Loader.ToString() is "Paper" or "Purpur";
+     public static bool SupportsPlugins(ServerProfile profile) => profile.Loader.ToString() is "Paper" or "Purpur" or "Spigot" or "Folia";
     public static bool MatchesVersion(ServerProfile profile, IEnumerable<string> versions)
     {
         var exact = versions.Where(v => !string.IsNullOrWhiteSpace(v) && v.Any(char.IsDigit) && v.Contains('.')).ToArray();
@@ -19,11 +19,11 @@ public static class ServerPluginTargets
     {
         var loaders = environments.ToArray();
         // CurseForge Bukkit class files have no per-file loader tags. Folia-only jars are not Paper plugins.
-        return SupportsPlugins(profile) && (loaders.Length == 0 || loaders.Any(v => v is "bukkit" or "spigot" or "paper" || v == "purpur" && profile.Loader.ToString() == "Purpur"));
+         return SupportsPlugins(profile) && (loaders.Length == 0 || loaders.Any(v => v is "bukkit" or "spigot" or "paper" || v == "purpur" && profile.Loader == ServerLoader.Purpur || v == "folia" && profile.Loader == ServerLoader.Folia));
     }
     public static string PluginsDirectory(ServerManager manager, ServerProfile profile)
     {
-        if (!SupportsPlugins(profile) || string.IsNullOrWhiteSpace(profile.EntryPoint)) throw new InvalidOperationException("请选择已完成安装的 Paper / Purpur 插件服务器，原版与模组服不能加载 Bukkit 插件。");
+         if (!SupportsPlugins(profile) || string.IsNullOrWhiteSpace(profile.EntryPoint)) throw new InvalidOperationException("请选择已完成安装的 Paper / Purpur / Spigot / Folia 插件服务器，原版与模组服不能加载 Bukkit 插件。");
         var installed = manager.List().FirstOrDefault(p => p.Id == profile.Id) ?? throw new InvalidOperationException("服务端不在当前管理目录中。");
         if (installed.Loader != profile.Loader || installed.MinecraftVersion != profile.MinecraftVersion || installed.EntryPoint != profile.EntryPoint)
             throw new InvalidOperationException("服务器配置已变化，请重新选择目标。");

@@ -33,7 +33,7 @@ internal sealed class ServerInstallWindow : Window
         var header = new StackPanel { Margin = new Thickness(26, 20, 26, 10) };
         var title = ServerUi.Text(profile is null ? "创建服务端" : "继续安装服务端", 25); title.FontWeight = FontWeights.SemiBold;
         header.Children.Add(title);
-        header.Children.Add(ServerUi.Text("Vanilla / Paper / Purpur / NeoForge / Fabric   ·   独立安装，不影响客户端", 12, muted: true));
+         header.Children.Add(ServerUi.Text("Vanilla / Paper / Purpur / Spigot / Folia / NeoForge / Fabric   ·   独立安装，不影响客户端", 12, muted: true));
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
 
         var footer = new StackPanel { Margin = new Thickness(26, 12, 26, 14) };
@@ -41,11 +41,12 @@ internal sealed class ServerInstallWindow : Window
         _progress.SetResourceReference(Control.ForegroundProperty, "Hybrid.Accent");
         _progress.SetResourceReference(Control.BackgroundProperty, "Hybrid.Line");
         footer.Children.Add(_progress);
-        _status = ServerUi.Text("服务端将独立保存在启动器 servers 目录。", 12, muted: true);
-        _status.ToolTip = ServerUi.Manager.GetDirectory(_profile); footer.Children.Add(_status);
-        var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
-        _cancel = ServerUi.Button("取消安装", (_, _) => _work?.Cancel()); _cancel.IsEnabled = false;
+         _status = ServerUi.Text("服务端将保存在当前版本列表所选的 Minecraft 目录中。", 12, muted: true);
+         try { ServerUi.UseSelectedGameDirectory(); _status.ToolTip = ServerUi.Manager.GetDirectory(_profile); } catch (Exception ex) { _status.ToolTip = ex.Message; }
+         footer.Children.Add(_status);
+         _cancel = ServerUi.Button("取消并删除", (_, _) => _work?.Cancel()); _cancel.IsEnabled = false;
         _install = ServerUi.Button("安装并打开控制台", Install_Click, primary: true);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         actions.Children.Add(_cancel); actions.Children.Add(_install); footer.Children.Add(actions);
         var footerBorder = new Border { Child = footer, BorderThickness = new Thickness(0, 1, 0, 0) };
         footerBorder.SetResourceReference(Border.BorderBrushProperty, "Hybrid.Line");
@@ -79,18 +80,20 @@ internal sealed class ServerInstallWindow : Window
             _editor.Apply(_profile);
             if ((!string.IsNullOrWhiteSpace(_script.Text) || !string.IsNullOrWhiteSpace(_installer.Text)) && _trust.IsChecked != true)
                 throw new InvalidOperationException("请先确认信任所选本地安装器或脚本。外部程序可执行任意代码。");
-            ServerUi.Manager.DownloadSource = ServerUi.DownloadSource();
+             ServerUi.UseSelectedGameDirectory();
+             ServerUi.Manager.DownloadSource = ServerUi.DownloadSource();
             ServerUi.Manager.Save(_profile); _saved = true;
+            Title = "正在安装 · " + _profile.Name;
             _work = new CancellationTokenSource();
             _editor.IsEnabled = _sources.IsEnabled = _install.IsEnabled = false;
             _cancel.IsEnabled = true; _progress.Visibility = Visibility.Visible; _install.Content = "正在安装…";
-            _status.Text = "正在安装，可在控制面板查看实时日志；此窗口可取消。";
+            _status.Text = "正在安装到 " + ServerUi.Manager.GetDirectory(_profile) + "。取消会停止安装并删除这次未完成的文件。";
             ServerUi.Open(_profile); _refresh();
             await ServerUi.Manager.InstallAsync(_profile, Optional(_pack.Text), Optional(_installer.Text), Optional(_script.Text), _trust.IsChecked == true, _work.Token);
             var build = string.IsNullOrWhiteSpace(_profile.LoaderVersion) ? "" : "实际构建 " + _profile.LoaderVersion + "。";
             _status.Text = "安装成功。" + build + "请在控制面板确认 EULA 后启动服务端。";
         }
-        catch (OperationCanceledException) { _status.Text = "安装已取消，可检查日志后重试。"; }
+         catch (OperationCanceledException) { _status.Text = "安装已取消，未完成的服务端文件已删除。"; }
         catch (Exception ex) { _status.Text = "安装失败：" + ex.Message; ServerUi.Error(ex); }
         finally
         {
@@ -113,7 +116,7 @@ internal sealed class ServerInstallWindow : Window
         if (_work is not null)
         {
             e.Cancel = true;
-            if (MessageBox.Show("安装仍在进行。取消安装？", "服务端安装", MessageBoxButton.YesNo) == MessageBoxResult.Yes) _work.Cancel();
+             if (MessageBox.Show("取消安装并删除这次未完成的文件？", "服务端安装", MessageBoxButton.YesNo) == MessageBoxResult.Yes) _work.Cancel();
         }
         else if (_saved) _refresh();
     }
@@ -121,39 +124,45 @@ internal sealed class ServerInstallWindow : Window
 
 internal sealed class ServerProfileEditor : StackPanel
 {
-    private readonly TextBox _name, _minecraft, _version, _java, _min, _max, _jvm, _entry;
-    private readonly ComboBox _loader;
-    private readonly TextBlock _versionLabel, _help, _mirror, _runtimeSummary;
-    private TextBlock? _versions;
-    internal event Action? LoaderChanged;
-    internal ServerLoader SelectedLoader => _loader.SelectedItem is LoaderItem item ? item.Loader : ServerLoader.Vanilla;
-
-    internal ServerProfileEditor(ServerProfile profile, bool installing = false)
-    {
-        var identity = ServerUi.Section("版本信息");
-        _name = ServerUi.Field(identity, "服务端名称", profile.Name);
-        var loader = new StackPanel(); loader.Children.Add(ServerUi.Text("加载器", 12, muted: true));
-        _loader = new ComboBox { Margin = new Thickness(0, 0, 0, 10), IsEnabled = installing };
-        foreach (ServerLoader item in Enum.GetValues<ServerLoader>()) _loader.Items.Add(new LoaderItem(item));
-        _loader.SelectedItem = FindLoader(profile.Loader);
-        loader.Children.Add(_loader);
-        var minecraft = new StackPanel(); _minecraft = ServerUi.Field(minecraft, "Minecraft 版本", profile.MinecraftVersion);
-        var version = new StackPanel(); _version = ServerUi.Field(version, "加载器版本", profile.LoaderVersion);
-        _versionLabel = (TextBlock)version.Children[0];
-        identity.Children.Add(Columns(loader, minecraft, version));
-        _help = ServerUi.Text("", 11, muted: true); _mirror = ServerUi.Text("", 11, muted: true);
-        identity.Children.Add(_help); identity.Children.Add(_mirror);
-        if (installing)
-        {
-            identity.Children.Add(ServerUi.Button("查询可用版本", QueryVersions));
-            _versions = ServerUi.Text("", 11, muted: true); identity.Children.Add(_versions);
-        }
-        _loader.SelectionChanged += (_, _) => UpdateLoaderHelp();
-        _version.TextChanged += (_, _) => UpdateLoaderHelp();
-        UpdateLoaderHelp();
-        _minecraft.IsReadOnly = _version.IsReadOnly = !installing;
-        Children.Add(ServerUi.Card(identity));
-
+     private readonly TextBox _name, _java, _min, _max, _jvm, _entry;
+     private readonly ComboBox _loader, _minecraft, _version;
+     private readonly TextBlock _versionLabel, _help, _mirror, _runtimeSummary;
+     private TextBlock? _versions;
+     private int _versionQuery;
+     internal event Action? LoaderChanged;
+     internal ServerLoader SelectedLoader => _loader.SelectedItem is LoaderItem item ? item.Loader : ServerLoader.Vanilla;
+ 
+     internal ServerProfileEditor(ServerProfile profile, bool installing = false)
+     {
+         var identity = ServerUi.Section("版本信息");
+         _name = ServerUi.Field(identity, "服务端名称", profile.Name);
+         var loader = new StackPanel(); loader.Children.Add(ServerUi.Text("加载器", 12, muted: true));
+         _loader = new ComboBox { Margin = new Thickness(0, 0, 0, 10), IsEnabled = installing };
+         foreach (ServerLoader item in Enum.GetValues<ServerLoader>()) _loader.Items.Add(new LoaderItem(item));
+         _loader.SelectedItem = FindLoader(profile.Loader);
+         loader.Children.Add(_loader);
+         var minecraft = new StackPanel(); minecraft.Children.Add(ServerUi.Text("Minecraft 版本", 12, muted: true));
+         _minecraft = new ComboBox { Margin = new Thickness(0, 0, 0, 10), IsEditable = true, IsEnabled = installing, Text = profile.MinecraftVersion };
+         minecraft.Children.Add(_minecraft);
+         var version = new StackPanel(); version.Children.Add(ServerUi.Text("加载器版本", 12, muted: true));
+         _versionLabel = (TextBlock)version.Children[0];
+         _version = new ComboBox { Margin = new Thickness(0, 0, 0, 10), IsEditable = true, IsEnabled = installing, Text = profile.LoaderVersion };
+         version.Children.Add(_version);
+         identity.Children.Add(Columns(loader, minecraft, version));
+         _help = ServerUi.Text("", 11, muted: true); _mirror = ServerUi.Text("", 11, muted: true);
+         identity.Children.Add(_help); identity.Children.Add(_mirror);
+         if (installing)
+         {
+             _versions = ServerUi.Text("", 11, muted: true); identity.Children.Add(_versions);
+             _loader.SelectionChanged += async (_, _) => { UpdateLoaderHelp(); await LoadGameVersionsAsync(); };
+             _minecraft.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent, new TextChangedEventHandler(async (_, _) => await LoadLoaderVersionsAsync()));
+             _minecraft.SelectionChanged += async (_, _) => await LoadLoaderVersionsAsync();
+             Loaded += async (_, _) => await LoadGameVersionsAsync();
+         }
+         else _loader.SelectionChanged += (_, _) => UpdateLoaderHelp();
+         _version.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent, new TextChangedEventHandler((_, _) => UpdateLoaderHelp()));
+         UpdateLoaderHelp();
+         Children.Add(ServerUi.Card(identity));
         var runtime = new StackPanel();
         _java = ServerUi.Field(runtime, "Java 可执行文件 · java 或完整 java.exe 路径", profile.JavaPath);
         runtime.Children.Add(ServerUi.Button("选择 Java…", (_, _) =>
@@ -192,8 +201,8 @@ internal sealed class ServerProfileEditor : StackPanel
 
     internal void Reload(ServerProfile profile)
     {
-        _name.Text = profile.Name; _loader.SelectedItem = FindLoader(profile.Loader);
-        _minecraft.Text = profile.MinecraftVersion; _version.Text = profile.LoaderVersion;
+         _name.Text = profile.Name; _loader.SelectedItem = FindLoader(profile.Loader);
+         _minecraft.Text = profile.MinecraftVersion; _version.Text = profile.LoaderVersion;
         _java.Text = profile.JavaPath; _min.Text = profile.MinMemoryMb.ToString(); _max.Text = profile.MaxMemoryMb.ToString();
         _jvm.Text = profile.JvmArguments; _entry.Text = profile.EntryPoint;
         UpdateLoaderHelp();
@@ -206,7 +215,7 @@ internal sealed class ServerProfileEditor : StackPanel
             throw new InvalidOperationException("内存需要是有效整数：256 ≤ 最小内存 ≤ 最大内存 ≤ 1048576 MiB。");
         if (_loader.SelectedItem is not LoaderItem loader) throw new InvalidOperationException("请选择加载器。");
         profile.Name = _name.Text.Trim(); profile.Loader = loader.Loader;
-        profile.MinecraftVersion = _minecraft.Text.Trim(); profile.LoaderVersion = _version.Text.Trim();
+         profile.MinecraftVersion = _minecraft.Text.Trim(); profile.LoaderVersion = _version.Text.Trim();
         profile.JavaPath = _java.Text.Trim(); profile.MinMemoryMb = min; profile.MaxMemoryMb = max;
         profile.JvmArguments = _jvm.Text.Trim(); profile.EntryPoint = _entry.Text.Trim();
     }
@@ -216,55 +225,89 @@ internal sealed class ServerProfileEditor : StackPanel
         return (LoaderItem)_loader.Items[0]!;
     }
 
-    private void UpdateLoaderHelp()
-    {
-        var loader = SelectedLoader;
-        var blank = string.IsNullOrWhiteSpace(_version.Text);
-        _versionLabel.Text = loader switch
-        {
-            ServerLoader.Vanilla => "构建 · 原版可留空",
-            ServerLoader.Paper => "Paper 构建 · 留空为稳定版",
-            ServerLoader.Purpur => "Purpur 构建 · 留空为最新",
-            ServerLoader.NeoForge => "NeoForge 版本",
-            _ => "Fabric 版本"
-        };
-        _help.Text = loader switch
-        {
-            ServerLoader.Vanilla => "填写精确 Minecraft 版本，例如 1.21.1。构建可留空。安装只下载 server.jar，不启动服务端，也不自动同意 EULA。",
-            ServerLoader.Paper or ServerLoader.Purpur => (blank ? "构建留空将选择稳定版/最新构建，安装后写入实际构建号。" : "将安装所填构建号。") + "安装只下载 server.jar，不执行。",
-            _ => "例如 Minecraft 1.21.1，NeoForge 21.1.172 或 Fabric 0.16.14。"
-        };
-        _mirror.Text = loader == ServerLoader.Vanilla
-            ? "原版可使用 BMCLAPI 镜像，顺序跟随下载源：镜像优先 / 官方优先 / 仅官方。"
-            : ServerCoreCatalog.MirrorNotice(loader, 1);
-        LoaderChanged?.Invoke();
-    }
-
-    private async void QueryVersions(object sender, RoutedEventArgs e)
-    {
-        if (_versions is null) return;
-        try
-        {
-            ServerUi.Manager.DownloadSource = ServerUi.DownloadSource();
-            _versions.Text = "正在查询版本…";
-            var versions = await ServerUi.Manager.ListCoreVersionsAsync(SelectedLoader);
-            var count = Math.Min(24, versions.Count);
-            var shown = new string[count];
-            for (var i = 0; i < count; i++) shown[i] = versions[i];
-            _versions.Text = count == 0 ? "没有查询到版本。" : "可用版本：" + string.Join("、", shown);
-        }
-        catch (Exception ex) { _versions.Text = "版本查询失败：" + ex.Message; }
-    }
+     private void UpdateLoaderHelp()
+     {
+         var loader = SelectedLoader;
+         var blank = string.IsNullOrWhiteSpace(_version.Text);
+         _versionLabel.Text = loader switch
+         {
+             ServerLoader.Vanilla => "构建 · 原版可留空",
+             ServerLoader.Paper => "Paper 构建",
+             ServerLoader.Folia => "Folia 构建",
+             ServerLoader.Purpur => "Purpur 构建",
+             ServerLoader.Spigot => "Spigot 版本",
+             ServerLoader.NeoForge => "NeoForge 版本",
+             _ => "Fabric 版本"
+         };
+         _help.Text = loader switch
+         {
+             ServerLoader.Vanilla => "先选择 Minecraft 版本。构建可留空。安装只下载 server.jar，不启动服务端，也不自动同意 EULA。",
+             ServerLoader.Paper or ServerLoader.Folia or ServerLoader.Purpur => (blank ? "构建留空将选择稳定版或最新构建，安装后写入实际构建号。" : "将安装所选构建。") + "安装只下载 server.jar，不执行。",
+             ServerLoader.Spigot => "选择 Minecraft 版本后，下拉框会列出 GetBukkit 已提供的 Spigot JAR。安装按目录 SHA-256 校验，不运行 BuildTools。",
+             _ => "选择 Minecraft 版本后，下拉框会列出对应的 NeoForge 或 Fabric 版本。"
+         };
+         _mirror.Text = loader == ServerLoader.Vanilla
+             ? "原版可使用 BMCLAPI 镜像，顺序跟随下载源：镜像优先 / 官方优先 / 仅官方。"
+             : ServerCoreCatalog.MirrorNotice(loader, 1);
+         LoaderChanged?.Invoke();
+     }
+ 
+     private async Task LoadGameVersionsAsync()
+     {
+         if (_versions is null) return;
+         var query = ++_versionQuery;
+         var loader = SelectedLoader;
+         var current = _minecraft.Text;
+         try
+         {
+             ServerUi.Manager.DownloadSource = ServerUi.DownloadSource();
+             _versions.Text = "正在查询 Minecraft 版本…";
+             var versions = await ServerUi.Manager.ListCoreVersionsAsync(loader);
+             if (query != _versionQuery || loader != SelectedLoader) return;
+             Fill(_minecraft, versions, current);
+             _versions.Text = versions.Count == 0 ? "没有查询到 Minecraft 版本。" : "";
+             await LoadLoaderVersionsAsync();
+         }
+         catch (Exception ex) { if (query == _versionQuery) _versions.Text = "版本查询失败：" + ex.Message; }
+     }
+ 
+     private async Task LoadLoaderVersionsAsync()
+     {
+         if (_versions is null || SelectedLoader == ServerLoader.Vanilla) { if (SelectedLoader == ServerLoader.Vanilla) _version.Items.Clear(); return; }
+         var query = _versionQuery;
+         var loader = SelectedLoader;
+         var minecraft = _minecraft.Text.Trim();
+         var current = _version.Text;
+         if (minecraft.Length == 0) { _version.Items.Clear(); return; }
+         try
+         {
+             _versions.Text = "正在查询 " + loader + " 版本…";
+             var versions = await ServerUi.Manager.ListLoaderVersionsAsync(loader, minecraft);
+             if (query != _versionQuery || loader != SelectedLoader || minecraft != _minecraft.Text.Trim()) return;
+             Fill(_version, versions, current);
+             _versions.Text = versions.Count == 0 ? "这个 Minecraft 版本没有可用的 " + loader + " 版本。" : "";
+         }
+         catch (Exception ex) { if (query == _versionQuery) _versions.Text = "版本查询失败：" + ex.Message; }
+     }
+ 
+     private static void Fill(ComboBox box, IReadOnlyList<string> values, string current)
+     {
+         box.Items.Clear();
+         foreach (var value in values) box.Items.Add(value);
+         box.Text = string.IsNullOrWhiteSpace(current) && values.Count > 0 ? values[0] : current;
+     }
 
     private sealed class LoaderItem(ServerLoader loader)
     {
-        public ServerLoader Loader { get; } = loader;
-        public override string ToString() => loader switch
-        {
-            ServerLoader.Vanilla => "Vanilla 原版",
-            ServerLoader.Paper => "Paper",
-            ServerLoader.Purpur => "Purpur",
-            _ => loader.ToString()
-        };
+         public ServerLoader Loader { get; } = loader;
+         public override string ToString() => loader switch
+         {
+             ServerLoader.Vanilla => "Vanilla 原版",
+             ServerLoader.Paper => "Paper",
+             ServerLoader.Purpur => "Purpur",
+             ServerLoader.Spigot => "Spigot",
+             ServerLoader.Folia => "Folia",
+             _ => loader.ToString()
+         };
     }
 }

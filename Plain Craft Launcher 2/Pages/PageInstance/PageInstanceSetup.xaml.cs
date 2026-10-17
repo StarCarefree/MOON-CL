@@ -993,6 +993,10 @@ public partial class PageInstanceSetup
             return;
         if (isReverting)
             return;
+        // 首次打开页面时 Loaded 可能晚于侧边栏动画把 AniControlEnabled 减回去，
+        // 程序化 SelectedIndex 会被当成用户修改。没有被换掉的旧项就不是用户操作。
+        if (e.RemovedItems.Count == 0)
+            return;
         if (ModMain.MyMsgBox(
                 Lang.Text("Instance.Setup.Options.InstanceIsolation.Message"),
                 Lang.Text("Common.Dialog.Warning"), Lang.Text("Setup.Launch.Advanced.Renderer.Warning.Confirm"), Lang.Text("Common.Action.Cancel"), isWarn: true) == 2)
@@ -1097,8 +1101,12 @@ public partial class PageInstanceSetup
             : identity.SourceLabel + (string.IsNullOrWhiteSpace(identity.Name) ? "" : " · " + identity.Name) +
               (string.IsNullOrWhiteSpace(identity.Version) ? "" : " · " + identity.Version) +
               (string.IsNullOrWhiteSpace(identity.MinecraftVersion) ? "" : " · MC " + identity.MinecraftVersion);
-        LabPackIntro.Text = identity?.Description ?? "";
-         BtnPackSite.Visibility = string.IsNullOrWhiteSpace(_packWebsite) ? Visibility.Collapsed : Visibility.Visible;
+        LabPackIntro.Text = identity is null
+            ? ""
+            : string.IsNullOrWhiteSpace(identity.Description)
+                ? "未在 MC百科、CurseForge 或 Modrinth 找到匹配介绍。"
+                : identity.Description;
+        BtnPackSite.Visibility = string.IsNullOrWhiteSpace(_packWebsite) ? Visibility.Collapsed : Visibility.Visible;
          ShowPackRelease();
      }
  

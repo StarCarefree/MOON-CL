@@ -95,19 +95,32 @@ public sealed partial class StartupService
         var memory = KernelInterop.GetPhysicalMemoryBytes();
         const int memoryDiv = 1024 * 1024;
         info.Append("\n可用内存: ").Append(memory.Available / memoryDiv).Append('/').Append(memory.Total / memoryDiv).Append(" MiB");
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        var cp = Encoding.GetEncoding(0);
-        info.Append("\n默认代码页: ").Append(cp.EncodingName).Append(" (").Append(cp.CodePage).Append(')');
         info.Append("\n管理员身份: ").Append(ProcessInterop.IsAdmin());
-        info.Append("\n识别码: ").Append(Identify.LauncherId);
         Context.Info(info.ToString());
+        // 识别码依赖 WMI 查询，首次调用可能耗时数百毫秒。放到后台输出，
+        // 同时提前触发计算，让它与后续加载流程并行而不是阻塞启动线程。
+        Basics.RunInNewThread(
+            () =>
+            {
+                Context.Info("识别码: " + Identify.LauncherId);
+                Context.Info("默认代码页: " + _GetDefaultCodePage());
+            },
+            "Identify Prewarm");
         return;
-        string GetArchitectureName(Architecture arch) => arch switch
+
+        static string GetArchitectureName(Architecture arch) => arch switch
         {
             Architecture.X64 => "x64",
             Architecture.Arm64 => "ARM64",
             _ => arch.ToString()
         };
+    }
+
+    private static string _GetDefaultCodePage()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var cp = Encoding.GetEncoding(0);
+        return $"{cp.EncodingName} ({cp.CodePage})";
     }
 
     [LifecycleStart]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+ using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -8,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace PCL.Core.Minecraft.Server;
 
-public enum ServerLoader { NeoForge, Fabric, Vanilla, Paper, Purpur }
+ public enum ServerLoader { NeoForge, Fabric, Vanilla, Paper, Purpur, Spigot, Folia }
 
 public sealed class ServerProfile
 {
@@ -33,7 +34,7 @@ public static class ServerCommands
 {
     public static void Validate(ServerProfile profile)
     {
-        if (!Guid.TryParseExact(profile.Id, "N", out _)) throw new ArgumentException("服务端 ID 无效。");
+         if (!IsFolderId(profile.Id)) throw new ArgumentException("服务端 ID 无效。");
         if (string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length > 150 || profile.Name.IndexOfAny(['\r', '\n', '\0']) >= 0)
             throw new ArgumentException("服务端名称无效。");
         if (!Enum.IsDefined(profile.Loader)) throw new ArgumentException("不支持的服务端加载器。");
@@ -48,6 +49,30 @@ public static class ServerCommands
         if (profile.RequiredJavaMajor is < 8 or > 64) throw new ArgumentException("所需 Java 主版本无效。");
         _ = ParseJvmArguments(profile.JvmArguments);
     }
+ 
+     internal static bool IsFolderId(string? id)
+     {
+         if (string.IsNullOrWhiteSpace(id) || id != Path.GetFileName(id) || id is "." or ".." || id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
+         return id.Length <= 80;
+     }
+ 
+     internal static string FolderName(string name)
+     {
+         var chars = name.Trim().Select(ch => Path.GetInvalidFileNameChars().Contains(ch) || char.IsControl(ch) ? '-' : ch).ToArray();
+         var folder = new string(chars).Trim().TrimEnd('.', ' ');
+         if (folder.Length == 0) folder = "server";
+         if (folder.Length > 80) folder = folder[..80].TrimEnd('.', ' ');
+         if (folder is "." or ".." || ReservedFolder(folder)) folder = "_" + folder;
+         return folder;
+     }
+ 
+     private static bool ReservedFolder(string name)
+     {
+         var bare = Path.GetFileNameWithoutExtension(name);
+         return bare.Equals("CON", StringComparison.OrdinalIgnoreCase) || bare.Equals("PRN", StringComparison.OrdinalIgnoreCase)
+             || bare.Equals("AUX", StringComparison.OrdinalIgnoreCase) || bare.Equals("NUL", StringComparison.OrdinalIgnoreCase)
+             || (bare.Length == 4 && (bare.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || bare.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && char.IsDigit(bare[3]));
+     }
 
     public static IReadOnlyList<string> ParseJvmArguments(string text)
     {
@@ -68,37 +93,43 @@ public static class ServerCommands
         return result;
     }
 
-    public static ProcessStartInfo Java(ServerProfile profile, string directory)
-    {
-        var info = new ProcessStartInfo(profile.JavaPath) { WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-        SetJavaEnvironment(info, profile.JavaPath);
-        return info;
-    }
+     public static ProcessStartInfo Java(ServerProfile profile, string directory, string? tempDirectory = null)
+     {
+         var info = new ProcessStartInfo(profile.JavaPath) { WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,
+             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
+         if (!string.IsNullOrWhiteSpace(tempDirectory))
+         {
+             var temp = Path.GetFullPath(tempDirectory);
+             Directory.CreateDirectory(temp);
+             info.ArgumentList.Add("-Djava.io.tmpdir=" + temp);
+         }
+         SetJavaEnvironment(info, profile.JavaPath);
+         return info;
+     }
 
-    public static ProcessStartInfo Start(ServerProfile profile, string directory)
+     public static ProcessStartInfo Start(ServerProfile profile, string directory, string? tempDirectory = null)
     {
-        Validate(profile);
-        var entry = ServerPaths.Inside(directory, profile.EntryPoint);
-        if (!File.Exists(entry)) throw new FileNotFoundException("未找到启动入口，请先完成服务端安装或检查版本设置。", entry);
-        var extension = Path.GetExtension(entry).ToLowerInvariant();
-        if (extension is ".bat" or ".cmd" or ".ps1") return Script(profile, directory, entry);
-        var info = Java(profile, directory);
+         Validate(profile);
+         var entry = ServerPaths.Inside(directory, profile.EntryPoint);
+         if (!File.Exists(entry)) throw new FileNotFoundException("未找到启动入口，请先完成服务端安装或检查版本设置。", entry);
+         var extension = Path.GetExtension(entry).ToLowerInvariant();
+         if (extension is ".bat" or ".cmd" or ".ps1") return Script(profile, directory, entry, tempDirectory);
+         var info = Java(profile, directory, tempDirectory);
         info.ArgumentList.Add($"-Xms{profile.MinMemoryMb}M"); info.ArgumentList.Add($"-Xmx{profile.MaxMemoryMb}M");
         foreach (var argument in ParseJvmArguments(profile.JvmArguments)) info.ArgumentList.Add(argument);
         if (extension == ".jar") { info.ArgumentList.Add("-jar"); info.ArgumentList.Add(profile.EntryPoint); }
         else if (Path.GetFileName(entry).Equals("win_args.txt", StringComparison.OrdinalIgnoreCase)) info.ArgumentList.Add("@" + profile.EntryPoint.Replace('\\', '/'));
         else throw new ArgumentException("启动入口必须为服务端 JAR、win_args.txt 或启动脚本。");
-        info.ArgumentList.Add("nogui"); return info;
-    }
+         info.ArgumentList.Add("nogui"); return info;
+     }
 
-    public static ProcessStartInfo Installer(ServerProfile profile, string directory, string jar)
-    {
-        if (IsDirectCore(profile.Loader)) throw new ArgumentException("原版、Paper、Purpur 直接下载 server.jar，不会执行 Fabric 或 NeoForge 安装器。");
-        if (string.IsNullOrWhiteSpace(profile.MinecraftVersion) || string.IsNullOrWhiteSpace(profile.LoaderVersion))
-            throw new ArgumentException("请填写精确的 Minecraft 和加载器版本。");
-        var info = Java(profile, directory); info.ArgumentList.Add("-jar"); info.ArgumentList.Add(jar);
+     public static ProcessStartInfo Installer(ServerProfile profile, string directory, string jar, string? tempDirectory = null)
+     {
+         if (IsDirectCore(profile.Loader)) throw new ArgumentException("原版、Paper、Purpur 直接下载 server.jar，不会执行 Fabric 或 NeoForge 安装器。");
+         if (string.IsNullOrWhiteSpace(profile.MinecraftVersion) || string.IsNullOrWhiteSpace(profile.LoaderVersion))
+             throw new ArgumentException("请填写精确的 Minecraft 和加载器版本。");
+         var info = Java(profile, directory, tempDirectory); info.ArgumentList.Add("-jar"); info.ArgumentList.Add(jar);
         if (profile.Loader == ServerLoader.NeoForge) info.ArgumentList.Add("--installServer");
         else if (profile.Loader == ServerLoader.Fabric)
             foreach (var arg in new[] { "server", "-mcversion", profile.MinecraftVersion, "-loader", profile.LoaderVersion, "-downloadMinecraft", "-dir", directory }) info.ArgumentList.Add(arg);
@@ -106,9 +137,9 @@ public static class ServerCommands
         return info;
     }
 
-    public static bool IsDirectCore(ServerLoader loader) => loader is ServerLoader.Vanilla or ServerLoader.Paper or ServerLoader.Purpur;
-
-    public static bool SupportsPlugins(ServerLoader loader) => loader is ServerLoader.Paper or ServerLoader.Purpur;
+     public static bool IsDirectCore(ServerLoader loader) => loader is ServerLoader.Vanilla or ServerLoader.Paper or ServerLoader.Purpur or ServerLoader.Spigot or ServerLoader.Folia;
+ 
+     public static bool SupportsPlugins(ServerLoader loader) => loader is ServerLoader.Paper or ServerLoader.Purpur or ServerLoader.Spigot or ServerLoader.Folia;
 
     public static int? ParseJavaMajor(string? text)
     {
@@ -155,13 +186,13 @@ public static class ServerCommands
             var message = $"当前 Java {actual} 低于所需 Java {required}。请更换 java.exe 后重试。";
             log?.Invoke(message); throw new InvalidOperationException(message);
         }
-        log?.Invoke($"Java {actual} 满足所需 Java {required}。");
-    }
+         log?.Invoke($"Java {actual} 满足所需 Java {required}。");
+     }
 
-    public static ProcessStartInfo Script(ServerProfile profile, string directory, string script)
-    {
-        var path = ServerPaths.Inside(directory, Path.GetRelativePath(directory, script));
-        var info = Java(profile, directory);
+     public static ProcessStartInfo Script(ServerProfile profile, string directory, string script, string? tempDirectory = null)
+     {
+         var path = ServerPaths.Inside(directory, Path.GetRelativePath(directory, script));
+         var info = Java(profile, directory, tempDirectory);
         if (Path.GetExtension(path).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
         {
             info.FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");

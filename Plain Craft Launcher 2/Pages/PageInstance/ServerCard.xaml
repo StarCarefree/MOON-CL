@@ -14,7 +14,7 @@
             <ColumnDefinition Width="7" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="350" />
-            <ColumnDefinition Width="60" />
+            <ColumnDefinition Width="84" />
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="1*" />
@@ -57,6 +57,11 @@
 
         <StackPanel Grid.Row="1" Grid.Column="5" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center"
                     Margin="0,0,4,0">
+            <local:MyIconButton
+                Width="24"
+                SvgIcon="lucide/circle-plus"
+                ToolTip="添加到浏览"
+                Click="BtnPublish_Click" />
             <local:MyIconButton
                 Width="24"
                 SvgIcon="lucide/play"

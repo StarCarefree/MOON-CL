@@ -1,6 +1,7 @@
 using System;
 using System.Management;
 using System.Text;
+using System.Threading;
 using PCL.Core.Logging;
 using PCL.Core.Utils.Exts;
 using PCL.Core.Utils.Hash;
@@ -9,8 +10,28 @@ namespace PCL.Core.Utils.Secret;
 
 public class Identify
 {
-    public static byte[] RawId { get => field ??= _GetRawId(); } = null!;
-    public static string LauncherId { get => field ??= _getLauncherId(); } = null!;
+    private static readonly Lazy<byte[]> _rawId = new(_GetRawId, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<string> _launcherId = new(_GetLauncherId, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// 设备原始识别数据。首次访问会触发 WMI 查询，代价较高，请优先使用 <see cref="LauncherId"/>。
+    /// </summary>
+    public static byte[] RawId => _rawId.Value;
+
+    /// <summary>
+    /// 启动器识别码。计算过程含 WMI 查询，首次访问可能明显耗时。
+    /// </summary>
+    public static string LauncherId => _launcherId.Value;
+
+    /// <summary>
+    /// 在后台线程预热识别码。WMI 首次查询往往比后续访问慢得多，
+    /// 提前在后台触发可以让它与其它加载流程并行，而不是阻塞启动线程。
+    /// </summary>
+    public static void Prewarm()
+    {
+        ThreadPool.UnsafeQueueUserWorkItem(static _ => { _ = LauncherId; }, null);
+    }
 
     private static byte[] _GetRawId()
     {
@@ -47,12 +68,13 @@ public class Identify
         return string.Empty;
     }
 
-    private static string _getLauncherId()
+    private static string _GetLauncherId()
     {
         try
         {
             var prefix = "PCL-CE|"u8.ToArray();
-            var ctx = RawId;
+            // 取副本后再清零，避免把 RawId 缓存本身抹掉
+            var ctx = (byte[])RawId.Clone();
             var suffix = "|LauncherId"u8.ToArray();
 
             var buffer = new byte[prefix.Length + ctx.Length + suffix.Length];

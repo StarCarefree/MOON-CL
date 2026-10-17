@@ -68,4 +68,22 @@ public sealed class PackIdentityVersionRegressionTest
         }
         finally { Directory.Delete(root, true); }
     }
+
+    [TestMethod]
+    public void MissingCatalogMatchIsNotADescription()
+    {
+        var identity = PackIdentityResolver.Choose(new PackClues { Name = "SRE", FileName = "SRE4.3", Version = "4.3" });
+        Assert.AreEqual("", identity.Description);
+        Assert.AreEqual("", identity.SidebarLine);
+        Assert.AreEqual("", identity.HeroText);
+        Assert.AreEqual("本地整合包", identity.SourceLabel);
+    }
+
+    [TestMethod]
+    public void RealSummaryStillBecomesIntro()
+    {
+        var identity = PackIdentityResolver.Choose(new PackClues { Name = "SRE", Summary = "哈比列车" });
+        Assert.AreEqual("哈比列车", identity.Description);
+        Assert.AreEqual("本地整合包 · 哈比列车", identity.SidebarLine);
+    }
 }

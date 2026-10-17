@@ -40,8 +40,9 @@ internal static class Program
     private static int Main(string[] args)
     {
         var selfCheck = HasFlag(args, "--self-check");
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
+        // WinForms 的视觉样式与控件渲染初始化开销不小，而绝大多数启动只需要
+        // 「校验 -> 解压 -> 拉起」这条快路径，根本不显示任何窗口。
+        // 因此推迟到真正要创建窗口时再初始化，见 EnsureVisualStyles。
         try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
         try
         {
@@ -56,9 +57,27 @@ internal static class Program
                 try { Console.Error.WriteLine(ex.ToString()); } catch { }
                 return 1;
             }
+            EnsureVisualStyles();
             MessageBox.Show(ex.Message, "MOONCL", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+    }
+
+    private static bool _visualStylesReady;
+
+    /// <summary>
+    /// 在第一次创建窗口之前初始化 WinForms 视觉样式。重复调用无副作用。
+    /// </summary>
+    private static void EnsureVisualStyles()
+    {
+        if (_visualStylesReady) return;
+        _visualStylesReady = true;
+        try
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+        }
+        catch { }
     }
 
     private static bool HasFlag(string[] args, string flag)
@@ -117,6 +136,7 @@ internal static class Program
             var missing = CollectMissing();
             if (missing.Count > 0)
             {
+                EnsureVisualStyles();
                 using (var form = new ConsentForm(this, args, missing))
                 {
                     Application.Run(form);
@@ -350,6 +370,7 @@ internal static class Program
             psi.EnvironmentVariables["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = bundle;
             psi.EnvironmentVariables["DOTNET_TieredPGO"] = "1";
             psi.EnvironmentVariables["DOTNET_TC_QuickJit"] = "1";
+            psi.EnvironmentVariables["DOTNET_TC_QuickJitForLoops"] = "1";
             psi.EnvironmentVariables["DOTNET_ReadyToRun"] = "1";
             if (clearRoot)
             {
@@ -992,6 +1013,7 @@ internal static class Program
         public static void ShowWhile(Action work)
         {
             Exception error = null;
+            EnsureVisualStyles();
             using (var form = new Form())
             {
                 form.Text = "MOONCL";

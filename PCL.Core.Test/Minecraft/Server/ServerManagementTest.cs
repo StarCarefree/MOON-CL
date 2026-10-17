@@ -40,13 +40,23 @@ public sealed class ServerManagementTest
     public void ProfilesAreIsolatedAndSessionsAreShared()
     {
         var other = new ServerProfile { Name = "另一个服务端" }; _manager.Save(other);
-        Assert.AreNotEqual(_manager.GetDirectory(_profile), _manager.GetDirectory(other));
-        Assert.AreEqual(2, _manager.List().Count);
-        Assert.AreSame(_manager.GetSession(_profile), new ServerManager(_manager.RootDirectory).GetSession(_profile));
-        Assert.IsFalse(Directory.Exists(Path.Combine(_root, "versions")));
-        Assert.Throws<ArgumentException>(() => _manager.GetDirectory(new ServerProfile { Id = "../escape" }));
+         Assert.AreEqual("测试服务端", _profile.Id);
+         Assert.AreEqual(Path.Combine(_manager.RootDirectory, "测试服务端"), _manager.GetDirectory(_profile));
+         Assert.AreEqual(Path.Combine(_manager.RootDirectory, "另一个服务端"), _manager.GetDirectory(other));
+         Assert.AreEqual(2, _manager.List().Count);
+         Assert.AreSame(_manager.GetSession(_profile), new ServerManager(_manager.RootDirectory).GetSession(_profile));
+         Assert.IsFalse(Directory.Exists(Path.Combine(_root, "versions")));
+         Assert.Throws<ArgumentException>(() => _manager.GetDirectory(new ServerProfile { Id = "../escape" }));
         _profile.EntryPoint = "../outside.jar";
         Assert.Throws<ArgumentException>(() => _manager.Save(_profile));
+        var guid = Guid.NewGuid().ToString("N");
+        var renamed = new ServerProfile { Id = guid, Name = "测试服务端" };
+        Directory.CreateDirectory(Path.Combine(_manager.RootDirectory, guid));
+        File.WriteAllText(Path.Combine(_manager.RootDirectory, guid, ".mooncl-server.json"), "{\"Id\":\"" + guid + "\",\"EntryPoint\":\"\"}");
+        _manager.Save(renamed);
+        Assert.AreEqual("测试服务端-2", renamed.Id);
+        Assert.IsFalse(Directory.Exists(Path.Combine(_manager.RootDirectory, guid)));
+        Assert.IsTrue(Directory.Exists(Path.Combine(_manager.RootDirectory, "测试服务端-2")));
     }
 
     [TestMethod]
@@ -68,16 +78,17 @@ public sealed class ServerManagementTest
     public void CommandsUseSelectedLoaderJavaMemoryAndSafeArguments()
     {
         var directory = _manager.GetDirectory(_profile);
-        var fabric = ServerCommands.Installer(_profile, directory, "installer with spaces.jar");
-        CollectionAssert.AreEqual(new[] { "-jar", "installer with spaces.jar", "server", "-mcversion", "1.21.1", "-loader", "0.16.14", "-downloadMinecraft", "-dir", directory }, fabric.ArgumentList.ToArray());
-        _profile.Loader = ServerLoader.NeoForge; _profile.LoaderVersion = "21.1.172";
-        CollectionAssert.AreEqual(new[] { "-jar", "installer.jar", "--installServer" }, ServerCommands.Installer(_profile, directory, "installer.jar").ArgumentList.ToArray());
+         var temp = Path.Combine(directory, "tmp");
+         var fabric = ServerCommands.Installer(_profile, directory, "installer with spaces.jar", temp);
+         CollectionAssert.AreEqual(new[] { "-Djava.io.tmpdir=" + Path.GetFullPath(temp), "-jar", "installer with spaces.jar", "server", "-mcversion", "1.21.1", "-loader", "0.16.14", "-downloadMinecraft", "-dir", directory }, fabric.ArgumentList.ToArray());
+         _profile.Loader = ServerLoader.NeoForge; _profile.LoaderVersion = "21.1.172";
+         CollectionAssert.AreEqual(new[] { "-Djava.io.tmpdir=" + Path.GetFullPath(temp), "-jar", "installer.jar", "--installServer" }, ServerCommands.Installer(_profile, directory, "installer.jar", temp).ArgumentList.ToArray());
         var entry = "libraries/net/neoforged/neoforge/21.1.172/win_args.txt";
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(directory, entry))!); File.WriteAllText(Path.Combine(directory, entry), "test");
         _profile.EntryPoint = entry; _profile.JvmArguments = "-Dtitle=\"a b\" -XX:+UseG1GC";
-        var start = ServerCommands.Start(_profile, directory);
-        Assert.AreEqual("java", start.FileName); Assert.AreEqual(directory, start.WorkingDirectory);
-        CollectionAssert.AreEqual(new[] { "-Xms1024M", "-Xmx4096M", "-Dtitle=a b", "-XX:+UseG1GC", "@" + entry, "nogui" }, start.ArgumentList.ToArray());
+         var start = ServerCommands.Start(_profile, directory, temp);
+         Assert.AreEqual("java", start.FileName); Assert.AreEqual(directory, start.WorkingDirectory);
+         CollectionAssert.AreEqual(new[] { "-Djava.io.tmpdir=" + Path.GetFullPath(temp), "-Xms1024M", "-Xmx4096M", "-Dtitle=a b", "-XX:+UseG1GC", "@" + entry, "nogui" }, start.ArgumentList.ToArray());
         Assert.Throws<ArgumentException>(() => ServerCommands.ParseJvmArguments("-Xmx8G"));
         Assert.Throws<ArgumentException>(() => ServerCommands.ParseJvmArguments("-jar other.jar"));
         _profile.JavaPath = "javaw.exe"; Assert.Throws<ArgumentException>(() => _manager.Save(_profile));
@@ -153,8 +164,10 @@ public sealed class ServerManagementTest
         Assert.Throws<InvalidOperationException>(() => _manager.WriteProperties(_profile, new Dictionary<string, string> { ["motd"] = "blocked" }));
         await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync());
         await WaitFor(() => session.GetLog().Any(line => line.EndsWith("waiting", StringComparison.Ordinal)));
-        cancellation.Cancel(); await Assert.ThrowsAsync<OperationCanceledException>(() => install);
-        Assert.IsFalse(session.IsInstalling); _manager.Save(_profile);
+         cancellation.Cancel(); await Assert.ThrowsAsync<OperationCanceledException>(() => install);
+         Assert.IsFalse(session.IsInstalling);
+         Assert.IsFalse(Directory.Exists(_manager.GetDirectory(_profile)));
+         Assert.IsFalse(_manager.List().Any(item => item.Id == _profile.Id));
     }
 
     [TestMethod]

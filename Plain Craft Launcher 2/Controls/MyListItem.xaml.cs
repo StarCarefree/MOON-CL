@@ -227,6 +227,32 @@ public partial class MyListItem : IMyRadio
 
 
     /// <summary>
+    ///     副文本行：标签与描述并排放在同一行，避免两者叠在同一个单元格里。
+    /// </summary>
+    public Grid PanInfo
+    {
+        get
+        {
+            if (field is not null)
+                return field;
+            var newLine = new Grid
+            {
+                IsHitTestVisible = false,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4d, 0d, 0d, 0d)
+            };
+            newLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            newLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1d, GridUnitType.Star) });
+            SetColumn(newLine, 3);
+            SetColumnSpan(newLine, 2);
+            SetRow(newLine, 2);
+            PanBack.Children.Add(newLine);
+            field = newLine;
+            return field;
+        }
+    }
+
+    /// <summary>
     ///     Tags 的存放 StackPanel
     /// </summary>
     public StackPanel PanTags
@@ -239,12 +265,12 @@ public partial class MyListItem : IMyRadio
             {
                 IsHitTestVisible = false,
                 Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(3.5d, 0d, -3, 0d)
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0d, 0d, 4d, 0d)
             };
-            SetColumn(newStack, 3);
-            SetRow(newStack, 2);
-            PanBack.Children.Add(newStack);
+            SetColumn(newStack, 0);
+            PanInfo.Children.Add(newStack);
             field = newStack;
             return field;
         }
@@ -299,17 +325,17 @@ public partial class MyListItem : IMyRadio
                     SnapsToDevicePixels = false,
                     UseLayoutRounding = false,
                     HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center,
                     IsHitTestVisible = false,
                     TextTrimming = TextTrimming.CharacterEllipsis,
+                    TextWrapping = TextWrapping.NoWrap,
                     Visibility = Visibility.Collapsed,
                     FontSize = 12d,
-                    Margin = new Thickness(4d, 0d, 0d, 0d),
+                    Margin = new Thickness(0d),
                     Opacity = 0.6d
                 };
-                SetColumn(lab, 3);
-                SetColumnSpan(lab, 2);
-                SetRow(lab, 2);
-                PanBack.Children.Add(lab);
+                SetColumn(lab, 1);
+                PanInfo.Children.Add(lab);
                 field = lab;
             }
 

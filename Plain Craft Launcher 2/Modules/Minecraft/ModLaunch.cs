@@ -2833,7 +2833,9 @@ public static partial class ModLaunch
         startInfo.RedirectStandardError = true;
         startInfo.CreateNoWindow = noJavaw;
         startInfo.Arguments = mcLaunchArgument;
-        _launchSession.Value?.Presentation?.PrepareProcess(startInfo, false);
+        StartupAgentLaunch.Prepare(startInfo, mcLaunchJavaSelected.Installation.MajorVersion,
+            mcLaunchJavaSelected.Installation.Is64Bit);
+        _launchSession.Value?.Presentation?.PrepareProcess(startInfo, LaunchingInstance.Info.HasFabric || LaunchingInstance.Info.HasQuilt);
         var gameLink = GameLinkLaunch.Prepare(startInfo, LaunchingInstance);
         gameProcess.StartInfo = startInfo;
 

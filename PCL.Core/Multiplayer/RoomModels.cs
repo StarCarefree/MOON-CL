@@ -99,7 +99,7 @@ public sealed record RoomPackShare(string Id = "", string Name = "", string Vers
             throw new ArgumentException("整合包文件名必须是 .zip 或 .mrpack。");
         var download = CheckUrl(DownloadUrl, "下载地址"); var share = CheckUrl(ShareUrl, "分享地址");
         var hash = Sha256 ?? "";
-        if (hash.Length > 0 && !Regex.IsMatch(hash, "^[0-9a-fA-F]{64}$")) throw new ArgumentException("整合包 SHA256 无效。");
+        if (hash.Length > 0 && !Regex.IsMatch(hash, "^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$|^[0-9a-fA-F]{128}$")) throw new ArgumentException("整合包校验值无效。");
         var path = SharePath ?? "";
         if (path.Length > 512 || path.Any(char.IsControl) || path.Contains("..") || path.Contains('\\'))
             throw new ArgumentException("整合包分享路径无效。");

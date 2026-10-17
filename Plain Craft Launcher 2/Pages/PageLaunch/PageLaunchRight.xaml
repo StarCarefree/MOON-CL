@@ -49,7 +49,7 @@
             <local:MyCard Margin="0,0,0,16" Title="{DynamicResource Launch.Right.Log.Title}" x:Name="PanLog">
                 <TextBlock x:Name="LabLog" Margin="22,42,22,20" TextWrapping="Wrap" FontSize="13" LineHeight="22" />
             </local:MyCard>
-            <StackPanel x:Name="PanRunning" Margin="0,8,0,0" HorizontalAlignment="Center" MaxWidth="720" />
+            <StackPanel x:Name="PanRunning" Margin="0,8,0,0" HorizontalAlignment="Left" MaxWidth="720" />
         </StackPanel>
     </local:MyScrollViewer>
 </local:MyPageRight>

@@ -41,7 +41,9 @@ public sealed class GameLinkSession : IDisposable
     public void Configure(ProcessStartInfo info, string agentJar, string? mappings = null, string? runtimeMappings = null)
     {
         if (!File.Exists(agentJar)) throw new FileNotFoundException("联机 Agent 文件不存在", agentJar);
-        info.Arguments = $"-javaagent:\"{agentJar}\" " + info.Arguments;
+        var existing = info.Arguments ?? "";
+        if (!existing.Contains("-javaagent:\"" + agentJar + "\"", StringComparison.OrdinalIgnoreCase))
+            info.Arguments = "-javaagent:\"" + agentJar + "\" " + existing;
         info.Environment["MOONCL_LINK_PORT"] = ((IPEndPoint)_listener.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
         info.Environment["MOONCL_LINK_TOKEN"] = _token;
         if (!string.IsNullOrEmpty(mappings)) info.Environment["MOONCL_LINK_MAPPINGS"] = mappings;

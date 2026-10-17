@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using PCL.Core.Multiplayer;
+using PCL.Core.Minecraft.Launcher;
 
 namespace PCL;
 
@@ -87,6 +88,7 @@ public partial class HybridRooms : UserControl, IDisposable
             if (self is not null) view?.Update(self with { Avatar = next.Avatar, Game = next.Game }, true, _avatars);
             if (_session.IsHost) HostGame.Text = CurrentHostGame.Text = "房主游戏：" + RoomPresentation.GameText(next.Game);
         }
+        RenderFlow();
     }
 
     private static Visibility Show(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
@@ -114,12 +116,14 @@ public partial class HybridRooms : UserControl, IDisposable
         CancelButton.Visibility = Show(_busy);
         RouteEditor.IsEnabled = ConnectActions.IsEnabled = !_busy && joined;
         CreateForm.IsEnabled = JoinForm.IsEnabled = !_busy && !joined;
+        if (_choiceCompletion is null) GameChoiceForm.Visibility = Visibility.Collapsed;
         ToolsPanel.IsEnabled = !_busy;
         EditorCard.Visibility = RemoveRouteButton.Visibility = Show(_session?.IsHost == true);
         RemoveRouteButton.IsEnabled = !_busy && SelectedRoute is not null;
         if (room is null)
         {
             ClearLeases(); _members.Clear(); _routes.Clear(); Endpoint.Text = ""; RefreshPages();
+            RenderFlow();
             if (viewChanged && IsVisible) PlayPageSwitch();
             return;
         }
@@ -149,6 +153,7 @@ public partial class HybridRooms : UserControl, IDisposable
         RefreshPages();
         var target = GetLaunchTarget();
         Endpoint.Text = target is null ? "" : RoomConnection.FormatEndpoint(target.Host, target.Port);
+        RenderFlow();
         if (viewChanged && IsVisible) PlayPageSwitch();
     }
 
@@ -236,10 +241,12 @@ public partial class HybridRooms : UserControl, IDisposable
     private async Task RunAsync(Func<CancellationToken, Task> action)
     {
         if (!_initialized || _busy || _closed) return;
+        _flowFailed = false; _flowStage = _flowMessage = "";
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operation = operation; _busy = true; Render();
         try { await action(operation.Token); }
-        catch (Exception ex) { if (!_closed) Status.Text = Error(ex); }
+        catch (OperationCanceledException) { if (!_closed) FlowIssue("操作已取消；已经启动的游戏不会被关闭，原有可用连接保留。"); }
+        catch (Exception ex) { if (!_closed) FlowIssue(Error(ex)); }
         finally { _operation = null; _busy = false; if (!_closed) Render(); }
     }
     private void Cancel_Click(object sender, RoutedEventArgs e) { if (_initialized && !_closed) _operation?.Cancel(); }
@@ -263,7 +270,7 @@ public partial class HybridRooms : UserControl, IDisposable
             await session.CreateAsync(new CreateRoomRequest(RoomName.Text.Trim(), PlayerName.Text.Trim(), CreatePassword.Password,
                 Connection: null, Avatar: _presence.Avatar, Game: _presence.Game), ct);
             Guard(ct, session); EnterRoom();
-            Status.Text = "房间已创建。现在可添加多条线路；不会自动启动 Minecraft。";
+            Status.Text = "房间已创建。按主按钮准备世界，或发布已有服务器线路。";
         }
         catch { if (session.Room is null) { session.Dispose(); if (ReferenceEquals(_session, session)) _session = null; } throw; }
     });
@@ -275,16 +282,24 @@ public partial class HybridRooms : UserControl, IDisposable
             Status.Text = "正在请求加入房间……";
             await session.JoinAsync(RoomCode.Text.Trim(), new JoinRoomRequest(PlayerName.Text.Trim(), JoinPassword.Password, _presence.Avatar, _presence.Game), ct);
             Guard(ct, session); EnterRoom();
-            Status.Text = "已加入房间。请选择游戏线路进行真实握手检测，房间成员身份不代表游戏网络可达。";
+            Status.Text = "已加入房间。点主按钮连接并进入；加入房间不代表游戏已经连通。";
         }
         catch { if (session.Room is null) { session.Dispose(); if (ReferenceEquals(_session, session)) _session = null; } throw; }
     });
     private void EnterRoom()
     {
+        ResetFlow();
         CreatePassword.Clear(); JoinPassword.Clear(); _inRoom = true; CloseOverlay();
         _nextHeartbeat = DateTime.UtcNow.AddSeconds(15); _presenceDue = null;
     }
-    private async void Leave_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
+    private void Leave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || _session?.Room is null) return;
+        ExitMessage.Text = _session.IsHost ? "解散后所有队友会离开房间，本房间的传输会停止。游戏不会被强制关闭。" : "退出会停止本房间的传输；游戏不会被强制关闭。返回大厅则会保留房间与连接。";
+        OpenOverlay(ExitForm, _session.IsHost ? "确认解散房间？" : "确认退出房间？");
+    }
+    private async void ConfirmExit_Click(object sender, RoutedEventArgs e) => await RunAsync(LeaveRoomAsync);
+    private async Task LeaveRoomAsync(CancellationToken ct)
     {
         var session = _session;
         if (session is null) return;
@@ -297,9 +312,11 @@ public partial class HybridRooms : UserControl, IDisposable
         {
             session.Dispose(); if (ReferenceEquals(_session, session)) _session = null;
             ClearLeases();
+            ResetFlow();
             if (!_closed) { _inRoom = false; NodeToken.Clear(); ZeroTierToken.Clear(); NetworkSecret.Clear(); }
         }
-    });
+        CloseOverlay();
+    }
 
     private static int ParsePort(string text)
     {
@@ -364,10 +381,13 @@ public partial class HybridRooms : UserControl, IDisposable
         if (host && !session.IsHost) throw new InvalidOperationException("只有房主可以发布或移除线路。");
         return session;
     }
-    private async void AutoConnect_Click(object sender, RoutedEventArgs e) => await RunAsync(ct => ConnectAsync(null, ct));
+    private async void AutoConnect_Click(object sender, RoutedEventArgs e) => await RunAsync(ct => { _manualRouteId = null; return ConnectAsync(null, ct); });
     private async void ManualConnect_Click(object sender, RoutedEventArgs e) => await RunAsync(ct =>
-        SelectedRoute is { } selected ? ConnectAsync(selected.Route.Id, ct) : throw new InvalidOperationException("请选择一条线路。"));
-    private async Task ConnectAsync(string? manual, CancellationToken ct)
+    {
+        _manualRouteId = SelectedRoute?.Route.Id ?? throw new InvalidOperationException("请选择一条线路。");
+        return ConnectAsync(_manualRouteId, ct);
+    });
+    private async Task<bool> ConnectAsync(string? manual, CancellationToken ct, bool retainPrevious = false)
     {
         var session = RequireRoom();
         var routes = session.Room!.EffectiveRoutes.Where(r => r.Enabled && (manual is null || r.Id == manual)).ToArray();
@@ -413,16 +433,18 @@ public partial class HybridRooms : UserControl, IDisposable
             }
             var winner = RoomRouteSelector.Choose(results, manual);
             if (winner is null || !candidates.TryGetValue(winner.RouteId, out var winningLease) || !winningLease.IsAlive)
-            { Status.Text = "未发现可响应 Minecraft 握手的线路。原有已验证连接不会因切换失败而被停止。"; return; }
+            { Status.Text = "未发现可响应 Minecraft 握手的线路。原有已验证连接不会因切换失败而被停止。"; return false; }
             Guard(ct, session);
             if (!session.Room!.EffectiveRoutes.Any(r => SameRoute(r, winningLease.Route))) throw new InvalidOperationException("所选线路已更新，请重新检测。");
             if (_leases.TryGetValue(winner.RouteId, out var replaced) && !ReferenceEquals(replaced, winningLease)) replaced.Dispose();
             _leases[winner.RouteId] = winningLease; created.Remove(winner.RouteId);
             _verifiedRouteId = winner.RouteId;
-            if (!session.IsHost)
+            _verifiedProbe = winner;
+            if (!session.IsHost && !retainPrevious)
                 foreach (var id in _leases.Keys.Where(id => id != winner.RouteId).ToArray()) RemoveLease(id);
             _selectedRouteId = winner.RouteId; RefreshPages();
-            Status.Text = "已选择可响应游戏握手的线路 · " + (winner.GameLatencyMs?.ToString() ?? "—") + " ms。可复制接入地址；不会自动启动游戏。";
+            Status.Text = "已验证线路 · " + (winner.GameLatencyMs?.ToString() ?? "—") + " ms。可关闭管理面板，点主按钮进入游戏；切换线路可能需要重新进服。";
+            return true;
         }
         finally { foreach (var lease in created.Values) lease.Dispose(); }
     }
@@ -446,15 +468,16 @@ public partial class HybridRooms : UserControl, IDisposable
     private void RemoveLease(string id)
     {
         if (_leases.Remove(id, out var lease)) lease.Dispose();
-        if (_verifiedRouteId == id) _verifiedRouteId = null;
+        if (_verifiedRouteId == id) { _verifiedRouteId = null; _verifiedProbe = null; }
     }
-    private void ClearLeases() { foreach (var lease in _leases.Values) lease.Dispose(); _leases.Clear(); _verifiedRouteId = null; }
+    private void ClearLeases() { foreach (var lease in _leases.Values) lease.Dispose(); _leases.Clear(); _verifiedRouteId = null; _verifiedProbe = null; }
 
     // Deliberately independent of _busy: twelve slow probes must never starve the 75-second room lease.
     private async void Heartbeat_Tick(object? sender, EventArgs e)
     {
         if (_closed) return;
         RefreshGameLink();
+        RenderFlow();
         RefreshEasyTierDownload();
         if (_refreshing || _session?.Room is null) return;
         var now = DateTime.UtcNow;
@@ -478,6 +501,17 @@ public partial class HybridRooms : UserControl, IDisposable
         finally { _refreshing = false; }
     }
     private void CopyCode_Click(object sender, RoutedEventArgs e) { if (_initialized && !_closed) Copy(_session?.Room?.Code); }
+    private void InviteFriend_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized || _closed) return;
+        var code = _session?.Room?.Code;
+        if (string.IsNullOrWhiteSpace(code)) { Status.Text = "还没有可邀请的房间。"; return; }
+        var main = Window.GetWindow(this) as FormMain;
+        if (main is null) return;
+        _ = main.NavigateHybridAsync("friends");
+        main.UpdateHybridShell();
+        main.HybridFriendsView.BeginRoomInvite(code, _session!.Room!.Name);
+    }
     private void CopyAddress_Click(object sender, RoutedEventArgs e)
     { if (_initialized && !_closed && GetLaunchTarget() is { } target) Copy(RoomConnection.FormatEndpoint(target.Host, target.Port)); }
     private void Copy(string? text)
@@ -581,33 +615,79 @@ public partial class HybridRooms : UserControl, IDisposable
         SharePackButton.Content = pack is null ? "分享整合包" : "更换 / 停止";
         DownloadPackButton.Visibility = Show(!mine && pack is not null);
         DownloadPackButton.IsEnabled = !_busy && pack is not null;
-        JoinHostButton.Visibility = Show(!mine && !string.IsNullOrWhiteSpace(host?.Game?.Server) && !string.IsNullOrWhiteSpace(host?.Game?.Version));
-        JoinHostButton.IsEnabled = !_busy;
+        JoinHostButton.Visibility = Visibility.Collapsed;
     }
-    private void SharePack_Click(object sender, RoutedEventArgs e)
+    private async void SharePack_Click(object sender, RoutedEventArgs e)
     {
         if (_session?.IsHost != true || _busy) return;
         var catalog = (ModMain.frmMain?.WebUi.Library.CatalogPacks ?? []).Where(RoomPackShareResolver.Shareable).Take(100).ToArray();
-        if (catalog.Length == 0) { Status.Text = "整合包目录里没有可公开下载的条目。"; return; }
+        var identities = InstalledPacks().Take(100).ToArray();
+        if (catalog.Length == 0 && identities.Length == 0) { Status.Text = "没有可公开分享的目录条目或已安装整合包。"; return; }
         var dialog = new Window
         {
-            Title = "分享整合包", Width = 420, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = "分享整合包", Width = 520, Height = 430, WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize, Background = new SolidColorBrush(Color.FromRgb(23, 25, 27))
         };
         var list = new ListBox { Margin = new Thickness(16, 44, 16, 56), Background = new SolidColorBrush(Color.FromRgb(32, 34, 36)), Foreground = Brushes.WhiteSmoke };
-        foreach (var pack in catalog) list.Items.Add(pack.Name + " · " + pack.Version);
+        foreach (var pack in catalog) list.Items.Add(pack.Name + " · " + pack.Version + " · 目录");
+        foreach (var identity in identities) list.Items.Add(identity.Name + " · " + identity.SourceLabel + " · 已安装");
         list.Items.Add("停止分享");
-        var hint = new TextBlock { Text = "只会发送公开下载地址，不会上传游戏文件。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)) };
+        var hint = new TextBlock { Text = "只分享公开下载地址。已安装的 Modrinth / CurseForge 整合包会列出官方版本供选择。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)), TextWrapping = TextWrapping.Wrap };
         var confirm = new Button { Content = "确定", Width = 88, Height = 30, Margin = new Thickness(0, 0, 112, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
         var cancel = new Button { Content = "取消", Width = 88, Height = 30, Margin = new Thickness(0, 0, 16, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsCancel = true };
         confirm.Click += (_, _) => { if (list.SelectedIndex >= 0) dialog.DialogResult = true; };
         dialog.Content = new Grid { Children = { hint, list, confirm, cancel } };
         if (dialog.ShowDialog() != true || list.SelectedIndex < 0) return;
-        _packManual = true;
-        _sharedPack = list.SelectedIndex == catalog.Length ? null : RoomPackShareResolver.From(catalog[list.SelectedIndex]);
-        _presenceDue = DateTime.UtcNow;
+        RoomPackShare? selected = null;
+        if (list.SelectedIndex < catalog.Length) selected = RoomPackShareResolver.From(catalog[list.SelectedIndex]);
+        else if (list.SelectedIndex < catalog.Length + identities.Length)
+        {
+            try { selected = await ChoosePublicPackAsync(identities[list.SelectedIndex - catalog.Length]); }
+            catch (Exception ex) { Status.Text = Error(ex); return; }
+            if (selected is null) return;
+        }
+        _packManual = true; _sharedPack = selected; _presenceDue = DateTime.UtcNow;
         UpdateLocalState(PlayerName.Text, _face, _hat, _selectedInstance);
-        Status.Text = _sharedPack is null ? "已停止分享整合包。" : "正在分享 " + _sharedPack.Display + "。";
+        Status.Text = selected is null ? "已停止分享整合包。" : "正在分享 " + selected.Display + "。";
+    }
+    private static IReadOnlyList<PackIdentity> InstalledPacks()
+    {
+        try
+        {
+            return RoomPresentation.AllInstances().Select(instance => PackIdentityStore.TryRead(instance.PathInstance))
+                .Where(identity => identity is not null && PackUpdateDownloads.Projects(identity).Count > 0).Cast<PackIdentity>()
+                .GroupBy(identity => identity.Source + ":" + identity.ModrinthId + ":" + identity.CurseForgeId, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First()).ToArray();
+        }
+        catch (Exception) { return []; }
+    }
+    private async Task<RoomPackShare?> ChoosePublicPackAsync(PackIdentity identity)
+    {
+        var projects = PackUpdateDownloads.Projects(identity);
+        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("MOONCL");
+        var versions = new List<PackDownloadVersion>();
+        foreach (var project in projects)
+        {
+            using var response = await http.GetAsync(PackUpdateDownloads.Address(project));
+            response.EnsureSuccessStatusCode();
+            versions.AddRange(PackUpdateDownloads.Parse(project, await response.Content.ReadAsStringAsync()).Take(30));
+        }
+        var choices = versions.Select(version => RoomPackShareResolver.FromPublicVersion(identity, version)).Where(share => share is not null).Cast<RoomPackShare>().Take(60).ToArray();
+        if (choices.Length == 0) throw new InvalidOperationException(identity.Name + " 没有可公开分享的客户端整合包版本。");
+        var dialog = new Window
+        {
+            Title = "选择公开版本", Width = 620, Height = 430, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize, Background = new SolidColorBrush(Color.FromRgb(23, 25, 27))
+        };
+        var list = new ListBox { Margin = new Thickness(16, 44, 16, 56), Background = new SolidColorBrush(Color.FromRgb(32, 34, 36)), Foreground = Brushes.WhiteSmoke };
+        foreach (var choice in choices) list.Items.Add(choice.Display + " · " + choice.FileName);
+        var hint = new TextBlock { Text = "选择与当前游戏版本匹配的公开版本；不会上传本机文件。", Margin = new Thickness(16), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)) };
+        var confirm = new Button { Content = "分享", Width = 88, Height = 30, Margin = new Thickness(0, 0, 112, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
+        var cancel = new Button { Content = "取消", Width = 88, Height = 30, Margin = new Thickness(0, 0, 16, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsCancel = true };
+        confirm.Click += (_, _) => { if (list.SelectedIndex >= 0) dialog.DialogResult = true; };
+        dialog.Content = new Grid { Children = { hint, list, confirm, cancel } };
+        return dialog.ShowDialog() == true && list.SelectedIndex >= 0 ? choices[list.SelectedIndex] : null;
     }
     private async void DownloadPack_Click(object sender, RoutedEventArgs e) => await RunAsync(async ct =>
     {
@@ -620,42 +700,15 @@ public partial class HybridRooms : UserControl, IDisposable
         Guard(ct);
         Status.Text = "整合包已交给启动器安装。安装完成后可在我的游戏里启动。";
     });
-    private void JoinHost_Click(object sender, RoutedEventArgs e)
+    private void JoinHost_Click(object sender, RoutedEventArgs e) => PrimaryAction_Click(sender, e);
+    private async void JoinMemberServer_Click(object sender, RoutedEventArgs e)
     {
-        var game = _session?.Room?.Members.FirstOrDefault(member => member.IsHost)?.Game;
-        if (_session?.IsHost == true || game is null) return;
-        JoinServer(game, "房主");
-    }
-    private void JoinMemberServer_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is not RoomMemberPresentation member) return;
-        var game = member.JoinableGame;
-        if (game is null) return;
-        JoinServer(game, member.Name);
-    }
-    private void JoinServer(RoomGameStatus game, string who)
-    {
-        if (string.IsNullOrWhiteSpace(game.Server) || string.IsNullOrWhiteSpace(game.Version)) return;
-        game.Validate();
-        var choices = RoomPresentation.SameVersion(game.Version);
-        if (choices.Count == 0) { Status.Text = "本机没有 " + game.Version + " 的游戏版本。请先安装同版本的 Fabric、Forge 或其他客户端。"; return; }
-        var dialog = new Window
+        if (_busy || (sender as FrameworkElement)?.DataContext is not RoomMemberPresentation member || member.JoinableGame is not { } game) return;
+        await RunAsync(async ct =>
         {
-            Title = "进入 " + who + " 所在服务器", Width = 460, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize, Background = new SolidColorBrush(Color.FromRgb(23, 25, 27))
-        };
-        var list = new ListBox { Margin = new Thickness(16, 44, 16, 56), Background = new SolidColorBrush(Color.FromRgb(32, 34, 36)), Foreground = Brushes.WhiteSmoke };
-        foreach (var instance in choices) list.Items.Add(instance.Name + " · " + RoomPresentation.LoaderText(instance));
-        var hint = new TextBlock { Text = who + " 正在 " + game.Server + "。选择你的 " + game.Version + " 客户端后启动并连接。", Margin = new Thickness(16, 12, 16, 0), Foreground = new SolidColorBrush(Color.FromRgb(217, 188, 117)), TextWrapping = TextWrapping.Wrap };
-        var confirm = new Button { Content = "启动并连接", Width = 110, Height = 30, Margin = new Thickness(0, 0, 112, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
-        var cancel = new Button { Content = "取消", Width = 88, Height = 30, Margin = new Thickness(0, 0, 16, 12), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsCancel = true };
-        confirm.Click += (_, _) => { if (list.SelectedIndex >= 0) dialog.DialogResult = true; };
-        dialog.Content = new Grid { Children = { hint, list, confirm, cancel } };
-        if (dialog.ShowDialog() != true || list.SelectedIndex < 0) return;
-        var selected = choices[list.SelectedIndex];
-        ModInstanceList.McMcInstanceSelected = selected;
-        if (!ModLaunch.McLaunchStart(new ModLaunch.McLaunchOptions { instance = selected, ServerIp = game.Server }))
-            Status.Text = "启动器没有开始进入 " + game.Server + "。";
-        else Status.Text = "正在用 " + selected.Name + " 连接 " + game.Server + "。";
+            var session = RequireRoom();
+            game.Validate();
+            await EnterGameAsync(session, game.Server, game.Version, null, member.Id, ct);
+        });
     }
 }

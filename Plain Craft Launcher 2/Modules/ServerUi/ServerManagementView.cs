@@ -36,9 +36,10 @@ internal sealed class ServerManagementView : UserControl
 
     private void Refresh()
     {
-        try
-        {
-            var profiles = ServerUi.Manager.List();
+         try
+         {
+             ServerUi.UseSelectedGameDirectory();
+             var profiles = ServerUi.Manager.List();
             var signature = string.Join("|", profiles.Select(p => $"{p.Id}:{p.Name}:{p.Loader}:{p.MinecraftVersion}:{p.LoaderVersion}:{p.EntryPoint}:{ServerUi.Manager.GetSession(p).Status}"));
             if (_signature == signature && _list.Children.Count > 0) return;
             _signature = signature; _list.Children.Clear();

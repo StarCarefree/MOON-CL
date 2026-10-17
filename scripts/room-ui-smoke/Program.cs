@@ -21,15 +21,40 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (args.Length >= 1 && args[0] == "--join-choices") { AssertJoinChoices(); Console.WriteLine("JOIN_CHOICES_PASS: " + _checks); return; }
         if (args.Length < 3) throw new ArgumentException("Usage: Room.UiSmoke <local coordinator URL> <scratch directory> <screenshot directory>");
         if (!Uri.TryCreate(args[0], UriKind.Absolute, out var coordinator) || !coordinator.IsLoopback)
             throw new ArgumentException("Smoke tests must use an isolated loopback coordinator, never a public service.");
         var launcher = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Plain Craft Launcher 2", "bin", "Debug", "net10.0-windows", "win-x64"));
         AssemblyLoadContext.Default.Resolving += (_, name) => File.Exists(Path.Combine(launcher, name.Name + ".dll"))
             ? AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(launcher, name.Name + ".dll")) : null;
+        InitializeDefaults();
         Run(args);
     }
+    private static void InitializeDefaults()
+    {
+        // Declared defaults only: no player settings/providers or full launcher lifecycle.
+        var service = typeof(PCL.Core.App.Configuration.ConfigService);
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        service.GetMethod("_InitializeConfigItems", flags)!.Invoke(null, null);
+        service.GetField("_isConfigItemsInitialized", flags)!.SetValue(null, true);
+        var items = (System.Collections.IDictionary)service.GetField("_Items", flags)!.GetValue(null)!;
+        foreach (var item in items.Values)
+        {
+            var type = item!.GetType();
+            type.GetProperty("EnableCache")!.SetValue(item, true);
+            var value = type.GetProperty("DefaultValueNoType")!.GetValue(item);
+            var cache = type.GetField("_valueCache", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(item)!;
+            cache.GetType().GetMethod("Write")!.Invoke(cache, new[] { value, null });
+            type.GetField("_valueCache", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(item, cache);
+        }
+    }
     private static void Check(bool condition, string message) { _checks++; if (!condition) throw new Exception(message); }
+    private static void SettleMotion()
+    {
+        typeof(ModAnimation).GetField("aniLastTick", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, long.MaxValue);
+        ModAnimation.AniTimer(10000);
+    }
     private static T Field<T>(HybridRooms view, string name) => (T)typeof(HybridRooms).GetField(name, Private)!.GetValue(view)!;
     private static void Set(HybridRooms view, string name, object? value) => typeof(HybridRooms).GetField(name, Private)!.SetValue(view, value);
     private static object? Invoke(HybridRooms view, string name, params object?[] args) => typeof(HybridRooms).GetMethod(name, Private)!.Invoke(view, args);
@@ -43,7 +68,13 @@ internal static class Program
     private static void Click(HybridRooms view, string id)
     {
         view.UpdateLayout();
-        var button = Descendants(view).OfType<Button>().First(b => AutomationProperties.GetAutomationId(b) == id);
+        // Exercise the real navigation to advanced controls, never bypass visibility checks.
+        if (!Control<FrameworkElement>(view, "ConnectionForm").IsVisible &&
+            (id is "Rooms.OpenRouteEditor" or "Rooms.RemoveRoute" or "Rooms.AutoConnect" or "Rooms.Connect" or "Rooms.RoutePrev" or "Rooms.RouteNext" or "Rooms.CopyAddress"))
+            Invoke(view, "OpenConnections_Click", null, new RoutedEventArgs());
+        view.UpdateLayout();
+        var button = Descendants(view).OfType<Button>().FirstOrDefault(b => AutomationProperties.GetAutomationId(b) == id)
+            ?? throw new Exception("Control not materialized after navigation: " + id);
         Check(button.IsEnabled && button.IsVisible, id + " is disabled or hidden");
         AssertInViewport(view, button, id); button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     }
@@ -76,6 +107,7 @@ internal static class Program
     private static void Screenshot(HybridRooms view, string path)
     {
         view.UpdateLayout();
+        SettleMotion();
         var image = new RenderTargetBitmap((int)view.ActualWidth, (int)view.ActualHeight, 96, 96, PixelFormats.Pbgra32);
         image.Render(view); var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!); using var output = File.Create(path); png.Save(output);
@@ -95,6 +127,7 @@ internal static class Program
     private static void AssertInViewport(HybridRooms view, FrameworkElement element, string label)
     {
         view.UpdateLayout();
+        SettleMotion();
         Check(element.IsVisible && element.ActualWidth > 1 && element.ActualHeight > 1, label + " is not visible");
         var bounds = element.TransformToAncestor(view).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
         Check(bounds.Left >= -1 && bounds.Top >= -1 && bounds.Right <= view.ActualWidth + 1 && bounds.Bottom <= view.ActualHeight + 1,
@@ -161,8 +194,114 @@ internal static class Program
             Check(edge[3] == 0 && center[3] == 255, "Avatar input must retain its aspect ratio and transparent padding");
         }
     }
+    private static void AssertJoinChoices()
+    {
+        var type = typeof(HybridRooms).Assembly.GetType("PCL.RoomPresentation")!;
+        var method = type.GetMethod("JoinChoices", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var link = typeof(PCL.Core.Minecraft.Launcher.GameLinkState);
+        var sessions = Array.CreateInstance(link, 4);
+        sessions.SetValue(Activator.CreateInstance(link, "idle", "生存", 11, "ready", "", "", ""), 0);
+        sessions.SetValue(Activator.CreateInstance(link, "busy", "已进服", 12, "connected", "other.example:25565", "", ""), 1);
+        sessions.SetValue(Activator.CreateInstance(link, "loading", "加载中", 13, "waiting", "", "", ""), 2);
+        sessions.SetValue(Activator.CreateInstance(link, "other", "创造", 14, "disconnected", "", "", ""), 3);
+        var choices = ((System.Collections.IEnumerable)method.Invoke(null, ["1.21.1", sessions, Array.CreateInstance(typeof(McInstance), 0)])!).Cast<object>().ToArray();
+        string Text(object choice, string name) => (string)choice.GetType().GetProperty(name)!.GetValue(choice)!;
+        bool Enabled(object choice) => (bool)choice.GetType().GetProperty("Enabled")!.GetValue(choice)!;
+        Check(choices.Length == 4 && choices.All(choice => !Enabled(choice)), "Unknown-version running games must remain visible but never be assumed compatible");
+        Check(choices.Any(choice => Text(choice, "SessionId") == "loading"), "A loading game must stay visible to prevent duplicate startup");
+        var empty = ((System.Collections.IEnumerable)method.Invoke(null, ["", Array.CreateInstance(link, 0), Array.CreateInstance(typeof(McInstance), 0)])!).Cast<object>().ToArray();
+        Check(empty.Length == 0, "No game must be invented when nothing is installed or running");
+        var installed = new[] { FixtureInstance("生存", "1.21.1"), FixtureInstance("已进服", "1.21.1"), FixtureInstance("加载中", "1.21.1"), FixtureInstance("创造", "1.21.1") };
+        var known = ((System.Collections.IEnumerable)method.Invoke(null, ["1.21.1", sessions, installed])!).Cast<object>().ToArray();
+        Check(known.Length == 4 && Enabled(known[0]) && Enabled(known[1]) && !Enabled(known[2]) && Enabled(known[3]), "Known same-version running clients must distinguish ready, switch-with-confirmation and loading states");
+        var duplicate = ((System.Collections.IEnumerable)method.Invoke(null, ["1.21.1", sessions, new[] { installed[0], FixtureInstance("生存", "1.21.1") }])!).Cast<object>().ToArray();
+        Check(duplicate.All(choice => !Enabled(choice)), "Ambiguous same-name game sessions must not be controlled by guesswork");
+    }
+    private static McInstance FixtureInstance(string name, string version)
+    {
+        var instance = (McInstance)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(McInstance));
+        typeof(McInstance).GetField("<Name>k__BackingField", Private)!.SetValue(instance, name);
+        typeof(McInstance).GetField("<PathInstance>k__BackingField", Private)!.SetValue(instance, "Z:\\fixtures\\" + name + "\\");
+        typeof(McInstance).GetField("<Info>k__BackingField", Private)!.SetValue(instance, new McInstanceInfo { VanillaName = version });
+        return instance;
+    }
+    private static async Task Until(Func<bool> condition, string message)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!condition() && DateTime.UtcNow < deadline) await Task.Delay(25);
+        Check(condition(), message);
+    }
+    private static async Task AssertUnifiedFlow(HybridRooms view, string scratch, string screenshots, int fastPort)
+    {
+        var original = ModInstanceList.mcInstanceList;
+        var instance = FixtureInstance("流程模拟客户端", "1.21.1");
+        ModInstanceList.mcInstanceList = new() { [McInstanceCardType.Auto] = [instance] };
+        var jar = Path.Combine(scratch, "flow-agent-fixture.jar"); File.WriteAllText(jar, "fixture");
+        using var game = new PCL.Core.Minecraft.Launcher.GameLinkSession(instance.Name);
+        var info = new ProcessStartInfo("java") { UseShellExecute = false }; game.Configure(info, jar);
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, int.Parse(info.Environment["MOONCL_LINK_PORT"]!));
+        using var writer = new StreamWriter(client.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+        using var reader = new StreamReader(client.GetStream(), Encoding.UTF8, leaveOpen: true);
+        await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["MOONCL_LINK_TOKEN"]);
+        Check(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)) == "OK", "Flow fixture Agent handshake failed");
+        async Task State(string state, string request = "", string address = "")
+        {
+            await writer.WriteLineAsync("STATE\t" + request + "\t" + state + "\t" + Convert.ToBase64String(Encoding.UTF8.GetBytes(address)) + "\t");
+            await Until(() => game.State.State == state && game.State.RequestId == request, "Fixture state not observed");
+        }
+        async Task<string[]> Start()
+        {
+            await State("ready"); Click(view, "Rooms.PrimaryAction");
+            await Until(() => Control<FrameworkElement>(view, "GameChoiceForm").IsVisible, "Primary action did not reach client selection");
+            AssertInViewport(view, ButtonById(view, "Rooms.FlowConfirm"), "Client confirmation");
+            Click(view, "Rooms.FlowConfirm");
+            return (await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)))!.Split('\t');
+        }
+        try
+        {
+            var command = await Start();
+            Check(command[0] == "CONNECT" && Field<bool>(view, "_busy"), "Primary action must deliver but not claim success");
+            var address = Encoding.UTF8.GetString(Convert.FromBase64String(command[2]));
+            Check(address.EndsWith(":" + fastPort), "Primary action must prefer fastest verified room route");
+            await State("connected", "old-request", address); await Task.Delay(300);
+            Check(Field<bool>(view, "_busy"), "Stale request acknowledged a new operation");
+            await State("connected", command[1], address); await Idle(view);
+            Check(Control<TextBlock>(view, "FlowStage").Text == "游戏已进服", "Actual game confirmation was not reflected");
+            Screenshot(view, Path.Combine(screenshots, "multiplayer-flow-connected.png"));
+
+            await State("ready"); Set(view, "_manualRouteId", "slow"); Click(view, "Rooms.PrimaryAction");
+            await Until(() => Control<FrameworkElement>(view, "GameChoiceForm").IsVisible, "Manual route did not reach game selection");
+            Check(Field<Dictionary<string, RoomTransportLease>>(view, "_leases").Count == 2, "Old route must survive until new game connection is confirmed");
+            Screenshot(view, Path.Combine(screenshots, "multiplayer-game-choice.png"));
+            Click(view, "Rooms.CloseOverlay"); await Idle(view);
+            Check(Target(view)?.Port == fastPort && Field<Dictionary<string, RoomTransportLease>>(view, "_leases").Count == 1, "Cancelling client selection did not restore previous connection");
+
+            Set(view, "_manualRouteId", null);
+            command = await Start(); Click(view, "Rooms.Cancel"); await Idle(view);
+            await State("connected", command[1], address); Invoke(view, "RenderFlow");
+            Check(Control<TextBlock>(view, "FlowStage").Text != "游戏已进服", "Late callback revived cancelled flow");
+            Set(view, "_flowWaitTimeout", TimeSpan.FromMilliseconds(400));
+            command = await Start(); await Idle(view);
+            Check(Control<TextBlock>(view, "Status").Text.Contains("未在等待时间内确认进服"), "Missing confirmation must show timeout, not success");
+            command = await Start(); await State("unsupported", command[1]); await Idle(view);
+            Check(Control<TextBlock>(view, "Status").Text.Contains("不支持"), "Unsupported Agent needs actionable manual fallback");
+
+            // A replacement under the same route ID is still a new owned resource.
+            var oldLease = Field<Dictionary<string, RoomTransportLease>>(view, "_leases")["fast"];
+            oldLease.Dispose(); await State("ready"); Set(view, "_manualRouteId", "fast");
+            Click(view, "Rooms.PrimaryAction");
+            await Until(() => Control<FrameworkElement>(view, "GameChoiceForm").IsVisible, "Dead lease was not replaced for detection");
+            Check(!ReferenceEquals(oldLease, Field<Dictionary<string, RoomTransportLease>>(view, "_leases")["fast"]), "Fixture must replace a dead lease under the same ID");
+            Click(view, "Rooms.CloseOverlay"); await Idle(view);
+            Check(!Field<Dictionary<string, RoomTransportLease>>(view, "_leases").ContainsKey("fast") && Target(view) is null,
+                "Cancelled flow retained a newly-created replacement lease or restored a dead previous connection");
+        }
+        finally { ModInstanceList.mcInstanceList = original; Set(view, "_flowWaitTimeout", TimeSpan.FromSeconds(120)); Set(view, "_manualRouteId", null); }
+    }
     private static async Task AssertGameLinkPanel(HybridRooms view, string scratch, string screenshots)
     {
+        Invoke(view, "OpenConnections_Click", null, new RoutedEventArgs());
         var panel = Control<Expander>(view, "GameLinkPanel");
         Check(!panel.IsExpanded, "Game link controls must not crowd compact room layouts by default");
         panel.IsExpanded = true;
@@ -204,6 +343,7 @@ internal static class Program
         Invoke(view, "RefreshGameLink");
         Check(!ButtonById(view, "Rooms.GameConnect").IsEnabled, "Ended game must no longer be controllable");
         panel.IsExpanded = false;
+        Click(view, "Rooms.CloseOverlay");
     }
     private static void Run(string[] args)
     {
@@ -217,6 +357,7 @@ internal static class Program
             try
             {
                 AssertAvatarComposition();
+                AssertJoinChoices();
                 Check(Control<ComboBox>(host, "Coordinator").SelectedIndex == 0, "Official must be the default");
                 Check(Control<TextBox>(host, "CustomUrl").Visibility == Visibility.Collapsed, "Official mode must hide the URL");
                 Check(Control<FrameworkElement>(host, "HallPanel").Visibility == Visibility.Visible, "Hall is the initial view");
@@ -251,9 +392,10 @@ internal static class Program
                 }
                 var face = BitmapSource.Create(8, 8, 96, 96, PixelFormats.Bgra32, null, facePixels, 8 * 4); face.Freeze();
                 host.UpdateLocalState("房主烟测", face, null, null);
-                Click(host, "Rooms.OpenCreate"); await Idle(host);
+                Click(host, "Rooms.OpenCreate");
                 Check(!string.IsNullOrWhiteSpace(Control<TextBox>(host, "RoomName").Text), "Room name should be suggested automatically");
-                Check(Control<FrameworkElement>(host, "Overlay").Visibility == Visibility.Collapsed, "Clicking the create card must create directly without a second button");
+                Check(Control<FrameworkElement>(host, "CreateForm").IsVisible && Field<RoomSession?>(host, "_session") is null, "Creating must require explicit form confirmation");
+                Click(host, "Rooms.Create"); await Idle(host);
                 var session = Field<RoomSession>(host, "_session");
                 Check(session.IsHost && session.Room is not null, "Create failed: " + Control<TextBlock>(host, "Status").Text);
                 Check(session.Room!.EffectiveRoutes.Length == 0, "Create must not need a transport");
@@ -274,7 +416,7 @@ internal static class Program
                 Check(lockedBorder.Background is SolidColorBrush lockedBrush && lockedBrush.Color.R + lockedBrush.Color.G + lockedBrush.Color.B < 180, "Disabled coordinator dropdown lost its dark fill");
                 Click(host, "Rooms.CloseOverlay");
                 await ResizeViewport(window, host, 750, 540);
-                AssertInViewport(host, ButtonById(host, "Rooms.AutoConnect"), "Auto connect at compact size");
+                AssertInViewport(host, ButtonById(host, "Rooms.PrimaryAction"), "Primary action at compact size");
                 AssertInViewport(host, Control<ItemsControl>(host, "Members"), "Player seats at compact size");
                 AssertSeatGeometry(host);
                 AssertPanelAlignment(host);
@@ -307,6 +449,7 @@ internal static class Program
                 Click(host, "Rooms.Reenter");
                 Click(host, "Rooms.RemoveRoute"); await Idle(host);
                 Check(session.Room!.EffectiveRoutes.Length == 1 && Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count == 1, "Removal affected the wrong transports");
+                Click(host, "Rooms.CloseOverlay");
                 AssertPrivate(host); Screenshot(host, Path.Combine(args[2], "multiplayer-room.png"));
                 Click(host, "Rooms.OpenRouteEditor");
                 await ResizeViewport(window, host, 750, 540);
@@ -386,6 +529,7 @@ internal static class Program
                 Control<TextBox>(guest, "RoomCode").Text = session.Room!.Code;
                 Click(guest, "Rooms.Join"); await Idle(guest);
                 Check(Field<RoomSession>(guest, "_session").Room?.EffectiveRoutes.Length == 2, "Guest did not receive both routes");
+                await AssertUnifiedFlow(guest, args[1], args[2], fast.Port);
                 Set(guest, "_presence", new RoomPresence("", new("访客实例", "1.21.1", "running")));
                 Click(guest, "Rooms.AutoConnect");
                 await Task.Delay(100); await Refresh(guest);
@@ -402,6 +546,7 @@ internal static class Program
                 Control<ListBox>(guest, "RouteList").SelectedIndex = 2;
                 Click(guest, "Rooms.Connect"); await Idle(guest);
                 Check(Target(guest)?.Port == slow.Port, "A failed switch destroyed the working connection");
+                Click(guest, "Rooms.CloseOverlay");
                 Click(guest, "Rooms.Back");
                 Check(Target(guest)?.Port == slow.Port, "Hall return destroyed guest connection");
                 Click(guest, "Rooms.Reenter"); AssertPrivate(guest);
@@ -412,7 +557,16 @@ internal static class Program
                     for (var i = 0; i < 14; i++)
                     {
                         var member = new RoomSession(new RoomApiClient(args[0])); extraMembers.Add(member);
-                        await member.JoinAsync(session.Room!.Code, new("队员" + (i + 3), ""), CancellationToken.None);
+                        try { await member.JoinAsync(session.Room!.Code, new("队员" + (i + 3), ""), CancellationToken.None); }
+                        catch (RoomApiException ex) when (ex.Status == HttpStatusCode.TooManyRequests)
+                        {
+                            Console.WriteLine("RATE_WINDOW_WAIT · isolated full-room fixture respects coordinator limits");
+                            // Existing simulated members need their own leases renewed during the bounded wait.
+                            foreach (var active in extraMembers.Where(m => m.Room is not null)) await active.RefreshAsync(CancellationToken.None);
+                            await Task.Delay(TimeSpan.FromSeconds(61));
+                            foreach (var active in extraMembers.Where(m => m.Room is not null)) await active.RefreshAsync(CancellationToken.None);
+                            await member.JoinAsync(session.Room!.Code, new("队员" + (i + 3), ""), CancellationToken.None);
+                        }
                     }
                     await Refresh(guest);
                     Check(Field<RoomSession>(guest, "_session").Room!.Members.Length == 16, "Full room fixture was not created");
@@ -432,6 +586,7 @@ internal static class Program
                     Check(!ButtonById(guest, "Rooms.MemberNext").IsEnabled, "Member pages must stop at the last page");
                     await Refresh(guest);
                     Check(Control<TextBlock>(guest, "MemberPageLabel").Text.Contains("2 / 2"), "Heartbeat unexpectedly reset the member page");
+                    Click(guest, "Rooms.ManageConnections");
                     var manyRoutes = Enumerable.Range(0, 12).Select(i => fastRoute with { Id = "paged" + i, Name = "游戏线路 " + (i + 1) }).ToArray();
                     await session.PublishRoutesAsync(manyRoutes, CancellationToken.None); await Refresh(guest);
                     var seenRoutes = new HashSet<string>();
@@ -449,14 +604,20 @@ internal static class Program
                     Click(guest, "Rooms.Connect"); await Idle(guest);
                     Check(Target(guest)?.Port == fast.Port, "Last-page route cannot be connected");
                     Screenshot(guest, Path.Combine(args[2], "multiplayer-full-room-compact.png"));
+                    Click(guest, "Rooms.CloseOverlay");
+                    Screenshot(guest, Path.Combine(args[2], "multiplayer-full-room-main-compact.png"));
                     await ResizeViewport(window, guest, 1080, 860);
                 }
                 finally { foreach (var member in extraMembers) { try { await member.LeaveAsync(CancellationToken.None); } finally { member.Dispose(); } } }
                 await session.PublishRoutesAsync([fastRoute], CancellationToken.None); await Refresh(guest);
                 Check(Target(guest) is null && Field<Dictionary<string, RoomTransportLease>>(guest, "_leases").Count == 0, "Deleted route remained selectable");
-                Click(guest, "Rooms.Leave"); await Idle(guest);
+                Click(guest, "Rooms.Leave");
+                Check(Field<RoomSession?>(guest, "_session") is not null && Control<FrameworkElement>(guest, "ExitForm").IsVisible, "Leave must require confirmation");
+                Click(guest, "Rooms.KeepRoom");
+                Check(Field<RoomSession?>(guest, "_session") is not null, "Cancelling leave lost membership");
+                Click(guest, "Rooms.Leave"); Click(guest, "Rooms.ConfirmExit"); await Idle(guest);
                 Check(Field<RoomSession?>(guest, "_session") is null, "Guest leave retained membership");
-                window.Content = host; window.UpdateLayout(); Click(host, "Rooms.Leave"); await Idle(host);
+                window.Content = host; window.UpdateLayout(); Click(host, "Rooms.Leave"); Click(host, "Rooms.ConfirmExit"); await Idle(host);
                 Check(Field<RoomSession?>(host, "_session") is null, "Host dissolve retained membership");
                 foreach (var file in Directory.GetFiles(args[1], "*-preferences.json"))
                 {

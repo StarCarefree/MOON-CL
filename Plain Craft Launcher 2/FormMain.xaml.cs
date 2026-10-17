@@ -1705,6 +1705,7 @@ public partial class FormMain
     {
         _webUi.Hide();
         SetRoomsVisible(false);
+        SetFriendsVisible(false);
         if (string.IsNullOrEmpty(PageNameGet(stack)))
         {
             // 切换到主页面
@@ -1892,6 +1893,7 @@ public partial class FormMain
 
             pageLast = pageCurrent;
             pageCurrent = stack;
+            ApplyHybridGameLayout(stack.page == PageType.Launch);
             switch (stack.page)
             {
                 case PageType.Launch: // 启动

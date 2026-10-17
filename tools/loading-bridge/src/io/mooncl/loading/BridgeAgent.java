@@ -1,76 +1,295 @@
 package io.mooncl.loading;
 
-import java.io.*;
-import java.lang.instrument.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.lang.instrument.Instrumentation;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.security.ProtectionDomain;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
-/** Replaces ONLY the MLS display subprocess main, preserving its binary event protocol. */
+/** Launcher-owned loading progress. It never loads or connects to mod-loading-screen. */
 public final class BridgeAgent {
-    private static final String TARGET = "io/github/gaming32/modloadingscreen/ActualLoadingScreen";
-    private static final String RELAY = "io/mooncl/loading/ProgressRelay";
+    /** Fabric/Quilt entrypoint order, so main, client and client_init each get their own phase. */
+    private static final String[] ORDER = {
+        "preLaunch", "pre_launch", "main", "init", "client", "server",
+        "client_init", "server_init", "client_game", "server_game", "modmenu"
+    };
 
-    public static void premain(String ignored, Instrumentation instrumentation) {
-        if (System.getenv("MOONCL_MLS_PROGRESS_FILE") == null || System.getenv("MOONCL_MLS_PROGRESS_TOKEN") == null) return;
+    public static void premain(String ignored, Instrumentation instrumentation) { start(); }
+
+    public static void main(String[] ignored) throws InterruptedException {
+        Thread worker = start();
+        if (worker != null) worker.join();
+    }
+
+    private static Thread start() {
+        final String file = System.getenv("MOONCL_MLS_PROGRESS_FILE");
+        final String token = System.getenv("MOONCL_MLS_PROGRESS_TOKEN");
+        if (file == null || token == null) return null;
+        Thread worker = new Thread(new Runnable() {
+            @Override public void run() { report(Paths.get(file), token); }
+        }, "MOONCL loading progress");
+        worker.setDaemon(false);
+        worker.start();
+        return worker;
+    }
+
+    static void report(Path output, String token) {
         try {
-            String ownJar = Paths.get(BridgeAgent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString();
-            // MLS builds the display subprocess classpath from this property. Do not alter the actual game loader.
-            System.setProperty("java.class.path", System.getProperty("java.class.path", "") + File.pathSeparator + ownJar);
-            instrumentation.addTransformer(new ClassFileTransformer() {
-                @Override public byte[] transform(ClassLoader loader, String name, Class<?> redef, ProtectionDomain domain, byte[] bytes) {
-                    if (!TARGET.equals(name)) return null;
-                    try {
-                        byte[] rewritten = redirectDisplayMain(bytes);
-                        if (rewritten != null) System.out.println("[MOONCL] mod-loading-screen native progress relay enabled");
-                        return rewritten;
-                    } catch (Throwable ex) {
-                        System.err.println("[MOONCL] MLS bridge unavailable; original loading screen preserved: " + ex);
-                        return null;
-                    }
+            Path game = Paths.get(System.getProperty("user.dir", ".")).toAbsolutePath().normalize();
+            List<Mod> mods = readMods(game.resolve("mods"));
+            String target = System.getenv("MOONCL_MLS_TARGET");
+            if (target == null || target.trim().isEmpty()) {
+                target = "";
+                for (Mod mod : mods) { target = mod.name + " " + mod.version; break; }
+            }
+            List<Phase> phases = phases(mods);
+            publish(output, token, "loading", "准备模组加载", "已读取 " + mods.size() + " 个模组", target, 0, 0);
+            int steps = 0;
+            for (Phase phase : phases) steps += phase.entries.size();
+            // Keep the whole walk visible on short packs without dragging on huge ones.
+            long gap = steps == 0 ? 0L : Math.max(15L, Math.min(250L, 4000L / steps));
+            int phaseIndex = 0;
+            for (Phase phase : phases) {
+                phaseIndex++;
+                publish(output, token, "loading", phase.title, "入口点 " + phase.type + " · 共 " + phase.entries.size() + " 项",
+                    target, 0, phase.entries.size());
+                for (int i = 0; i < phase.entries.size(); i++) {
+                    publish(output, token, "loading", phase.title, phase.entries.get(i), target, i + 1, phase.entries.size());
+                    if (gap > 0) Thread.sleep(gap);
                 }
-            });
-        } catch (Throwable ex) {
-            // Optional presentation must never prevent the game from booting.
-            System.err.println("[MOONCL] Cannot enable loading progress bridge: " + ex);
+            }
+            publish(output, token, "ready", "模组初始化完成",
+                "已处理 " + phaseIndex + " 个入口点阶段", target, 1, 1);
+        } catch (Exception ex) {
+            publish(output, token, "unavailable", "无法读取整合包进度", "将按游戏窗口完成交接", "", 0, 0);
         }
     }
 
-    /** Adds one UTF8 constant, redirects matching String constants only, never Class/name/descriptors. No ASM/JDK internals. */
-    static byte[] redirectDisplayMain(byte[] bytes) throws IOException {
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes));
-        if (in.readInt() != 0xcafebabe) throw new IOException("Invalid class file");
-        in.readUnsignedShort(); in.readUnsignedShort();
-        int count = in.readUnsignedShort();
-        if (count == 65535) return null;
-        String[] utf = new String[count]; int[] stringOffsets = new int[count];
-        int p = 10;
-        for (int i = 1; i < count; i++) {
-            int tag = bytes[p++] & 255;
-            switch (tag) {
-                case 1: int length = u16(bytes, p); p += 2; utf[i] = new String(bytes, p, length, StandardCharsets.UTF_8); p += length; break;
-                case 3: case 4: p += 4; break;
-                case 5: case 6: p += 8; i++; break;
-                case 7: case 16: case 19: case 20: p += 2; break;
-                case 8: stringOffsets[i] = p; p += 2; break;
-                case 9: case 10: case 11: case 12: case 17: case 18: p += 4; break;
-                case 15: p += 3; break;
-                default: throw new IOException("Unknown constant tag " + tag);
+    private static List<Phase> phases(List<Mod> mods) {
+        Map<String, List<String>> byType = new LinkedHashMap<String, List<String>>();
+        for (Mod mod : mods) {
+            for (Map.Entry<String, List<String>> entry : mod.entrypoints.entrySet()) {
+                List<String> sink = byType.get(entry.getKey());
+                if (sink == null) { sink = new ArrayList<String>(); byType.put(entry.getKey(), sink); }
+                for (String value : entry.getValue()) sink.add(value + "  ·  " + mod.id);
             }
         }
-        byte[] pool = bytes.clone(); boolean changed = false;
-        for (int i = 1; i < count; i++) {
-            int offset = stringOffsets[i];
-            if (offset != 0 && TARGET.equals(utf[u16(bytes, offset)])) {
-                pool[offset] = (byte)(count >>> 8); pool[offset + 1] = (byte)count; changed = true;
-            }
+        List<Phase> phases = new ArrayList<Phase>();
+        Set<String> used = new LinkedHashSet<String>();
+        for (String type : ORDER) {
+            List<String> entries = byType.get(type);
+            if (entries == null || entries.isEmpty()) continue;
+            phases.add(new Phase(type, title(type), entries));
+            used.add(type);
         }
-        if (!changed) return null; // Unknown MLS build: fail open without modifying anything.
-        ByteArrayOutputStream result = new ByteArrayOutputStream(bytes.length + 80);
-        DataOutputStream out = new DataOutputStream(result);
-        out.write(pool, 0, 8); out.writeShort(count + 1); out.write(pool, 10, p - 10);
-        out.writeByte(1); out.writeUTF(RELAY); out.write(pool, p, pool.length - p);
-        return result.toByteArray();
+        for (Map.Entry<String, List<String>> entry : byType.entrySet()) {
+            if (used.contains(entry.getKey()) || entry.getValue().isEmpty()) continue;
+            phases.add(new Phase(entry.getKey(), title(entry.getKey()), entry.getValue()));
+        }
+        return phases;
     }
-    private static int u16(byte[] bytes, int p) { return (bytes[p] & 255) << 8 | bytes[p + 1] & 255; }
+
+    private static String title(String type) {
+        if ("main".equals(type) || "init".equals(type)) return "初始化 main";
+        if ("preLaunch".equals(type) || "pre_launch".equals(type)) return "初始化 preLaunch";
+        return "初始化 " + type;
+    }
+
+    private static List<Mod> readMods(Path directory) throws IOException {
+        List<Mod> mods = new ArrayList<Mod>();
+        Set<String> seen = new LinkedHashSet<String>();
+        if (!Files.isDirectory(directory)) return mods;
+        DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "*.jar");
+        try {
+            for (Path jar : stream) {
+                Mod mod = readMod(jar);
+                if (mod != null && seen.add(mod.id)) mods.add(mod);
+            }
+        } finally { stream.close(); }
+        return mods;
+    }
+
+    private static Mod readMod(Path jar) {
+        ZipFile zip = null;
+        try {
+            zip = new ZipFile(jar.toFile());
+            ZipEntry entry = zip.getEntry("fabric.mod.json");
+            if (entry == null) entry = zip.getEntry("quilt.mod.json");
+            if (entry == null) return null;
+            String json = read(zip, entry);
+            String id = value(json, "\"id\"");
+            if (id.length() == 0) return null;
+            String name = value(json, "\"name\"");
+            String version = value(json, "\"version\"");
+            return new Mod(id, name.length() == 0 ? id : name, version, entrypoints(json));
+        } catch (Exception ex) { return null; }
+        finally { if (zip != null) try { zip.close(); } catch (IOException ignored) { } }
+    }
+
+    private static String read(ZipFile zip, ZipEntry entry) throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8));
+        try {
+            StringBuilder text = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) text.append(line);
+            return text.toString();
+        } finally { reader.close(); }
+    }
+
+    /** Reads "entrypoints": { "type": [ ... ] } without a JSON library. */
+    private static Map<String, List<String>> entrypoints(String json) {
+        Map<String, List<String>> result = new LinkedHashMap<String, List<String>>();
+        int at = json.indexOf("\"entrypoints\"");
+        if (at < 0) return result;
+        int open = json.indexOf('{', at);
+        if (open < 0) return result;
+        int p = open + 1;
+        while (p < json.length()) {
+            p = skipSpace(json, p);
+            if (p >= json.length() || json.charAt(p) == '}') break;
+            if (json.charAt(p) == ',') { p++; continue; }
+            if (json.charAt(p) != '"') break;
+            int nameEnd = json.indexOf('"', p + 1);
+            if (nameEnd < 0) break;
+            String type = json.substring(p + 1, nameEnd);
+            int colon = json.indexOf(':', nameEnd);
+            if (colon < 0) break;
+            int arrayStart = skipSpace(json, colon + 1);
+            if (arrayStart >= json.length() || json.charAt(arrayStart) != '[') { p = colon + 1; continue; }
+            int arrayEnd = match(json, arrayStart, '[', ']');
+            if (arrayEnd < 0) break;
+            List<String> entries = elements(json, arrayStart + 1, arrayEnd);
+            if (!entries.isEmpty()) result.put(type, entries);
+            p = arrayEnd + 1;
+        }
+        return result;
+    }
+
+    /** One label per top-level array element; nested objects and arrays count once. */
+    private static List<String> elements(String json, int from, int to) {
+        List<String> entries = new ArrayList<String>();
+        int p = from;
+        while (p < to) {
+            p = skipSpace(json, p);
+            if (p >= to) break;
+            if (json.charAt(p) == ',') { p++; continue; }
+            char first = json.charAt(p);
+            if (first == '{') {
+                int end = match(json, p, '{', '}');
+                if (end < 0 || end > to) break;
+                entries.add(label(json.substring(p, end + 1)));
+                p = end + 1;
+            } else if (first == '[') {
+                int end = match(json, p, '[', ']');
+                if (end < 0 || end > to) break;
+                for (String inner : elements(json, p + 1, end)) entries.add(inner);
+                p = end + 1;
+            } else if (first == '"') {
+                int end = json.indexOf('"', p + 1);
+                if (end < 0 || end > to) break;
+                entries.add(json.substring(p + 1, end));
+                p = end + 1;
+            } else {
+                int end = p;
+                while (end < to && json.charAt(end) != ',' && json.charAt(end) != ']') end++;
+                entries.add(json.substring(p, end).trim());
+                p = end;
+            }
+        }
+        return entries;
+    }
+
+    private static String label(String object) {
+        String value = value(object, "\"value\"");
+        if (value.length() > 0) return value;
+        String adapter = value(object, "\"adapter\"");
+        if (adapter.length() > 0) return adapter;
+        return "入口点";
+    }
+
+    private static int match(String json, int at, char open, char close) {
+        int depth = 0;
+        boolean inString = false;
+        for (int i = at; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (inString) {
+                if (c == '\\') i++;
+                else if (c == '"') inString = false;
+                continue;
+            }
+            if (c == '"') inString = true;
+            else if (c == open) depth++;
+            else if (c == close) { depth--; if (depth == 0) return i; }
+        }
+        return -1;
+    }
+
+    private static int skipSpace(String json, int p) {
+        while (p < json.length() && Character.isWhitespace(json.charAt(p))) p++;
+        return p;
+    }
+
+    private static String value(String json, String key) {
+        int at = json.indexOf(key); if (at < 0) return "";
+        int colon = json.indexOf(':', at + key.length()); if (colon < 0) return "";
+        int cursor = skipSpace(json, colon + 1);
+        if (cursor < json.length() && json.charAt(cursor) == '[') {
+            int end = match(json, cursor, '[', ']');
+            if (end < 0) return "";
+            for (String inner : elements(json, cursor + 1, end)) if (inner.length() > 0) return inner;
+            return "";
+        }
+        if (cursor >= json.length() || json.charAt(cursor) != '"') return "";
+        int end = json.indexOf('"', cursor + 1); if (end < 0) return "";
+        return json.substring(cursor + 1, Math.min(end, cursor + 2049));
+    }
+
+    private static void publish(Path file, String token, String status, String stage, String detail, String target, long current, long total) {
+        String json = "{\"protocol\":1,\"token\":" + quote(token) + ",\"status\":" + quote(status)
+            + ",\"stage\":" + quote(stage) + ",\"detail\":" + quote(detail) + ",\"target\":" + quote(target)
+            + ",\"current\":" + current + ",\"total\":" + total + "}";
+        Path pending = file.resolveSibling("progress.tmp");
+        try {
+            Files.write(pending, json.getBytes(StandardCharsets.UTF_8));
+            try { Files.move(pending, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            catch (java.nio.file.AtomicMoveNotSupportedException ex) { Files.move(pending, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        } catch (IOException ignored) { }
+    }
+
+    private static String quote(String value) {
+        StringBuilder out = new StringBuilder("\"");
+        if (value != null) for (int i = 0; i < Math.min(value.length(), 2048); i++) {
+            char c = value.charAt(i);
+            if (c == '"' || c == '\\') out.append('\\').append(c);
+            else if (c < 32) out.append(String.format(java.util.Locale.ROOT, "\\u%04x", (int)c));
+            else out.append(c);
+        }
+        return out.append('"').toString();
+    }
+
+    private static final class Mod {
+        final String id, name, version;
+        final Map<String, List<String>> entrypoints;
+        Mod(String id, String name, String version, Map<String, List<String>> entrypoints) {
+            this.id = id; this.name = name; this.version = version; this.entrypoints = entrypoints;
+        }
+    }
+
+    private static final class Phase {
+        final String type, title;
+        final List<String> entries;
+        Phase(String type, String title, List<String> entries) { this.type = type; this.title = title; this.entries = entries; }
+    }
 }

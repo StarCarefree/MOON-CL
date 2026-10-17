@@ -122,7 +122,7 @@ internal static class PackIdentityInstall
                  if (!string.IsNullOrWhiteSpace(identity.Version)) States.Instance.ModpackVersion[folder] = identity.Version;
                  var id = First(identity.CurseForgeId, identity.ModrinthId, identity.McmodId);
                  if (id.Length > 0) States.Instance.ModpackId[folder] = id;
-                 if (string.IsNullOrWhiteSpace(States.Instance.CustomInfo[folder]))
+                 if (string.IsNullOrWhiteSpace(States.Instance.CustomInfo[folder]) && !string.IsNullOrWhiteSpace(identity.SidebarLine))
                      States.Instance.CustomInfo[folder] = identity.SidebarLine;
              }
              catch (Exception ex)

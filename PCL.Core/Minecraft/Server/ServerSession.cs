@@ -11,14 +11,15 @@ public sealed class ServerSession
 {
     internal object SyncRoot { get; } = new();
     private readonly ServerManager _manager;
-    private readonly string _id;
+     private string _id;
     private readonly Queue<string> _log = new();
     private Process? _process;
     private bool _installing;
     private bool _stopping;
     private string _status = "已停止";
 
-    internal ServerSession(ServerManager manager, string id) { _manager = manager; _id = id; }
+     internal ServerSession(ServerManager manager, string id) { _manager = manager; _id = id; }
+     internal void Bind(string id) => _id = id;
     public bool IsRunning { get { lock (SyncRoot) return _process is not null && !_installing; } }
     public bool IsInstalling { get { lock (SyncRoot) return _installing; } }
     public string Status { get { lock (SyncRoot) return _status; } }
@@ -59,7 +60,7 @@ public sealed class ServerSession
             var profile = _manager.Load(_id);
             if (!_manager.IsEulaAccepted(profile)) throw new InvalidOperationException("请先阅读并明确同意 Minecraft EULA。");
             ServerCommands.EnsureJava(profile, Log);
-            var info = ServerCommands.Start(profile, _manager.GetDirectory(profile));
+             var info = ServerCommands.Start(profile, _manager.GetDirectory(profile), _manager.JavaTempDirectory);
             _process = Launch(info);
             _stopping = false; _status = "运行中（启动输出见控制台）";
             _ = MonitorServerAsync(_process);

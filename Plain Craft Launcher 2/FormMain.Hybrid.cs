@@ -34,6 +34,7 @@ public partial class FormMain
             _hybridTimer.Tick -= HybridTick;
             _webUi.Dispose();
             HybridRoomsView.Dispose();
+            HybridFriendsView.Dispose();
         };
         HybridAccountView.Closed += (_, _) => UpdateHybridShell();
         HybridSidebarView.PlayEntrance();
@@ -75,9 +76,9 @@ public partial class FormMain
     internal void SetBrowseVisible(bool visible)
     {
         if (PanBrowse is null) return;
-        if (visible) HybridRoomsView.Visibility = Visibility.Collapsed;
+        if (visible) { HybridRoomsView.Visibility = Visibility.Collapsed; HybridFriendsView.Visibility = Visibility.Collapsed; }
         PanBrowse.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || HybridRoomsView.Visibility == Visibility.Visible;
+        var covered = visible || HybridRoomsView.Visibility == Visibility.Visible || HybridFriendsView.Visibility == Visibility.Visible;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
         ModAnimation.AniStop("Hybrid Browse");
@@ -89,11 +90,24 @@ public partial class FormMain
     internal void SetRoomsVisible(bool visible)
     {
         var show = visible && HybridRoomsView.Visibility != Visibility.Visible;
+        if (visible) HybridFriendsView.Visibility = Visibility.Collapsed;
         HybridRoomsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || _webUi.IsPresented;
+        var covered = visible || HybridFriendsView.Visibility == Visibility.Visible || _webUi.IsPresented;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
         if (show) HybridRoomsView.PlayPageSwitch();
+        UpdateHybridShell();
+    }
+
+    internal void SetFriendsVisible(bool visible)
+    {
+        var show = visible && HybridFriendsView.Visibility != Visibility.Visible;
+        if (visible) HybridRoomsView.Visibility = Visibility.Collapsed;
+        HybridFriendsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        var covered = visible || HybridRoomsView.Visibility == Visibility.Visible || _webUi.IsPresented;
+        PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
+        PanMain.IsHitTestVisible = !covered;
+        if (show) HybridFriendsView.UpdateAccount(ProfileService.Current);
         UpdateHybridShell();
     }
 
@@ -115,12 +129,12 @@ public partial class FormMain
         catch (Exception ex) { ModBase.Log(ex, "更新启动中的版本列表失败", ModBase.LogLevel.Debug); }
     }
 
-    private void UpdateHybridShell()
+    internal void UpdateHybridShell()
     {
         if (HybridSidebarView is null || PanMain is null) return;
         var browse = _webUi.IsPresented;
         var page = (PageType)pageCurrent;
-        var route = HybridRoomsView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
+        var route = HybridFriendsView.Visibility == Visibility.Visible ? "friends" : HybridRoomsView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
         {
             PageType.Download or PageType.CompDetail => "download",
             PageType.Setup => "settings",
@@ -133,6 +147,7 @@ public partial class FormMain
         {
             "browse" => Lang.Text("Hybrid.Browse"),
             "rooms" => "联机房间",
+            "friends" => "好友",
             "settings" => Lang.Text("Main.Tab.Settings"),
             "download" => Lang.Text("Main.Tab.Download"),
             "tools" => Lang.Text("Main.Tab.Tools"),
@@ -149,23 +164,16 @@ public partial class FormMain
                 ModAnimation.AaTranslateX(LabHybridSection, -12, 320, 0, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak))
             }, "Hybrid Section");
         }
-        var gameLayout = page == PageType.Launch;
-        if (gameLayout) PanForm.Background = (Brush)FindResource("Hybrid.Background");
-        if (_hybridGameLayout != gameLayout)
-        {
-            _hybridGameLayout = gameLayout;
-            Grid.SetColumn(PanLeftSlot, gameLayout ? 1 : 0);
-            Grid.SetColumn(PanRightSlot, gameLayout ? 0 : 1);
-            PanMain.ColumnDefinitions[0].Width = gameLayout ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-            PanMain.ColumnDefinitions[1].Width = gameLayout ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
-        }
-        PanLeft.Visibility = browse || gameLayout ? Visibility.Collapsed : Visibility.Visible;
+        // Swap before the page-change animation so the native launch button never flashes on the left.
+        ApplyHybridGameLayout(page == PageType.Launch);
+        PanLeft.Visibility = browse || page == PageType.Launch ? Visibility.Collapsed : Visibility.Visible;
         var account = ProfileService.Current;
         var skin = account is null ? null : ModMain.frmLoginProfileSkin?.Skin;
         HybridSidebarView.UpdateAccount(account?.UserName ?? Lang.Text("Hybrid.NotLoggedIn"),
             skin?.ImgBack?.Source, skin?.ImgFore?.Source);
         var selected = ModInstanceList.McMcInstanceSelected;
         HybridRoomsView.UpdateLocalState(account?.UserName ?? "Player", skin?.ImgBack?.Source, skin?.ImgFore?.Source, selected);
+        HybridFriendsView.UpdateAccount(account);
         var versionPath = selected?.PathInstance ?? "";
         var versionChanged = _hybridVersionPath is not null && !string.Equals(_hybridVersionPath, versionPath, StringComparison.OrdinalIgnoreCase);
         _hybridVersionPath = versionPath;
@@ -182,7 +190,9 @@ public partial class FormMain
         if (!string.IsNullOrEmpty(folder) && ModInstanceList.mcInstanceListLoader.State != ModBase.LoadState.Loading)
             ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, folder,
                 ModLoader.LoaderFolderRunType.RunOnUpdated, 1, @"versions\");
-        if (ModInstanceList.mcInstanceListLoader.State == ModBase.LoadState.Finished)
+        var versionsLoaded = ModInstanceList.mcInstanceListLoader.State == ModBase.LoadState.Finished;
+        HybridSidebarView.SetVersionsLoaded(versionsLoaded);
+        if (versionsLoaded)
         {
             var prefix = string.IsNullOrEmpty(folder) ? null : Path.GetFullPath(Path.Combine(folder, "versions")) + Path.DirectorySeparatorChar;
             var instances = prefix is null ? [] : ModInstanceList.mcInstanceList.ToArray().SelectMany(pair => pair.Value.ToArray())
@@ -191,6 +201,16 @@ public partial class FormMain
             HybridSidebarView.UpdateVersions(instances, selected, ModLaunch.LaunchingPaths(), Lang.Text("Hybrid.LaunchingPrefix"));
             if (versionChanged) HybridSidebarView.AnimateSelected(versionPath);
         }
+    }
+    internal void ApplyHybridGameLayout(bool gameLayout)
+    {
+        if (gameLayout) PanForm.Background = (Brush)FindResource("Hybrid.Background");
+        if (_hybridGameLayout == gameLayout) return;
+        _hybridGameLayout = gameLayout;
+        Grid.SetColumn(PanLeftSlot, gameLayout ? 1 : 0);
+        Grid.SetColumn(PanRightSlot, gameLayout ? 0 : 1);
+        PanMain.ColumnDefinitions[0].Width = gameLayout ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        PanMain.ColumnDefinitions[1].Width = gameLayout ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
     }
 
     private async void HybridNavigation_Requested(object sender, HybridNavigationEventArgs e)
@@ -228,6 +248,7 @@ public partial class FormMain
         switch (route)
         {
             case "rooms": _webUi.Hide(); SetRoomsVisible(true); break;
+            case "friends": _webUi.Hide(); SetFriendsVisible(true); break;
             case "games":
                 _webUi.Hide();
                 var replayGames = (PageType)pageCurrent == PageType.Launch;

@@ -30,7 +30,7 @@ public sealed class LaunchProgressState
         {
             if (_gameStarted || _terminal) return;
             _gameStarted = true;
-            _snapshot = new(LaunchProgressPhase.Game, "等待游戏加载信号", "Java 进程已启动，正在等待 mod-loading-screen", null, false, warning, _snapshot.Target);
+            _snapshot = new(LaunchProgressPhase.Game, "等待游戏加载信号", "Java 进程已启动，正在读取整合包模组清单", null, false, warning, _snapshot.Target);
         }
     }
 
@@ -49,7 +49,7 @@ public sealed class LaunchProgressState
             var status = statusElement.GetString();
             if (status is not ("loading" or "ready" or "unavailable")) return false;
             var stage = Text(root, "stage", "游戏正在加载");
-            var detail = Text(root, "detail", "mod-loading-screen 实时进度");
+            var detail = Text(root, "detail", "整合包模组加载进度");
             var incoming = Text(root, "target", "");
             string? target = incoming.Length == 0 ? null : incoming;
             long? currentCount = null, totalCount = null;

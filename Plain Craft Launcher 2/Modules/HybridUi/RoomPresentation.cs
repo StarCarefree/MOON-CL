@@ -28,17 +28,64 @@ internal static class RoomPresentation
         if (info.HasLiteLoader) return "LiteLoader";
         return "原版";
     }
+    internal readonly record struct JoinChoice(string Kind, string Title, string Detail, bool Enabled, string SessionId, McInstance? Instance)
+    {
+        public override string ToString() => Title + " · " + Detail;
+    }
+    internal static IReadOnlyList<JoinChoice> JoinChoices(string? version, IReadOnlyList<PCL.Core.Minecraft.Launcher.GameLinkState>? sessions = null, IReadOnlyList<McInstance>? instances = null)
+    {
+        var target = (version ?? "").Trim();
+        sessions ??= PCL.Core.Minecraft.Launcher.GameLinkSession.Snapshot();
+        var installed = instances ?? SameVersion(target);
+        var all = instances ?? AllInstances();
+        var result = new List<JoinChoice>();
+        foreach (var session in sessions)
+        {
+            var matches = all.Where(instance => string.Equals(instance.Name, session.Instance, StringComparison.Ordinal)).ToArray();
+            var match = matches.Length == 1 && installed.Contains(matches[0]) ? matches[0] : null;
+            var idle = session.State is "ready" or "disconnected" or "error";
+            var canSwitch = session.State == "connected";
+            var detail = match is null ? "无法确认同版本 · 请手动加入" : session.State switch
+            {
+                "waiting" => "正在加载 · 请等待，勿重复启动",
+                "unsupported" => "不可控 · 请手动加入",
+                "connecting" => "正在连接 · 请等待",
+                "connected" => "已在服务器 · 切服需要确认",
+                _ => "已启动 · 直接进入，不重新启动"
+            };
+            result.Add(new("running", session.Instance, detail + (string.IsNullOrEmpty(session.Address) ? "" : " · " + session.Address),
+                match is not null && (idle || canSwitch), session.SessionId, match));
+        }
+        foreach (var instance in installed)
+        {
+            if (sessions.Any(session => string.Equals(session.Instance, instance.Name, StringComparison.Ordinal))) continue;
+            var active = IsLaunchingOrRunning(instance);
+            result.Add(new("install", instance.Name, active ? "已启动 / 启动中 · 暂不可控，请手动加入" : LoaderText(instance) + " · 启动并连接", !active, "", instance));
+        }
+        return result;
+    }
     internal static IReadOnlyList<McInstance> SameVersion(string? version)
     {
         var target = (version ?? "").Trim();
         if (target.Length == 0) return [];
         try
         {
-            return ModInstanceList.mcInstanceList.ToArray().SelectMany(pair => pair.Value.ToArray())
-                .Where(instance => string.Equals(instance.Info?.VanillaName, target, StringComparison.OrdinalIgnoreCase))
-                .GroupBy(instance => instance.PathInstance, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToArray();
+            return AllInstances().Where(instance => string.Equals(instance.Info?.VanillaName, target, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
         catch (Exception) { return []; }
+    }
+
+    internal static McInstance[] AllInstances()
+    {
+        try { return ModInstanceList.mcInstanceList.ToArray().SelectMany(pair => pair.Value.ToArray())
+            .GroupBy(instance => instance.PathInstance, StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToArray(); }
+        catch (Exception) { return []; }
+    }
+    internal static bool IsLaunchingOrRunning(McInstance instance)
+    {
+        try { return ModLaunch.LaunchingPaths().Any(p => string.Equals(p, instance.PathInstance, StringComparison.OrdinalIgnoreCase)) ||
+            ModWatcher.mcWatcherList.ToArray().Any(w => string.Equals(w.version?.PathInstance, instance.PathInstance, StringComparison.OrdinalIgnoreCase) && Alive(w)); }
+        catch (Exception) { return true; } // Uncertain process state must never cause a duplicate launch.
     }
 
     internal static RoomGameStatus LocalGame(McInstance? selected, IEnumerable<PCL.Core.Minecraft.Launcher.PackDefinition>? catalog = null, RoomPackShare? chosen = null, bool manual = false)
@@ -208,7 +255,7 @@ internal sealed class RoomMemberPresentation(string id) : RoomObservable
     public string Initials => string.IsNullOrWhiteSpace(_member?.Name) ? "?" : System.Globalization.StringInfo.GetNextTextElement(_member.Name).ToUpperInvariant();
     public string Game => RoomPresentation.GameText(_member?.Game);
     public bool CanJoinServer => !_self && !string.IsNullOrWhiteSpace(_member?.Game?.Server) && !string.IsNullOrWhiteSpace(_member?.Game?.Version);
-    public string JoinServerLabel => CanJoinServer ? "进入 " + _member!.Game!.Server : "";
+    public string JoinServerLabel => CanJoinServer ? "跟随进服" : "";
     internal RoomGameStatus? JoinableGame => CanJoinServer ? _member?.Game : null;
     public ImageSource? Avatar { get; private set; }
     internal void Update(RoomMember member, bool self, RoomAvatarCache cache)
