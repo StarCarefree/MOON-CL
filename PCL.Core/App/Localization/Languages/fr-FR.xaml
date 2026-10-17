@@ -3992,6 +3992,7 @@ IPv6 优先：-Djava.net.preferIPv6Stack=true</sys:String>
     <sys:String x:Key="Tools.Test.LaunchCount.Title">查看启动计数</sys:String>
     <sys:String x:Key="Tools.Test.WebUi.Failed">系统 WebView2 页面打不开。请确认 Windows 已安装 WebView2 运行时。</sys:String>
     <sys:String x:Key="Tools.Test.WebUi.Title">系统 WebView2 页面</sys:String>
+    <sys:String x:Key="Tools.Test.McNav.Title">MC导航网</sys:String>
     <sys:String x:Key="WebUi.Page.Host">页面宿主</sys:String>
     <sys:String x:Key="Tools.Test.ServerQuery.Title">瞅眼服务器</sys:String>
     <sys:String x:Key="Tools.Test.Title">百宝箱</sys:String>
