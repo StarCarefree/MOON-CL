@@ -142,7 +142,7 @@ public partial class PageLaunchRight
             }
             body.Children.Add(grid);
             body.Children.Add(DashboardText($"本月 {DashboardDuration(report.Seconds)} · {report.ActiveDays} 天活跃 · {report.Sessions} 次会话", 11, true));
-            body.Children.Add(DashboardText("色深代表时长 · 圆点代表日期便签", 10, true));
+            grid.ToolTip = "色深代表游玩时长，圆点代表日期便签。";
             var selectedReport = GamePlayReport.Create(report.Records, state.Selected, state.Selected, state.InstancePath);
             var detail = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
             var selectedTitle = DashboardText($"{state.Selected:MM.dd}  {DashboardDuration(selectedReport.Seconds)}", 15);
@@ -150,7 +150,7 @@ public partial class PageLaunchRight
             detail.Children.Add(selectedTitle);
             foreach (var version in selectedReport.Versions.Take(5))
                 detail.Children.Add(DashboardText($"{version.Name} · {DashboardDuration(version.Seconds)} · {version.Sessions} 次会话", 11, true));
-            if (selectedReport.ActiveDays == 0) detail.Children.Add(DashboardText("当天暂无已记录的游玩。", 11, true));
+            if (selectedReport.ActiveDays == 0) detail.Children.Add(DashboardText("暂无游玩记录", 11, true));
             var selectedNote = DashboardNotes.Get(state.Selected);
             if (selectedNote.Length > 0)
             {
@@ -266,8 +266,8 @@ public partial class PageLaunchRight
                 body.Children.Add(DashboardText($"{version.Name} · {DashboardDuration(version.Seconds)}", 12));
                 body.Children.Add(new ProgressBar { Minimum = 0, Maximum = Math.Max(1, report.Seconds), Value = version.Seconds, Height = 3, Margin = new Thickness(0, 4, 0, 9), Foreground = DashboardBrush("Hybrid.Accent"), Background = DashboardBrush("Hybrid.Line"), BorderThickness = new Thickness(0) });
             }
-            if (report.ActiveDays == 0) body.Children.Add(DashboardText("此范围内暂无记录。游玩后会自动积累，不会把旧累计时长填入图表。", 12, true));
-            var export = DashboardButton("导出当前筛选 CSV  ↗", () => ExportDashboardReport(report));
+            if (report.ActiveDays == 0) body.Children.Add(DashboardText("暂无记录，游玩后自动积累。", 12, true));
+            var export = DashboardButton("导出 CSV  ↗", () => ExportDashboardReport(report));
             export.Tag = "Stats.Export";
             export.IsEnabled = !_dashboardEditing && report.Records.Count > 0;
             export.HorizontalAlignment = HorizontalAlignment.Left;
@@ -276,8 +276,9 @@ public partial class PageLaunchRight
             var instances = DashboardInstances().Where(instance => state.InstancePath is null || string.Equals(instance.PathInstance, state.InstancePath, StringComparison.OrdinalIgnoreCase)).ToArray();
             var lifetime = instances.Sum(instance => (long)InstanceActivity.PlayedSeconds(instance.PathInstance));
             var launches = instances.Sum(instance => (long)Math.Max(0, States.Instance.LaunchCount[instance.PathInstance]));
-            body.Children.Add(DashboardText($"当前游戏库累计（含旧记录）：{DashboardDuration(lifetime)} · {launches} 次启动", 10, true));
-            body.Children.Add(DashboardText("会话数按同一版本的一段连续运行计，多开不重复计时；跨日会话只记在开始日。", 10, true));
+            var lifetimeText = DashboardText($"历史累计 {DashboardDuration(lifetime)} · {launches} 次启动", 10, true);
+            lifetimeText.ToolTip = "当前游戏库的全部累计数据（含旧记录），不受上方时间范围限制。";
+            body.Children.Add(lifetimeText);
             AddDashboardHistoryNotice(body);
         }
         for (var index = 0; index < names.Length; index++)
@@ -322,10 +323,22 @@ public partial class PageLaunchRight
 
     private void AddDashboardHistoryNotice(Panel panel)
     {
-        var message = DashboardText($"每日记录始于 {InstanceActivity.HistoryTrackingSince.LocalDateTime:yyyy.MM.dd}；保留最近三年。旧累计时长无法还原每日分布。", 10, true);
-        message.Margin = new Thickness(0, 10, 0, 0);
+        var message = DashboardText("记录说明 ⓘ", 10, true);
+        message.ToolTip = new TextBlock
+        {
+            Text = $"每日记录始于 {InstanceActivity.HistoryTrackingSince.LocalDateTime:yyyy.MM.dd}，保留最近三年。\n旧累计时长不计入每日图表。\n同版本多开不重复计时，跨日会话归开始日。",
+            MaxWidth = 360, TextWrapping = TextWrapping.Wrap
+        };
+        message.Cursor = System.Windows.Input.Cursors.Help;
+        message.HorizontalAlignment = HorizontalAlignment.Left;
+        message.Margin = new Thickness(0, 6, 0, 0);
         panel.Children.Add(message);
-        if (InstanceActivity.HistoryError is { } error) panel.Children.Add(DashboardText("游玩记录暂未能保存，将自动重试：" + error, 10, true));
+        if (InstanceActivity.HistoryError is { } error)
+        {
+            var warning = DashboardText("记录保存失败，正在重试", 10, true);
+            warning.ToolTip = error;
+            panel.Children.Add(warning);
+        }
     }
 
     private void ExportDashboardReport(GamePlayReport report)
