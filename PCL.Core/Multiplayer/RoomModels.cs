@@ -95,11 +95,11 @@ public sealed record RoomPackShare(string Id = "", string Name = "", string Vers
         CheckShareText(Name, 80, "整合包名称"); CheckShareText(Version, 80, "整合包版本");
         if ((Minecraft ?? "").Length > 40 || (Minecraft ?? "").Any(char.IsControl)) throw new ArgumentException("整合包 Minecraft 版本无效。");
         var file = FileName ?? "";
-        if (!Regex.IsMatch(file, @"^[^\\/:*?""<>|\p{C}]+\.(?i:zip|mrpack)$") || file.EndsWith(' ') || file.StartsWith('.'))
+        if (file.Length > 0 && (!Regex.IsMatch(file, @"^[^\\/:*?""<>|\p{C}]+\.(?i:zip|mrpack)$") || file.EndsWith(' ') || file.StartsWith('.')))
             throw new ArgumentException("整合包文件名必须是 .zip 或 .mrpack。");
         var download = CheckUrl(DownloadUrl, "下载地址"); var share = CheckUrl(ShareUrl, "分享地址");
         var hash = Sha256 ?? "";
-        if (hash.Length > 0 && !Regex.IsMatch(hash, "^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$|^[0-9a-fA-F]{128}$")) throw new ArgumentException("整合包校验值无效。");
+        if (hash.Length > 0 && !Regex.IsMatch(hash, "^[0-9a-fA-F]{32}$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$|^[0-9a-fA-F]{128}$")) throw new ArgumentException("整合包校验值无效。");
         var path = SharePath ?? "";
         if (path.Length > 512 || path.Any(char.IsControl) || path.Contains("..") || path.Contains('\\'))
             throw new ArgumentException("整合包分享路径无效。");

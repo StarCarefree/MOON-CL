@@ -207,6 +207,13 @@ class RoomApiTest {
         call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json")
                 .content("{\"game\":{\"state\":\"stopped\"}}")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.members[0].game.pack").doesNotExist());
+        String quark = "{\"game\":{\"state\":\"running\",\"pack\":{\"id\":\"roguelike-bio\",\"name\":\"肉鸽生化\",\"version\":\"V1.0\",\"fileName\":\"\",\"shareUrl\":\"https://pan.quark.cn/s/538fbf1a2d2c?pwd=T6v2\"}}}";
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json").content(quark))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.members[0].game.pack.fileName").value(""))
+                .andExpect(jsonPath("$.members[0].game.pack.shareUrl").value("https://pan.quark.cn/s/538fbf1a2d2c?pwd=T6v2"));
+        String curse = "{\"game\":{\"state\":\"running\",\"pack\":{\"id\":\"curseforge-1248884\",\"name\":\"Simply Optimized (Improved)\",\"version\":\"1.21.1\",\"minecraft\":\"1.21.1\",\"fileName\":\"Simply-Optimized.zip\",\"downloadUrl\":\"https://edge.forgecdn.net/files/1/2/Simply-Optimized.zip\",\"sha256\":\"" + "c".repeat(32) + "\"}}}";
+        call(post(member(host) + "/heartbeat").header("Authorization", auth(host)).contentType("application/json").content(curse))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.members[0].game.pack.sha256").value("c".repeat(32)));
     }
 
     @Test void overlayDescriptorsWorkThroughRoutesAndRejectIrrelevantFields() throws Exception {

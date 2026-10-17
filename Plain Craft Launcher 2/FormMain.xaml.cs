@@ -214,8 +214,12 @@ public partial class FormMain
         // Left = (GetWPFSize(My.Computer.Screen.WorkingArea.Width) - Width) / 2
         isSizeSaveable = true;
         ShowWindowToTop();
+        AcceptJoinRoom();
+
         var hwndSource = (HwndSource)PresentationSource.FromVisual(this);
         hwndSource.AddHook(WndProc);
+        AddClipboardFormatListener(hwndSource.Handle);
+
         ModAnimation.AniStart(new[]
         {
             ModAnimation.AaCode(() => ModAnimation.AniControlEnabled -= 1, 50),
@@ -1279,8 +1283,10 @@ public partial class FormMain
             }
 
             ShowWindowToTop();
+            AcceptJoinRoom();
             handled = true;
         }
+
         else if (msg == 26) // WM_SETTINGCHANGE
         {
             if (Marshal.PtrToStringAuto(lParam) == "ImmersiveColorSet")
@@ -1290,9 +1296,63 @@ public partial class FormMain
                     (ThemeManager.IsDarkMode != SystemTheme.IsSystemInDarkMode())) ThemeService.RefreshColorMode();
             }
         }
+        else if (msg == 0x031D && isWindowLoadFinished) // WM_CLIPBOARDUPDATE
+        {
+            TryPromptCopiedRoomInvite();
+        }
 
         return nint.Zero;
     }
+
+    private string? _promptedClipboard;
+    private bool _promptingClipboard;
+    private static string? _joinRoomCode;
+
+    internal static void QueueJoinRoom(string code) => _joinRoomCode = code;
+
+    private void AcceptJoinRoom()
+    {
+        var code = _joinRoomCode;
+        var handoff = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "join-room.txt");
+        if (File.Exists(handoff))
+        {
+            try { code = File.ReadAllText(handoff).Trim(); File.Delete(handoff); }
+            catch (IOException) { }
+        }
+
+        if (string.IsNullOrWhiteSpace(code) || !isWindowLoadFinished) return;
+        _joinRoomCode = null;
+        ShowWindowToTop();
+        _ = NavigateHybridAsync("rooms");
+        UpdateHybridShell();
+        HybridRoomsView.OfferJoin(code);
+    }
+
+    private void TryPromptCopiedRoomInvite()
+    {
+        if (_promptingClipboard || !Clipboard.ContainsText()) return;
+        string text;
+        try { text = Clipboard.GetText(); }
+        catch (ExternalException) { return; }
+        var code = RoomFlowPresentation.RoomInviteCode(text);
+        if (code is null || text == _promptedClipboard) return;
+        _promptedClipboard = text;
+        _promptingClipboard = true;
+        try
+        {
+            ShowWindowToTop();
+            if (ModMain.MyMsgBox("检测到复制的房间邀请，邀请码 " + code + "。是否加入房间？", "加入房间", "加入", "稍后", forceWait: true) != 1) return;
+            ShowWindowToTop();
+            _ = NavigateHybridAsync("rooms");
+            UpdateHybridShell();
+            HybridRoomsView.OfferJoin(code);
+        }
+        finally { _promptingClipboard = false; }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool AddClipboardFormatListener(nint hwnd);
+
 
     // 窗口隐藏与置顶
     public bool Hidden

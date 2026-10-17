@@ -53,6 +53,10 @@ public partial class HybridFriends : UserControl, IDisposable
     private IInputElement? _overlayFocus;
     private string? _pendingRoomCode;
     private string? _pendingRoomName;
+    private string? _promptedInviteKey;
+    private string? _pendingJoinCode;
+
+
 
     public HybridFriends() : this(null) { }
 
@@ -66,9 +70,7 @@ public partial class HybridFriends : UserControl, IDisposable
         ShowTab();
         IsVisibleChanged += (_, _) =>
         {
-            if (IsVisible) return;
-            CloseOverlay();
-            StopGateway();
+            if (!IsVisible) CloseOverlay();
         };
     }
 
@@ -95,7 +97,7 @@ public partial class HybridFriends : UserControl, IDisposable
         Status.Text = _premium
             ? "已使用当前正版档案。打开本页会向好友服务登记一次 Mojang 会话。"
             : "离线、Authlib 和外置登录不能使用这套好友系统。";
-        if (IsVisible && _premium) _ = ConnectAsync();
+        if (_premium) _ = ConnectAsync();
     }
 
     private async void Request_Click(object sender, RoutedEventArgs e)
@@ -629,6 +631,8 @@ public partial class HybridFriends : UserControl, IDisposable
             SaveCache(session.Uuid, channel, messages);
             ShowLines(messages.Select(ToLine).ToArray());
         }
+
+
         catch (Exception ex) { if (selection == _selectionVersion && generation == _generation && !_closed && !Messages.HasItems) Status.Text = Message(ex); }
     }
 
@@ -746,7 +750,7 @@ public partial class HybridFriends : UserControl, IDisposable
                     {
                         await Dispatcher.InvokeAsync(async () =>
                         {
-                            if (generation != _generation || !_notices) return;
+                            if (generation != _generation) return;
                             var notice = friendEvent.Target switch
                             {
                                 "friend_request" => "收到新的好友申请。",
@@ -757,9 +761,14 @@ public partial class HybridFriends : UserControl, IDisposable
                                 "channel_invite_reaction" => "频道邀请已有回应。",
                                 _ => "好友活动已更新。"
                             };
-                            Status.Text = notice;
+                            if (_notices && friendEvent.Target != "chat_message") Status.Text = notice;
+
                             if (friendEvent.Target == "chat_message" && !string.Equals(friendEvent.From, _session?.Uuid, StringComparison.OrdinalIgnoreCase))
+                            {
                                 Announce(notice);
+                                PromptRoomInvite(friendEvent.Content, friendEvent.MessageId);
+                            }
+
                             if (friendEvent.Target is "chat_message" or "channel_invite" or "channel_invite_reaction")
                             {
                                 await LoadChannelsAsync().ConfigureAwait(true);
@@ -810,7 +819,7 @@ public partial class HybridFriends : UserControl, IDisposable
         _api?.Dispose();
         _api = null;
         ResetView();
-        if (IsVisible && _premium) _ = ConnectAsync();
+        if (_premium) _ = ConnectAsync();
     }
 
     private sealed record Preferences(bool UseCustom = false, string CustomUrl = "", bool Notices = true);
@@ -940,11 +949,35 @@ public partial class HybridFriends : UserControl, IDisposable
         catch (Exception ex) { Status.Text = Message(ex); }
     }
 
+    private void PromptRoomInvite(string? text, string? messageId)
+    {
+        if (_closed) return;
+        var code = RoomFlowPresentation.RoomInviteCode(text);
+        if (code is null) return;
+        var key = string.IsNullOrWhiteSpace(messageId) ? code : messageId;
+        _promptedInviteKey = key;
+
+        _pendingJoinCode = code;
+        try
+        {
+            var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(exe)) { PCL.Core.UI.ToastNotification.SendToast("邀请码 " + code, "好友邀请你加入房间"); return; }
+            PCL.Core.UI.ToastNotification.SendActionToast("邀请码 " + code, "好友邀请你加入房间", "加入", exe + " --join-room " + code);
+        }
+        catch (Exception) { }
+
+    }
+
+
+
     private static void Announce(string text)
     {
-        try { HintService.Hint(text, HintType.Info); }
-        catch (Exception) { }
-        try { System.Media.SystemSounds.Exclamation.Play(); }
+        var title = "MOONCL";
+        var body = text;
+        var split = text.IndexOf('：');
+        if (split > 0 && split < 24) { title = text[..split]; body = text[(split + 1)..]; }
+        try { PCL.Core.UI.ToastNotification.SendToast(body, title); }
         catch (Exception) { }
     }
+
 }

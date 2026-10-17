@@ -666,12 +666,19 @@ public partial class HybridRooms : UserControl, IDisposable
         var projects = PackUpdateDownloads.Projects(identity);
         using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(12) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("MOONCL");
+        var key = PCL.Core.App.Secrets.CurseForgeAPIKey;
+        if (!string.IsNullOrWhiteSpace(key)) http.DefaultRequestHeaders.TryAddWithoutValidation("x-api-key", key);
         var versions = new List<PackDownloadVersion>();
         foreach (var project in projects)
         {
-            using var response = await http.GetAsync(PackUpdateDownloads.Address(project));
-            response.EnsureSuccessStatusCode();
-            versions.AddRange(PackUpdateDownloads.Parse(project, await response.Content.ReadAsStringAsync()).Take(30));
+            for (var page = 0; page < 8; page++)
+            {
+                using var response = await http.GetAsync(PackUpdateDownloads.Address(project, page));
+                response.EnsureSuccessStatusCode();
+                var json = await response.Content.ReadAsStringAsync();
+                versions.AddRange(PackUpdateDownloads.Parse(project, json).Take(30));
+                if (project.Source != "curseforge" || !PackUpdateDownloads.HasMore(project, json, page)) break;
+            }
         }
         var choices = versions.Select(version => RoomPackShareResolver.FromPublicVersion(identity, version)).Where(share => share is not null).Cast<RoomPackShare>().Take(60).ToArray();
         if (choices.Length == 0) throw new InvalidOperationException(identity.Name + " 没有可公开分享的客户端整合包版本。");

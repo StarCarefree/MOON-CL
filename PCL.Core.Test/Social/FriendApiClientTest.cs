@@ -117,9 +117,9 @@ public sealed class FriendApiClientTest
     {
         using var http = new HttpClient(new Handler(request =>
         {
-            Assert.AreEqual("https://api.nxvav.cn/api/mcuuid?id=Notch", request.RequestUri!.AbsoluteUri);
+            Assert.AreEqual("https://uapis.cn/api/v1/game/minecraft/userinfo?username=Notch", request.RequestUri!.AbsoluteUri);
             return request.RequestUri.Query.Contains("Notch")
-                ? Json(new { code = 200, name = "Notch", uuid = "069a79f444e94726a5befca90e38aaf5" })
+                ? Json(new { username = "Notch", uuid = "069a79f444e94726a5befca90e38aaf5", skin_url = "https://textures.example/skin" })
                 : new HttpResponseMessage(HttpStatusCode.BadRequest);
         }));
         using var api = new FriendApiClient(FriendApiClient.OfficialUrl, http);

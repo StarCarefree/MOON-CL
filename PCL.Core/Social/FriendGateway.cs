@@ -28,6 +28,7 @@ public sealed class FriendGateway : IAsyncDisposable
         _socket = socket ?? new ClientWebSocket();
         _socket.Options.SetRequestHeader("Authorization", accessToken);
         _socket.Options.SetRequestHeader("User-Agent", "MOONCL");
+        _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(5);
     }
 
     public Uri GatewayUri => _gateway;
@@ -54,7 +55,10 @@ public sealed class FriendGateway : IAsyncDisposable
         var builder = new StringBuilder();
         while (true)
         {
-            var result = await _socket.ReceiveAsync(buffer, ct).ConfigureAwait(false);
+            WebSocketReceiveResult result;
+            try { result = await _socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct).ConfigureAwait(false); }
+            catch (InvalidOperationException) { return null; }
+
             if (result.MessageType == WebSocketMessageType.Close) return null;
             if (result.MessageType != WebSocketMessageType.Text) continue;
             builder.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));

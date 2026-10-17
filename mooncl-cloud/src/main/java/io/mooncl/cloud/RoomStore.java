@@ -77,11 +77,11 @@ final class RoomStore {
             if (mc.length() > 40 || mc.chars().anyMatch(Character::isISOControl))
                 throw new ApiException(400, "Invalid pack minecraft");
             String file = fileName == null ? "" : fileName;
-            if (!file.matches("[^\\\\/:*?\\\"<>|\\p{Cntrl}]+\\.(?i:zip|mrpack)") || file.endsWith(" ") || file.startsWith("."))
+            if (!(file.isEmpty() || file.matches("[^\\\\/:*?\\\"<>|\\p{Cntrl}]+\\.(?i:zip|mrpack)") && !file.endsWith(" ") && !file.startsWith(".")))
                 throw new ApiException(400, "Invalid pack file name");
             String download = httpUrl(downloadUrl, "pack download");
             String hash = sha256 == null ? "" : sha256;
-            if (!hash.matches("(?:[a-fA-F0-9]{64})?")) throw new ApiException(400, "Invalid pack sha256");
+            if (!hash.matches("(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64}|[a-fA-F0-9]{128})?")) throw new ApiException(400, "Invalid pack sha256");
             String share = httpUrl(shareUrl, "pack share");
             String path = sharePath == null ? "" : sharePath;
             if (path.length() > 512 || path.chars().anyMatch(Character::isISOControl) || path.contains("..") || path.contains("\\"))

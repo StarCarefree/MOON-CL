@@ -939,6 +939,7 @@ public static class ModMain
     [DllImport("user32", EntryPoint = "PostMessageA")]
     private static extern bool PostMessage(nint hWnd, uint msg, long wParam, long lParam);
 
+
     /// <summary>
     ///     将特定程序设置为使用高性能显卡启动。
     ///     如果失败，则抛出异常。

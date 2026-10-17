@@ -813,6 +813,14 @@ internal sealed class LauncherLibrary : IDisposable
         return blocked == 0;
     }
 
+    private static HashAlgorithmName PackHash(string hash) => (hash ?? "").Length switch
+    {
+        32 => HashAlgorithmName.MD5,
+        40 => HashAlgorithmName.SHA1,
+        128 => HashAlgorithmName.SHA512,
+        _ => HashAlgorithmName.SHA256
+    };
+
     private async Task InstallAsync(PackDefinition pack, bool quark, CancellationToken token)
     {
         var folder = ModFolder.mcFolderSelected;
@@ -850,7 +858,7 @@ internal sealed class LauncherLibrary : IDisposable
                     _phase = "下载整合包";
                     try
                     {
-                        await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, HashAlgorithmName.SHA256,
+                        await _transfer.DownloadAsync(url, archive, quark ? "" : pack.Sha256, PackHash(pack.Sha256),
                             new Progress<double>(p => _progress = p * .25), token, headers);
                     }
                     catch (HttpRequestException ex) when (quark && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)

@@ -76,6 +76,16 @@ public sealed class PackUpdateDownloadsTest
         var badUrl = Cf(); badUrl["downloadUrl"] = "file:///C:/test.zip";
         Assert.AreEqual(0, PackUpdateDownloads.Parse(CurseForge, CfResponse(noHash, badHash, noUrl, badUrl)).Count);
     }
+    [TestMethod]
+    public void CurseForgeKeepsClientZipWhenOnlyMd5IsPresent()
+    {
+        var md5 = Cf();
+        md5["hashes"] = new JsonArray(new JsonObject { ["algo"] = 2, ["value"] = new string('c', 32) });
+        var result = PackUpdateDownloads.Parse(CurseForge, CfResponse(md5));
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual(HashAlgorithmName.MD5, result[0].Algorithm);
+        Assert.AreEqual(32, result[0].Hash.Length);
+    }
 
     [TestMethod]
     public void PaginationAndProjectIdentityAreBounded()

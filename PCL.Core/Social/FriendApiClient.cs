@@ -75,7 +75,7 @@ public sealed class FriendApiClient : IDisposable
             throw new ArgumentException("UUID 须是 32 位十六进制，可带连字符。");
         return parsed.ToString("N");
     }
-    public const string NameLookupUrl = "https://api.nxvav.cn/api/mcuuid";
+    public const string NameLookupUrl = "https://uapis.cn/api/v1/game/minecraft/userinfo";
 
     public static bool TryUuid(string? value, out string uuid)
     {
@@ -91,16 +91,16 @@ public sealed class FriendApiClient : IDisposable
         return text;
     }
 
-    /// <summary>Resolve a Java username through https://docs.nxvav.cn/doc/mcuuid.html.</summary>
+    /// <summary>Resolve a Java username through https://uapis.cn/docs/api-reference/get-game-minecraft-userinfo.</summary>
     public async Task<string> LookupUuidAsync(string username, CancellationToken ct)
     {
         var name = PlayerName(username);
-        var uri = new Uri(NameLookupUrl + "?id=" + Uri.EscapeDataString(name));
+        var uri = new Uri(NameLookupUrl + "?username=" + Uri.EscapeDataString(name));
         using var response = await _http.GetAsync(uri, ct).ConfigureAwait(false);
         UuidBody? body = null;
         try { body = await response.Content.ReadFromJsonAsync<UuidBody>(Json, ct).ConfigureAwait(false); }
         catch (JsonException) { }
-        if (body is not { Code: 200 } || !TryUuid(body.Uuid, out var uuid))
+        if (!response.IsSuccessStatusCode || !TryUuid(body?.Uuid, out var uuid))
             throw new FriendApiException(response.StatusCode, "没有找到这个正版用户名。");
         return uuid;
     }
@@ -432,7 +432,6 @@ public sealed class FriendApiClient : IDisposable
     }
     private sealed class UuidBody
     {
-        [JsonPropertyName("code")] public int Code { get; set; }
         [JsonPropertyName("uuid")] public string? Uuid { get; set; }
     }
     private sealed class RequestsBody

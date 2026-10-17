@@ -52,4 +52,14 @@ public class RoomFlowPresentationTest
         Assert.IsTrue(RoomFlowPresentation.SameAddress("[2001:db8::1]:25565", "[2001:db8::1]"));
         Assert.IsFalse(RoomFlowPresentation.SameAddress("", ""));
     }
+
+    [TestMethod]
+    public void RoomInviteCodeReadsOnlyTheSharedInvitePhrase()
+    {
+        Assert.AreEqual("AB12CD34", RoomFlowPresentation.RoomInviteCode("邀请你加入联机房间「晚间」，邀请码 AB12cd34。"));
+        Assert.IsNull(RoomFlowPresentation.RoomInviteCode("随便聊聊 AB12CD34"));
+        Assert.IsNull(RoomFlowPresentation.RoomInviteCode("邀请码 只有七位"));
+        Assert.IsNull(RoomFlowPresentation.RoomInviteCode(null));
+    }
 }
+

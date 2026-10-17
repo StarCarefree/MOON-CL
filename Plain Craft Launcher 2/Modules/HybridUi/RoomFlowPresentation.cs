@@ -46,4 +46,15 @@ internal static class RoomFlowPresentation
     internal static bool Confirmed(GameLinkState? state, string sessionId, string address, string? requestId) =>
         state is { State: "connected" } && state.SessionId == sessionId && SameAddress(state.Address, address) &&
         (requestId is null || state.RequestId == requestId);
+
+    private static readonly Regex RoomInvite = new(@"邀请码\s*([A-Za-z0-9]{8})\b", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    /// <summary>邀请码只认好友房间邀请文案，避免普通聊天里的 8 位词被当成房间。</summary>
+    internal static string? RoomInviteCode(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var match = RoomInvite.Match(text);
+        return match.Success ? match.Groups[1].Value.ToUpperInvariant() : null;
+    }
 }
+

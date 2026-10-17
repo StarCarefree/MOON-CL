@@ -32,6 +32,26 @@ public static class ToastNotification
         SendToastFromTemplate(xml);
     }
 
+    /// <summary>右下角通知，带一个可启动本程序的按钮。arguments 原样交给新进程。</summary>
+    public static void SendActionToast(string message, string title, string button, string arguments)
+    {
+        var xml = $"""
+                   <toast activationType="protocol">
+                       <visual>
+                           <binding template="ToastGeneric">
+                               <text>{SecurityElement.Escape(title)}</text>
+                               <text>{SecurityElement.Escape(message)}</text>
+                           </binding>
+                       </visual>
+                       <actions>
+                           <action content="{SecurityElement.Escape(button)}" activationType="protocol" arguments="{SecurityElement.Escape(arguments)}"/>
+                       </actions>
+                   </toast>
+                   """;
+        SendToastFromTemplate(xml);
+    }
+
+
     /// <summary>
     /// 根据模板发送 Toast 通知。
     /// </summary>

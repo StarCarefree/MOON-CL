@@ -47,7 +47,8 @@ internal static class RoomPackShareResolver
         {
             Id = id, Name = identity.Name, Version = version.Version, Minecraft = minecraft,
             FileName = version.FileName, DownloadUrl = version.Url,
-            Sha256 = version.Algorithm == System.Security.Cryptography.HashAlgorithmName.SHA256 ? version.Hash : ""
+            Sha256 = version.Algorithm == System.Security.Cryptography.HashAlgorithmName.SHA256 ? version.Hash
+                : version.Algorithm == System.Security.Cryptography.HashAlgorithmName.MD5 ? version.Hash : ""
         });
     }
 

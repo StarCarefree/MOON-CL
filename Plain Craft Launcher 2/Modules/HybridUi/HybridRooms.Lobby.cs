@@ -110,6 +110,21 @@ public partial class HybridRooms
         if (_session?.Room is not null || _busy) return;
         OpenOverlay(JoinForm, "加入队伍", RoomCode);
     }
+    internal void OfferJoin(string code)
+    {
+        if (!_initialized || _closed || _busy) return;
+        var room = (code ?? "").Trim().ToUpperInvariant();
+        if (room.Length != 8 || !room.All(char.IsAsciiLetterOrDigit)) return;
+        if (_session?.Room is not null)
+        {
+            Status.Text = "已在房间中。要加入 " + room + "，请先退出当前房间。";
+            return;
+        }
+        RoomCode.Text = room;
+        OpenOverlay(JoinForm, "加入队伍", RoomCode);
+        Status.Text = "邀请码 " + room + " 已填入，确认后加入房间。";
+    }
+
     private void OpenRouteEditor_Click(object sender, RoutedEventArgs e)
     {
         if (_session?.IsHost != true || _busy || _closed) return;

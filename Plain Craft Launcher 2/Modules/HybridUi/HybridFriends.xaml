@@ -250,7 +250,7 @@
             <TextBlock DockPanel.Dock="Right" Text="{Binding Time}" Foreground="#9B9A90" FontSize="10" Margin="16,0,0,0"/>
             <TextBlock Text="{Binding Sender}" Foreground="#D9BC75" FontSize="11" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
            </DockPanel>
-           <TextBlock Text="{Binding Content}" FontSize="13"/>
+           <TextBox Text="{Binding Content, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="True" BorderThickness="0" Background="Transparent" Padding="0" MinHeight="0" FontSize="13" TextWrapping="Wrap" Cursor="IBeam" Focusable="True"/>
           </StackPanel>
          </Border>
          <DataTemplate.Triggers><DataTrigger Binding="{Binding Mine}" Value="True">
