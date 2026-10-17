@@ -50,6 +50,7 @@ public partial class PageLaunchRight
         HeroIconLetter.Visibility = icon is null ? Visibility.Visible : Visibility.Collapsed;
         HeroIconLetter.Text = string.IsNullOrEmpty(instance?.Name) ? "M" : instance.Name[..1];
         RunningInstanceCards.Refresh(PanRunning, instance);
+        RefreshDashboardData(instance);
     }
 
     private string DescribeVersion(McInstance instance)
