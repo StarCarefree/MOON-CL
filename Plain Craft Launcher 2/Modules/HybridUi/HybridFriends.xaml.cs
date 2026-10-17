@@ -74,6 +74,18 @@ public partial class HybridFriends : UserControl, IDisposable
         };
     }
 
+    internal void PlayPageSwitch()
+    {
+        if (Visibility != Visibility.Visible) return;
+        if (Overlay.Visibility == Visibility.Visible)
+        {
+            HybridMotion.Enter("Hybrid Friends Enter", OverlayFrame);
+            return;
+        }
+        HybridMotion.Enter("Hybrid Friends Enter",
+            Workspace.Children.OfType<FrameworkElement>().Where(child => child.Visibility == Visibility.Visible).ToArray());
+    }
+
     public void UpdateAccount(McProfile? profile)
     {
         if (_closed) return;

@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Input;
 using PCL.Core.App.Localization;
 using PCL.Core.Minecraft.Profile;
 using PCL.Core.Minecraft.Profile.Models;
@@ -11,13 +10,8 @@ public partial class PageLoginProfileSkin
     public PageLoginProfileSkin()
     {
         InitializeComponent();
-        Loaded += (_, _) => Reload();
-        // Handles
-        PanData.MouseEnter += ShowPanel;
-        PanData.MouseLeave += HidePanel;
         BtnSkin.Click += BtnSkin_Click;
         BtnEdit.Click += BtnEdit_Click;
-        BtnSelect.Click += ChangeProfile;
     }
 
     /// <summary>
@@ -53,26 +47,6 @@ public partial class PageLoginProfileSkin
     }
 
     #region 控制与编辑
-
-    // 显示 / 隐藏控制
-    private void ShowPanel(object sender, MouseEventArgs e)
-    {
-        ModAnimation.AniStart(ModAnimation.AaOpacity(PanButtons, 1d - PanButtons.Opacity, 120),
-            "PageLoginProfileSkin Button");
-    }
-
-    private void HidePanel(object sender, EventArgs e)
-    {
-        if (BtnEdit.ContextMenu.IsOpen || BtnSkin.ContextMenu.IsOpen || PanData.IsMouseOver)
-            return;
-        ModAnimation.AniStart(ModAnimation.AaOpacity(PanButtons, -PanButtons.Opacity, 120),
-            "PageLoginProfileSkin Button");
-    }
-
-    private void MenuAccountOptions_Closed(object sender, RoutedEventArgs e)
-    {
-        HidePanel(sender, e);
-    }
 
     // 皮肤与披风子菜单
     private void BtnSkin_Click(object sender, EventArgs e)
@@ -111,17 +85,6 @@ public partial class PageLoginProfileSkin
     private void BtnEditName_Click(object sender, RoutedEventArgs e)
     {
         ProfileUi.EditProfileId();
-    }
-
-    // 选择档案
-    private void ChangeProfile(object sender, EventArgs e)
-    {
-        ProfileService.Select(null);
-        ModBase.RunInUi(() =>
-        {
-            ModMain.frmLaunchLeft.RefreshPage(true);
-            ModMain.frmLaunchLeft.BtnLaunch.IsEnabled = false;
-        });
     }
 
     // 修改皮肤

@@ -29,6 +29,9 @@ public partial class HybridRooms : UserControl, IDisposable
     private CancellationTokenSource? _operation;
     private RoomSession? _session;
     private RoomPresence _presence = new();
+    private readonly ObservableCollection<string> _chat = [];
+    private string? _sharedClipboard;
+
     private RoomPackShare? _sharedPack;
     private bool _packManual;
     private ImageSource? _face, _hat;
@@ -52,7 +55,8 @@ public partial class HybridRooms : UserControl, IDisposable
         _settingsPath = settingsPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "multiplayer.json");
         InitializeComponent();
         LoadSettings();
-        Members.ItemsSource = _memberPage; HallMembers.ItemsSource = _hallPage; RouteList.ItemsSource = _routePage;
+        Members.ItemsSource = _memberPage; HallMembers.ItemsSource = _hallPage; RouteList.ItemsSource = _routePage; RoomChat.ItemsSource = _chat;
+
         _initialized = true;
         SaveSettings(); // Migrate legacy URL fields without persisting the built-in address.
         _heartbeat = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
@@ -122,7 +126,8 @@ public partial class HybridRooms : UserControl, IDisposable
         RemoveRouteButton.IsEnabled = !_busy && SelectedRoute is not null;
         if (room is null)
         {
-            ClearLeases(); _members.Clear(); _routes.Clear(); Endpoint.Text = ""; RefreshPages();
+            ClearLeases(); _members.Clear(); _routes.Clear(); _chat.Clear(); Endpoint.Text = ""; RefreshPages();
+
             RenderFlow();
             if (viewChanged && IsVisible) PlayPageSwitch();
             return;
@@ -501,6 +506,32 @@ public partial class HybridRooms : UserControl, IDisposable
         finally { _refreshing = false; }
     }
     private void CopyCode_Click(object sender, RoutedEventArgs e) { if (_initialized && !_closed) Copy(_session?.Room?.Code); }
+    private void ShareCode_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized || _closed || _session?.Room is not { } room) return;
+        var text = RoomFlowPresentation.ShareText(room.Name, room.Code);
+        _sharedClipboard = text;
+        Copy(text);
+        if (Status.Text == "已复制。") Status.Text = "已复制分享文字。别人复制后会进入这个房间。";
+    }
+    private void ChatInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
+        e.Handled = true;
+        SendChat_Click(sender, e);
+    }
+    private void SendChat_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized || _closed || _session?.Room is null) return;
+        var text = ChatInput.Text.Trim();
+        if (text.Length == 0) return;
+        var who = string.IsNullOrWhiteSpace(PlayerName.Text) ? "我" : PlayerName.Text.Trim();
+        _chat.Add(DateTime.Now.ToString("HH:mm") + "  " + who + "：" + text);
+        while (_chat.Count > 80) _chat.RemoveAt(0);
+        ChatInput.Clear();
+        if (_chat.Count > 0) RoomChat.ScrollIntoView(_chat[^1]);
+    }
+
     private void InviteFriend_Click(object sender, RoutedEventArgs e)
     {
         if (!_initialized || _closed) return;

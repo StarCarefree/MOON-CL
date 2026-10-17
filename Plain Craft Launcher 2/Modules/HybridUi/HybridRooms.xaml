@@ -196,6 +196,7 @@
       <TextBlock Text="邀请码" Foreground="#ADA99F" VerticalAlignment="Center" Margin="0,0,8,0"/>
       <TextBlock x:Name="Invitation" FontSize="16" FontWeight="SemiBold" Foreground="#D9BC75" VerticalAlignment="Center" Margin="0,0,12,0"/>
       <Button Content="复制" Style="{StaticResource Action}" Height="26" Padding="8,0" Click="CopyCode_Click" AutomationProperties.AutomationId="Rooms.CopyCode"/>
+      <Button Content="分享" Style="{StaticResource Action}" Height="26" Padding="8,0" Click="ShareCode_Click" AutomationProperties.AutomationId="Rooms.ShareCode"/>
       <Button Content="邀请好友" Style="{StaticResource Action}" Height="26" Padding="8,0" Click="InviteFriend_Click" AutomationProperties.AutomationId="Rooms.InviteFriend"/>
      </StackPanel>
     </Grid>
@@ -225,19 +226,36 @@
        </StackPanel>
       </Grid>
      </Border>
-     <Border x:Name="NetworkPanelSurface" Grid.Column="2" Style="{StaticResource Card}" Padding="12" BorderThickness="0">
-      <Grid>
-       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-       <TextBlock Text="连接概要" Foreground="#D9BC75" FontWeight="SemiBold"/>
-       <TextBlock Grid.Row="1" x:Name="ConnectionSummary" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,8" LineHeight="20" LineStackingStrategy="BlockLineHeight" MaxHeight="40" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-       <TextBlock Grid.Row="2" x:Name="ConnectionDetail" FontSize="12" Foreground="#ADA99F" LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="64" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-       <TextBlock Grid.Row="3" x:Name="RoomHealth" FontSize="12" Foreground="#C7C3B8" Margin="0,12,0,0" LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="48" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.LiveSetting="Polite"/>
-       <StackPanel Grid.Row="5" Margin="0,12,0,0">
-        <Button Content="管理线路" Style="{StaticResource Action}" Margin="0" Click="OpenConnections_Click" AutomationProperties.AutomationId="Rooms.ManageConnections"/>
-        <Button x:Name="HostPublishShortcut" Content="LAN 手动 / 已有服务器" Style="{StaticResource Action}" Margin="0,8,0,0" FontSize="12" Padding="4,0" Visibility="Collapsed" Click="OpenRouteEditor_Click" AutomationProperties.AutomationId="Rooms.HostPublishShortcut"/>
-       </StackPanel>
-      </Grid>
-     </Border>
+     <Grid Grid.Column="2">
+      <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="8"/><RowDefinition Height="3*"/></Grid.RowDefinitions>
+      <Border x:Name="NetworkPanelSurface" Style="{StaticResource Card}" Padding="12" BorderThickness="0">
+       <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="连接概要" Foreground="#D9BC75" FontWeight="SemiBold"/>
+        <TextBlock Grid.Row="1" x:Name="ConnectionSummary" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,8" LineHeight="20" LineStackingStrategy="BlockLineHeight" MaxHeight="40" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        <TextBlock Grid.Row="2" x:Name="ConnectionDetail" FontSize="12" Foreground="#ADA99F" LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="64" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        <TextBlock Grid.Row="3" x:Name="RoomHealth" FontSize="12" Foreground="#C7C3B8" Margin="0,12,0,0" LineHeight="16" LineStackingStrategy="BlockLineHeight" MaxHeight="48" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.LiveSetting="Polite"/>
+        <StackPanel Grid.Row="5" Margin="0,12,0,0">
+         <Button Content="管理线路" Style="{StaticResource Action}" Margin="0" Click="OpenConnections_Click" AutomationProperties.AutomationId="Rooms.ManageConnections"/>
+         <Button x:Name="HostPublishShortcut" Content="LAN 手动 / 已有服务器" Style="{StaticResource Action}" Margin="0,8,0,0" FontSize="12" Padding="4,0" Visibility="Collapsed" Click="OpenRouteEditor_Click" AutomationProperties.AutomationId="Rooms.HostPublishShortcut"/>
+        </StackPanel>
+       </Grid>
+      </Border>
+      <Border Grid.Row="2" Style="{StaticResource Card}" Padding="12" BorderThickness="0">
+       <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="房间聊天" Foreground="#D9BC75" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ListBox Grid.Row="1" x:Name="RoomChat" Background="Transparent" Foreground="#EEECE5" BorderThickness="0" Focusable="False" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.AutomationId="Rooms.Chat">
+         <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2" FontSize="12"/></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <DockPanel Grid.Row="2" Margin="0,8,0,0">
+         <Button DockPanel.Dock="Right" Content="发送" Style="{StaticResource Action}" Margin="8,0,0,0" Click="SendChat_Click" AutomationProperties.AutomationId="Rooms.SendChat"/>
+         <TextBox x:Name="ChatInput" MaxLength="200" KeyDown="ChatInput_KeyDown" AutomationProperties.AutomationId="Rooms.ChatInput"/>
+        </DockPanel>
+       </Grid>
+      </Border>
+     </Grid>
+
     </Grid>
     <Border Grid.Row="4" Background="#29271F" CornerRadius="6" Padding="12,8">
      <Grid>
@@ -305,6 +323,7 @@
           <Button x:Name="RouteNext" Content="›" Style="{StaticResource Action}" Height="28" Width="32" Padding="0" Margin="0" Click="RouteNext_Click" AutomationProperties.AutomationId="Rooms.RouteNext" AutomationProperties.Name="下一页线路"/>
          </StackPanel>
          <WrapPanel x:Name="ConnectActions" Margin="0,4,0,8">
+
           <Button Content="自动选路 / 检测" Style="{StaticResource Action}" Click="AutoConnect_Click" AutomationProperties.AutomationId="Rooms.AutoConnect"/>
           <Button Content="检测所选" Style="{StaticResource Action}" Click="ManualConnect_Click" AutomationProperties.AutomationId="Rooms.Connect"/>
           <Button Content="复制地址" Style="{StaticResource Action}" Click="CopyAddress_Click" AutomationProperties.AutomationId="Rooms.CopyAddress"/>

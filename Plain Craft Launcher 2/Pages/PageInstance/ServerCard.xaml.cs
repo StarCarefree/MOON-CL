@@ -216,7 +216,7 @@ public partial class ServerCard
         }
     }
 
-    private async void BtnPublish_Click(object sender, RoutedEventArgs e)
+    private async void BtnPublish_Click(object sender, EventArgs e)
     {
         try
         {

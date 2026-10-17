@@ -37,13 +37,24 @@ public partial class HybridAccountOverlay
         }
         _closing = false;
         if (ModMain.frmLaunchLeft is { } launch)
+        {
             launch.ExternalLoginEnded += OnLoginEnded;
-        ShowMethods();
+            launch.ProfileHost = PanProfileHost;
+            launch.RefreshPage(false);
+        }
+        if (ProfileService.Current is null) ShowMethods();
+        else ShowCurrent();
         Visibility = Visibility.Visible;
         ReloadAccounts(false);
         HybridMotion.Pop(Card, Backdrop);
         HybridMotion.SlideIn(LeftPane, RightPane);
         Keyboard.Focus(this);
+    }
+
+    internal void OpenLogin(ModLaunch.McLoginType type)
+    {
+        Open();
+        Begin(type);
     }
 
     public void Close()
@@ -63,20 +74,47 @@ public partial class HybridAccountOverlay
 
     private void OnLoginEnded(object? sender, EventArgs e)
     {
-        ShowMethods();
+        ShowCurrent();
         ReloadAccounts(false);
     }
 
     private void ShowMethods()
     {
         Methods.Visibility = Visibility.Visible;
+        CurrentScroll.Visibility = Visibility.Collapsed;
+        HybridNavigation.SetIsActive(CurrentTab, false);
+        HybridNavigation.SetIsActive(CreateTab, true);
         CreateScroll.Visibility = Visibility.Collapsed;
         BackMethods.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowCurrent()
+    {
+        if (ProfileService.Current is null) { ShowMethods(); return; }
+        Methods.Visibility = Visibility.Collapsed;
+        CurrentScroll.Visibility = Visibility.Visible;
+        CreateScroll.Visibility = Visibility.Collapsed;
+        BackMethods.Visibility = Visibility.Collapsed;
+        HybridNavigation.SetIsActive(CurrentTab, true);
+        HybridNavigation.SetIsActive(CreateTab, false);
+    }
+
+    private void Current_Click(object sender, RoutedEventArgs e)
+    {
+        DetachHost();
+        ShowCurrent();
+    }
+
+    private void Create_Click(object sender, RoutedEventArgs e)
+    {
+        DetachHost();
+        ShowMethods();
     }
 
     private void ShowForm()
     {
         Methods.Visibility = Visibility.Collapsed;
+        CurrentScroll.Visibility = Visibility.Collapsed;
         CreateScroll.Visibility = Visibility.Visible;
         BackMethods.Visibility = Visibility.Visible;
         if (ModMain.frmLaunchLeft is not { } launch) return;
@@ -209,15 +247,17 @@ public partial class HybridAccountOverlay
     private void Select_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: McProfile profile } || ModMain.frmLaunchLeft is not { } launch) return;
-        launch.ExternalLoginHost = null;
+        DetachHost();
         ProfileService.IsCreatingProfile = false;
         ProfileService.Select(profile);
         ModLaunch.mcLoginMsLoader.State = ModBase.LoadState.Waiting;
         ModLaunch.mcLoginAuthLoader.State = ModBase.LoadState.Waiting;
         ModLaunch.mcLoginLegacyLoader.State = ModBase.LoadState.Waiting;
-        launch.RefreshPage(true);
-        launch.BtnLaunch.IsEnabled = true;
-        Close();
+        launch.ProfileHost = PanProfileHost;
+        launch.RefreshPage(false);
+        ShowCurrent();
+        ReloadAccounts(false);
+        Closed?.Invoke(this, EventArgs.Empty);
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
@@ -229,6 +269,7 @@ public partial class HybridAccountOverlay
             return;
         ProfileUi.RemoveProfile(profile);
         ReloadAccounts(false);
+        if (ProfileService.Current is null) ShowMethods();
         Closed?.Invoke(this, EventArgs.Empty);
     }
 

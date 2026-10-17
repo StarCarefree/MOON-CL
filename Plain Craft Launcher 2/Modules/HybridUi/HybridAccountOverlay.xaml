@@ -51,12 +51,17 @@
                     </Border>
                     <Border x:Name="RightPane" Grid.Column="2" Background="#1B1D21" BorderBrush="#2A2D32" BorderThickness="1" CornerRadius="6" Padding="16">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Top" Text="{DynamicResource Hybrid.Account.Create}" Foreground="{StaticResource Hybrid.Text}" FontSize="16" FontWeight="SemiBold" />
-                            <TextBlock DockPanel.Dock="Top" Text="{DynamicResource Hybrid.Account.CreateHint}" Foreground="{StaticResource Hybrid.Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12" />
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
+                                <Button x:Name="CurrentTab" Content="{DynamicResource Hybrid.Account.Current}" Click="Current_Click" Style="{StaticResource Hybrid.QuietButton}" AutomationProperties.AutomationId="Hybrid.Account.Current" />
+                                <Button x:Name="CreateTab" Content="{DynamicResource Hybrid.Account.Create}" Click="Create_Click" Style="{StaticResource Hybrid.QuietButton}" AutomationProperties.AutomationId="Hybrid.Account.Create" />
+                            </StackPanel>
                             <Button x:Name="BackMethods" DockPanel.Dock="Top" Click="Back_Click" Style="{StaticResource Hybrid.QuietButton}"
                                     HorizontalAlignment="Left" Margin="0,0,0,10" Visibility="Collapsed"
                                     Content="{DynamicResource Hybrid.Account.Back}" AutomationProperties.AutomationId="Hybrid.Account.Back" />
                             <Grid>
+                                <ScrollViewer x:Name="CurrentScroll" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <Grid x:Name="PanProfileHost" />
+                                </ScrollViewer>
                                 <StackPanel x:Name="Methods">
                                     <Button Click="LittleSkin_Click" Style="{StaticResource Method}" AutomationProperties.AutomationId="Hybrid.Account.LittleSkin">
                                         <StackPanel>

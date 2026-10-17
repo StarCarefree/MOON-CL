@@ -6,7 +6,7 @@ For Fabric/Quilt the launcher prepends this Java agent. The agent reads `mods/*.
 
 `preLaunch` -> `main` -> `client` / `server` -> `client_init` / `server_init` -> other declared types.
 
-Each phase reports the real entrypoint count (`current/total`) and the entrypoint identifier with its mod id, then a final `ready`. Unknown types are appended rather than dropped, so a pack never hides a startup phase.
+Each phase reports the real entrypoint count (`current/total`) and the current mod name plus id. The stage line matches the original loading bar: `Loading 'client' (ClientModInitializer) — 81/83 — Wifi Card Games`. Known Fabric/Quilt keys use the initializer interface simple name; other declared types keep a readable fallback and are appended rather than dropped.
 
 The launcher passes `MOONCL_MLS_TARGET` (instance name) for the title, `MOONCL_MLS_PROGRESS_FILE` for the snapshot and `MOONCL_MLS_PROGRESS_TOKEN` as the per-launch identity.
 

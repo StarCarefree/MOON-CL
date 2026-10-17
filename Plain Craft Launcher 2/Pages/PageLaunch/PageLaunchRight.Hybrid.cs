@@ -43,6 +43,7 @@ public partial class PageLaunchRight
     public void ShowSelectedVersion(McInstance? instance)
     {
         LabNativeGameName.Text = instance?.Name ?? Lang.Text("Hybrid.EmptyGameTitle");
+        NativeVersionSettings.IsEnabled = instance is not null && !ModLaunch.IsInstanceLaunching(instance);
         LabNativeGameDetail.Text = instance is null ? Lang.Text("Hybrid.EmptyGameDetail") : DescribeVersion(instance);
         var icon = instance is null ? null : HybridSidebar.IconFor(instance);
         HeroIcon.Source = icon;
@@ -170,6 +171,11 @@ public partial class PageLaunchRight
     private async void NativeVersions_Click(object sender, RoutedEventArgs e)
     {
         if (ModMain.frmMain is { } form) await form.NavigateHybridAsync("versions");
+    }
+
+    private void NativeVersionSettings_Click(object sender, RoutedEventArgs e)
+    {
+        ModMain.frmLaunchLeft?.OpenSelectedVersionSettings();
     }
 
 }

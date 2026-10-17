@@ -15,12 +15,9 @@ namespace PCL;
 
 public partial class PageLaunchLeft
 {
-    private double actualUsedHeight;
-    private double actualUsedWidth;
     private int btnLaunchState;
     private string _btnLaunchLanguage;
     private McInstance btnLaunchVersion;
-    private bool isHeightAnimating;
     public interface ILoginPage { void Reload(); }
 
     private enum LaunchButtonAction
@@ -45,8 +42,7 @@ public partial class PageLaunchLeft
 
     private bool isLoadFinished;
 
-    // 尺寸改变动画
-    private bool isWidthAnimating;
+    // 平滑显示的启动进度
     private double showProgress;
 
     public PageLaunchLeft()
@@ -60,8 +56,6 @@ public partial class PageLaunchLeft
         BtnCancel.Click += BtnCancel_Click;
         BtnMore.Click += BtnMore_Click;
         Unloaded += (_, _) => _updatePulse?.Stop();
-        PanLaunchingInfo.SizeChanged += PanLaunchingInfo_SizeChangedW;
-        PanLaunchingInfo.SizeChanged += PanLaunchingInfo_SizeChangedH;
     }
     private static void OnLanguageChanged(PageLaunchLeft page) => ModBase.RunInUi(page.RefreshButtonsUI);
 
@@ -379,7 +373,9 @@ public partial class PageLaunchLeft
     }
 
     // 实例设置按钮
-    private void BtnMore_Click(object sender, MouseButtonEventArgs e)
+    private void BtnMore_Click(object sender, MouseButtonEventArgs e) => OpenSelectedVersionSettings();
+
+    internal void OpenSelectedVersionSettings()
     {
         if (ModInstanceList.McMcInstanceSelected is { } launching && ModLaunch.IsInstanceLaunching(launching))
             return;
@@ -522,46 +518,6 @@ public partial class PageLaunchLeft
         }
     }
 
-    private void PanLaunchingInfo_SizeChangedW(object sender, SizeChangedEventArgs e)
-    {
-        var deltaWidth = e.NewSize.Width - e.PreviousSize.Width;
-        if (e.PreviousSize.Width == 0d || isWidthAnimating || Math.Abs(deltaWidth) < 1d ||
-            PanLaunchingInfo.ActualWidth == 0d)
-            return;
-        ModAnimation.AniStart(new[]
-        {
-            ModAnimation.AaWidth(PanLaunchingInfo, deltaWidth, 180, ease: new ModAnimation.AniEaseOutFluent()),
-            ModAnimation.AaCode(() =>
-            {
-                isWidthAnimating = false;
-                PanLaunchingInfo.Width = actualUsedWidth;
-            }, after: true)
-        }, "Launching Info Width");
-        isWidthAnimating = true;
-        actualUsedWidth = PanLaunchingInfo.Width;
-        PanLaunchingInfo.Width = e.PreviousSize.Width;
-    }
-
-    private void PanLaunchingInfo_SizeChangedH(object sender, SizeChangedEventArgs e)
-    {
-        var deltaHeight = e.NewSize.Height - e.PreviousSize.Height;
-        if (e.PreviousSize.Height == 0d || isHeightAnimating || Math.Abs(deltaHeight) < 1d ||
-            PanLaunchingInfo.ActualHeight == 0d)
-            return;
-        ModAnimation.AniStart(new[]
-        {
-            ModAnimation.AaHeight(PanLaunchingInfo, deltaHeight, 180, ease: new ModAnimation.AniEaseOutFluent()),
-            ModAnimation.AaCode(() =>
-            {
-                isHeightAnimating = false;
-                PanLaunchingInfo.Height = actualUsedHeight;
-            }, after: true)
-        }, "Launching Info Height");
-        isHeightAnimating = true;
-        actualUsedHeight = PanLaunchingInfo.Height;
-        PanLaunchingInfo.Height = e.PreviousSize.Height;
-    }
-
     // 启动游戏按钮
     public void ApplyVersionUpdateChrome()
     {
@@ -683,7 +639,6 @@ public partial class PageLaunchLeft
         ProgressLaunchingUnfinished.Width = new GridLength(1d, GridUnitType.Star);
         PanLaunchingHint.Opacity = 0d;
         PanLaunchingHint.Visibility = Visibility.Collapsed;
-        PanLaunchingInfo.Width = double.NaN; // 重置宽度改变动画
         ModLaunch.mcLaunchProcess = null;
         ModLaunch.mcLaunchWatcher = null;
 
@@ -694,22 +649,16 @@ public partial class PageLaunchLeft
             LabLaunchingHint.Text = "";
 
         // 初始化其他页面
+        ModAnimation.AniStop("Launch State Page");
         PanInput.IsHitTestVisible = false;
-        PanLaunching.IsHitTestVisible = false;
+        PanInput.Visibility = Visibility.Collapsed;
         LoadLaunching.State.LoadingState = MyLoading.MyLoadingState.Run;
+        LabLaunchingProgress.Visibility = Visibility.Visible;
+        LabLaunchingProgressLeft.Visibility = Visibility.Visible;
         PanLaunching.Visibility = Visibility.Visible;
-        ModAnimation.AniStart(
-            new[]
-            {
-                ModAnimation.AaOpacity(PanInput, 0d, 50),
-                ModAnimation.AaOpacity(PanInput, -PanInput.Opacity, 110, ease: new ModAnimation.AniEaseInFluent(),
-                    after: true),
-                ModAnimation.AaScaleTransform(PanInput, 1.2d - ((ScaleTransform)PanInput.RenderTransform).ScaleX, 160),
-                ModAnimation.AaOpacity(PanLaunching, 1d - PanLaunching.Opacity, 150, 100),
-                ModAnimation.AaScaleTransform(PanLaunching, 1d - ((ScaleTransform)PanLaunching.RenderTransform).ScaleX,
-                    500, 100, new ModAnimation.AniEaseOutBack(ModAnimation.AniEasePower.Weak)),
-                ModAnimation.AaCode(() => PanLaunching.IsHitTestVisible = true, 150)
-            }, "Launch State Page"); // 略作延迟，这样如果预检测失败，不会出现奇怪的弹一下的动画
+        PanLaunching.IsHitTestVisible = true;
+        PanLaunching.Opacity = 0;
+        ModAnimation.AniStart(ModAnimation.AaOpacity(PanLaunching, 1, 180), "Launch State Page");
     }
 
     /// <summary>
@@ -749,6 +698,7 @@ public partial class PageLaunchLeft
     /// </summary>
     private PageType pageCurrent = PageType.None;
     internal Panel? ExternalLoginHost { get; set; }
+    internal Panel? ProfileHost { get; set; }
     internal event EventHandler? ExternalLoginEnded;
 
     internal void ShowCreateLogin(ModLaunch.McLoginType type)
@@ -835,19 +785,19 @@ public partial class PageLaunchLeft
         {
             #region 确定更改的页面实例并实例化
 
-            if (pageCurrent == type)
-                return pageNew;
             pageNew = PageGet(type);
+            var host = type == PageType.ProfileSkin ? ProfileHost ?? PanLogin : ExternalLoginHost ?? PanLogin;
+            if (pageCurrent == type && pageNew is FrameworkElement existing && ReferenceEquals(existing.Parent, host))
+                return pageNew;
 
             #endregion
 
             #region 切换页面
 
             ModAnimation.AniStop("FrmLogin PageChange");
-            var host = ExternalLoginHost ?? PanLogin;
             if (ExternalLoginHost is not null && type is PageType.Profile or PageType.ProfileSkin)
             {
-                host = PanLogin;
+                host = type == PageType.ProfileSkin ? ProfileHost ?? PanLogin : PanLogin;
                 ExternalLoginHost = null;
                 ExternalLoginEnded?.Invoke(this, EventArgs.Empty);
             }
@@ -904,6 +854,12 @@ public partial class PageLaunchLeft
     /// <param name="targetLoginType">目标验证方式，若正在创建档案需填</param>
     public void RefreshPage(bool anim, ModLaunch.McLoginType targetLoginType = default)
     {
+        // 从版本设置或外部登录链接进入时，也统一使用账号窗口承载表单。
+        if (targetLoginType != default && ExternalLoginHost is null && ModMain.frmMain is { } main)
+        {
+            main.ShowHybridLogin(targetLoginType);
+            return;
+        }
         var type = default(PageType);
         if (targetLoginType != default)
         {
@@ -926,10 +882,11 @@ public partial class PageLaunchLeft
                 BtnLaunch.IsEnabled = false;
         }
 
-        // 刷新页面
-        if (pageCurrent == type)
-            return;
-        PageChange(type, anim);
+        // 同类型账号切换也必须刷新身份与皮肤；宿主可能已从首页移入账号窗口。
+        if (pageCurrent != type || type == PageType.ProfileSkin)
+            PageChange(type, anim);
+        if (type == PageType.ProfileSkin)
+            ModMain.frmLoginProfileSkin?.Reload();
     }
 
     #endregion

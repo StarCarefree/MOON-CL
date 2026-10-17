@@ -17,6 +17,7 @@ public partial class FormMain
     private DispatcherTimer? _hybridTimer;
     private bool? _hybridGameLayout;
     private string? _hybridVersionPath;
+    private HybridRooms HybridRoomsView => HybridMultiplayerView.Rooms;
 
     private void InitializeHybridShell()
     {
@@ -76,9 +77,9 @@ public partial class FormMain
     internal void SetBrowseVisible(bool visible)
     {
         if (PanBrowse is null) return;
-        if (visible) { HybridRoomsView.Visibility = Visibility.Collapsed; HybridFriendsView.Visibility = Visibility.Collapsed; }
+        if (visible) { HybridMultiplayerView.Visibility = Visibility.Collapsed; HybridFriendsView.Visibility = Visibility.Collapsed; }
         PanBrowse.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || HybridRoomsView.Visibility == Visibility.Visible || HybridFriendsView.Visibility == Visibility.Visible;
+        var covered = visible || HybridMultiplayerView.Visibility == Visibility.Visible || HybridFriendsView.Visibility == Visibility.Visible;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
         ModAnimation.AniStop("Hybrid Browse");
@@ -89,9 +90,9 @@ public partial class FormMain
 
     internal void SetRoomsVisible(bool visible)
     {
-        var show = visible && HybridRoomsView.Visibility != Visibility.Visible;
+        var show = visible && HybridMultiplayerView.Visibility != Visibility.Visible;
         if (visible) HybridFriendsView.Visibility = Visibility.Collapsed;
-        HybridRoomsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        HybridMultiplayerView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         var covered = visible || HybridFriendsView.Visibility == Visibility.Visible || _webUi.IsPresented;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
@@ -102,12 +103,12 @@ public partial class FormMain
     internal void SetFriendsVisible(bool visible)
     {
         var show = visible && HybridFriendsView.Visibility != Visibility.Visible;
-        if (visible) HybridRoomsView.Visibility = Visibility.Collapsed;
+        if (visible) HybridMultiplayerView.Visibility = Visibility.Collapsed;
         HybridFriendsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || HybridRoomsView.Visibility == Visibility.Visible || _webUi.IsPresented;
+        var covered = visible || HybridMultiplayerView.Visibility == Visibility.Visible || _webUi.IsPresented;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
-        if (show) HybridFriendsView.UpdateAccount(ProfileService.Current);
+        if (show) { HybridFriendsView.UpdateAccount(ProfileService.Current); HybridFriendsView.PlayPageSwitch(); }
         UpdateHybridShell();
     }
 
@@ -123,6 +124,12 @@ public partial class FormMain
         HybridAccountView.Open();
     }
 
+    internal void ShowHybridLogin(ModLaunch.McLoginType type)
+    {
+        if (_webUi.IsPresented) _webUi.Hide();
+        HybridAccountView.OpenLogin(type);
+    }
+
     internal void RefreshHybridVersions()
     {
         try { UpdateHybridShell(); }
@@ -134,7 +141,7 @@ public partial class FormMain
         if (HybridSidebarView is null || PanMain is null) return;
         var browse = _webUi.IsPresented;
         var page = (PageType)pageCurrent;
-        var route = HybridFriendsView.Visibility == Visibility.Visible ? "friends" : HybridRoomsView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
+        var route = HybridFriendsView.Visibility == Visibility.Visible ? "friends" : HybridMultiplayerView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
         {
             PageType.Download or PageType.CompDetail => "download",
             PageType.Setup => "settings",
@@ -146,7 +153,7 @@ public partial class FormMain
         var nextSection = route switch
         {
             "browse" => Lang.Text("Hybrid.Browse"),
-            "rooms" => "联机房间",
+            "rooms" => "多人游戏",
             "friends" => "好友",
             "settings" => Lang.Text("Main.Tab.Settings"),
             "download" => Lang.Text("Main.Tab.Download"),
@@ -207,10 +214,21 @@ public partial class FormMain
         if (gameLayout) PanForm.Background = (Brush)FindResource("Hybrid.Background");
         if (_hybridGameLayout == gameLayout) return;
         _hybridGameLayout = gameLayout;
-        Grid.SetColumn(PanLeftSlot, gameLayout ? 1 : 0);
+        // A dedicated bottom row keeps the primary action visible without covering cards.
+        Grid.SetColumn(PanLaunchLayer, 0);
+        Grid.SetColumnSpan(PanLaunchLayer, gameLayout ? 2 : 1);
+        Grid.SetRow(PanLaunchLayer, gameLayout ? 2 : 0);
+        Grid.SetRowSpan(PanLaunchLayer, gameLayout ? 1 : 3);
+        Panel.SetZIndex(PanLaunchLayer, 0);
+        PanLeftSlot.HorizontalAlignment = HorizontalAlignment.Stretch;
+        PanLeftSlot.VerticalAlignment = gameLayout ? VerticalAlignment.Bottom : VerticalAlignment.Stretch;
         Grid.SetColumn(PanRightSlot, gameLayout ? 0 : 1);
-        PanMain.ColumnDefinitions[0].Width = gameLayout ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-        PanMain.ColumnDefinitions[1].Width = gameLayout ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        Grid.SetRow(PanRightSlot, gameLayout ? 1 : 0);
+        Grid.SetRowSpan(PanRightSlot, gameLayout ? 1 : 3);
+        Grid.SetColumnSpan(PanRightSlot, gameLayout ? 2 : 1);
+        HybridGameHeading.Visibility = gameLayout ? Visibility.Visible : Visibility.Collapsed;
+        PanMain.ColumnDefinitions[0].Width = gameLayout ? new GridLength(0) : GridLength.Auto;
+        PanMain.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
     }
 
     private async void HybridNavigation_Requested(object sender, HybridNavigationEventArgs e)

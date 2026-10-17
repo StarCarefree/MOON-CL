@@ -138,7 +138,7 @@ public partial class HybridSidebar : UserControl
             NavigationRequested?.Invoke(this, new HybridNavigationEventArgs("instance", entry.Instance));
     }
 
-    private void Version_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private void Version_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_synchronising || e.Handled) return;
         if (Versions.InputHitTest(e.GetPosition(Versions)) is not DependencyObject hit) return;

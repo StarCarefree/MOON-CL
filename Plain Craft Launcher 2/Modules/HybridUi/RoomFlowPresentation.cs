@@ -56,5 +56,12 @@ internal static class RoomFlowPresentation
         var match = RoomInvite.Match(text);
         return match.Success ? match.Groups[1].Value.ToUpperInvariant() : null;
     }
+
+    internal static string ShareText(string? name, string code) =>
+        "邀请你加入联机房间「" + (string.IsNullOrWhiteSpace(name) ? "房间" : name.Trim()) + "」，邀请码 " + code.Trim().ToUpperInvariant() + "。";
+
+    internal static bool IsOwnShare(string? text, string? ownCode) =>
+        RoomInviteCode(text) is { } code && string.Equals(code, ownCode?.Trim(), StringComparison.OrdinalIgnoreCase);
 }
+
 

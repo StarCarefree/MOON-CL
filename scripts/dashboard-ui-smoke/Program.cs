@@ -113,10 +113,15 @@ internal static partial class Program
                 finally { if (dialog.IsVisible) dialog.Close(); }
             }));
         }));
+        var legacy = GameDashboardLayout.CreateDefault();
+        legacy.Widgets[0].Title = "旧版本布局";
+        legacy.Save(Path.Combine(Paths.Data, "game-dashboard.json"));
         var page = new PageLaunchRight();
         Control<FrameworkElement>(page, "PanHint").Visibility = Visibility.Collapsed;
         Control<FrameworkElement>(page, "PanLog").Visibility = Visibility.Collapsed;
         var layout = Field<GameDashboardLayout>(page, "_dashboard");
+        Check(layout.Widgets[0].Title == "旧版本布局", "First load must import the existing local layout");
+        Check(File.Exists(Path.Combine(Paths.SharedData, "game-dashboard.json")), "Legacy layout must migrate to stable user data");
         var grid = Control<Grid>(page, "DashboardGrid");
         Render(page, 900, 820, "default.png");
         Check(grid.Children.Count == 4, "Default must contain four widgets");
@@ -166,8 +171,8 @@ internal static partial class Program
         Render(page, 900, 1100, "editing.png");
         Check(grid.Children.Count == layout.Widgets.Count, "Every component must have a card");
         // Avoid notification lifecycle: persist with the exact production model, then rebuild the page.
-        layout.Save(Path.Combine(Paths.Data, "game-dashboard.json"));
-        var restored = GameDashboardLayout.Load(Path.Combine(Paths.Data, "game-dashboard.json"));
+        layout.Save(Path.Combine(Paths.SharedData, "game-dashboard.json"));
+        var restored = GameDashboardLayout.Load(Path.Combine(Paths.SharedData, "game-dashboard.json"));
         Check(restored.Widgets.Any(widget => widget.Kind == "note" && widget.Text == note.Text), "Saved note must round-trip");
         var restoredPage = new PageLaunchRight();
         Check(Field<GameDashboardLayout>(restoredPage, "_dashboard").Widgets.Count == layout.Widgets.Count, "New page must restore saved layout");
@@ -181,6 +186,30 @@ internal static partial class Program
         Render(page, 480, 700, "empty.png");
         Click(page, "DashboardCancel_Click");
         Check(Control<Border>(page, "HeroCard").Parent is ContentControl, "Hero must survive repeated detach/rebuild");
+        // Exercise the real Save handler, not only the model serialization API.
+        Click(page, "DashboardEdit_Click");
+        layout = Field<GameDashboardLayout>(page, "_dashboard");
+        Call(page, "MoveDashboardWidget", layout.Widgets[0], 1);
+        Click(page, "DashboardColumns_Click");
+        layout.Widgets[0].Title = "本地持久化验证";
+        var expected = layout.Clone();
+        Click(page, "DashboardSave_Click");
+        Check(File.Exists(Path.Combine(Paths.SharedData, "game-dashboard.json")), "Save button must create stable user layout file");
+        Check(!Field<bool>(page, "_dashboardEditing"), "Save button must exit edit mode");
+        var reopened = Field<GameDashboardLayout>(new PageLaunchRight(), "_dashboard");
+        Check(reopened.Columns == expected.Columns, "Save button must persist column preference");
+        Check(reopened.Widgets.Select(widget => widget.Id).SequenceEqual(expected.Widgets.Select(widget => widget.Id)), "Save button must persist widget order");
+        Check(reopened.Widgets[0].Title == "本地持久化验证", "Save button must persist component settings");
+        Console.WriteLine("PASS real save button / local file / fresh page reload");
+        // An update can put the launcher in a new directory; user layout must survive it.
+        Paths.Data = Path.Combine(Paths.Temp, "updated-launcher", "PCL");
+        Directory.CreateDirectory(Paths.Data);
+        GameDashboardLayout.CreateDefault().Save(Path.Combine(Paths.Data, "game-dashboard.json"));
+        var updated = Field<GameDashboardLayout>(new PageLaunchRight(), "_dashboard");
+        Check(updated.Columns == expected.Columns, "Updating launcher directory must preserve column preference");
+        Check(updated.Widgets.Select(widget => widget.Id).SequenceEqual(expected.Widgets.Select(widget => widget.Id)), "Updating launcher directory must preserve widget order");
+        Check(updated.Widgets[0].Title == expected.Widgets[0].Title, "Updating launcher directory must preserve component settings");
+        Console.WriteLine("PASS launcher update preserves user layout");
         CheckDashboardInsights(page);
         app.Shutdown();
     }

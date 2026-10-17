@@ -60,6 +60,10 @@ public class RoomFlowPresentationTest
         Assert.IsNull(RoomFlowPresentation.RoomInviteCode("随便聊聊 AB12CD34"));
         Assert.IsNull(RoomFlowPresentation.RoomInviteCode("邀请码 只有七位"));
         Assert.IsNull(RoomFlowPresentation.RoomInviteCode(null));
+        Assert.AreEqual("邀请你加入联机房间「晚间」，邀请码 AB12CD34。", RoomFlowPresentation.ShareText("晚间", "ab12cd34"));
+        Assert.IsTrue(RoomFlowPresentation.IsOwnShare("邀请码 AB12CD34", "ab12cd34"));
+        Assert.IsFalse(RoomFlowPresentation.IsOwnShare("邀请码 AB12CD34", "ZZZZZZZZ"));
     }
 }
+
 

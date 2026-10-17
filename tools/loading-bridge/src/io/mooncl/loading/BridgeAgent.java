@@ -63,10 +63,19 @@ public final class BridgeAgent {
             int phaseIndex = 0;
             for (Phase phase : phases) {
                 phaseIndex++;
-                publish(output, token, "loading", phase.title, "入口点 " + phase.type + " · 共 " + phase.entries.size() + " 项",
+                String typeName = simpleType(phase.type);
+                String stage = loadingLine(phase.type, typeName, 0, phase.entries.size(), null);
+                publish(output, token, "loading", stage, "入口点 '" + phase.type + "' (" + typeName + ")",
                     target, 0, phase.entries.size());
                 for (int i = 0; i < phase.entries.size(); i++) {
-                    publish(output, token, "loading", phase.title, phase.entries.get(i), target, i + 1, phase.entries.size());
+                    String entry = phase.entries.get(i);
+                    int split = entry.indexOf('\u0000');
+                    int second = split < 0 ? -1 : entry.indexOf('\u0000', split + 1);
+                    String modName = split < 0 ? entry : entry.substring(0, split);
+                    String modId = split < 0 ? "" : entry.substring(split + 1, second < 0 ? entry.length() : second);
+                    stage = loadingLine(phase.type, typeName, i + 1, phase.entries.size(), modName);
+                    String detail = modId.length() == 0 ? modName : modName + "  ·  " + modId;
+                    publish(output, token, "loading", stage, detail, target, i + 1, phase.entries.size());
                     if (gap > 0) Thread.sleep(gap);
                 }
             }
@@ -83,7 +92,7 @@ public final class BridgeAgent {
             for (Map.Entry<String, List<String>> entry : mod.entrypoints.entrySet()) {
                 List<String> sink = byType.get(entry.getKey());
                 if (sink == null) { sink = new ArrayList<String>(); byType.put(entry.getKey(), sink); }
-                for (String value : entry.getValue()) sink.add(value + "  ·  " + mod.id);
+                for (String value : entry.getValue()) sink.add(mod.name + "\u0000" + mod.id + "\u0000" + value);
             }
         }
         List<Phase> phases = new ArrayList<Phase>();
@@ -102,9 +111,38 @@ public final class BridgeAgent {
     }
 
     private static String title(String type) {
-        if ("main".equals(type) || "init".equals(type)) return "初始化 main";
-        if ("preLaunch".equals(type) || "pre_launch".equals(type)) return "初始化 preLaunch";
-        return "初始化 " + type;
+        return "Loading '" + type + "'";
+    }
+
+    /** Same shape as mod-loading-screen: Loading 'client' (ClientModInitializer) — 81/83 — Wifi Card Games. */
+    private static String loadingLine(String type, String typeName, int current, int total, String modName) {
+        StringBuilder message = new StringBuilder("Loading '").append(type)
+            .append("' (").append(typeName).append(") — ")
+            .append(current).append('/').append(total);
+        if (modName != null && modName.length() > 0) message.append(" — ").append(modName);
+        return message.toString();
+    }
+
+    /** Fabric entrypoint key → initializer interface simple name, matching Class.getSimpleName(). */
+    private static String simpleType(String type) {
+        if ("main".equals(type) || "init".equals(type)) return "ModInitializer";
+        if ("client".equals(type)) return "ClientModInitializer";
+        if ("server".equals(type)) return "DedicatedServerModInitializer";
+        if ("preLaunch".equals(type) || "pre_launch".equals(type)) return "PreLaunchEntrypoint";
+        if ("client_init".equals(type)) return "ClientModInitializer";
+        if ("server_init".equals(type)) return "DedicatedServerModInitializer";
+        if ("modmenu".equals(type)) return "ModMenuApi";
+        if (type == null || type.length() == 0) return "Entrypoint";
+        StringBuilder name = new StringBuilder();
+        boolean upper = true;
+        for (int i = 0; i < type.length(); i++) {
+            char c = type.charAt(i);
+            if (c == '_' || c == '-' || c == ' ') { upper = true; continue; }
+            name.append(upper ? Character.toUpperCase(c) : c);
+            upper = false;
+        }
+        if (name.length() == 0) return "Entrypoint";
+        return name.append("Entrypoint").toString();
     }
 
     private static List<Mod> readMods(Path directory) throws IOException {

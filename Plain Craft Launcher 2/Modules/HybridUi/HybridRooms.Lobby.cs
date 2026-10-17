@@ -117,13 +117,17 @@ public partial class HybridRooms
         if (room.Length != 8 || !room.All(char.IsAsciiLetterOrDigit)) return;
         if (_session?.Room is not null)
         {
-            Status.Text = "已在房间中。要加入 " + room + "，请先退出当前房间。";
+            if (!string.Equals(_session.Room.Code, room, StringComparison.OrdinalIgnoreCase))
+                Status.Text = "已在房间中。要加入 " + room + "，请先退出当前房间。";
             return;
         }
         RoomCode.Text = room;
-        OpenOverlay(JoinForm, "加入队伍", RoomCode);
-        Status.Text = "邀请码 " + room + " 已填入，确认后加入房间。";
+        JoinPassword.Clear();
+        Join_Click(this, new RoutedEventArgs());
     }
+
+    internal bool OwnsClipboard(string? text) => text == _sharedClipboard || RoomFlowPresentation.IsOwnShare(text, _session?.Room?.Code);
+
 
     private void OpenRouteEditor_Click(object sender, RoutedEventArgs e)
     {

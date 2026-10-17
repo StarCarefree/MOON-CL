@@ -47,6 +47,24 @@ internal static class Program
                 var applicationType = assembly.GetType("PCL.Application", throwOnError: true)!;
                 var application = (Application)Activator.CreateInstance(applicationType)!;
                 applicationType.GetMethod("InitializeComponent")!.Invoke(application, null);
+                if (args.Contains("--launch-dock"))
+                {
+                    LaunchDockChecks.Run(assembly, args);
+                    application.Shutdown();
+                    return 0;
+                }
+                if (args.Contains("--accounts"))
+                {
+                    AccountChecks.Run(assembly);
+                    application.Shutdown();
+                    return 0;
+                }
+                if (args.Contains("--multiplayer"))
+                {
+                    MultiplayerChecks.Run(assembly, args);
+                    application.Shutdown();
+                    return 0;
+                }
                 var page = (FrameworkElement)Activator.CreateInstance(pageType)!;
                 Console.WriteLine("PASS PageSelectRight constructor / BAML load");
                 var client = (FrameworkElement)page.FindName("PanClientContent");
@@ -86,9 +104,11 @@ internal static class Program
         foreach (var item in items.Values)
         {
             var type = item!.GetType();
+            type.GetProperty("EnableCache")!.SetValue(item, true);
             var value = type.GetProperty("DefaultValueNoType")!.GetValue(item);
             var cache = type.GetField("_valueCache", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(item)!;
             cache.GetType().GetMethod("Write")!.Invoke(cache, new[] { value, null });
+            type.GetField("_valueCache", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(item, cache);
         }
     }
 

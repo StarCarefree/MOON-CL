@@ -31,7 +31,8 @@ public sealed class RunningInstanceCard : Border
         BorderBrush = new SolidColorBrush(Color.FromRgb(48, 50, 55));
         BorderThickness = new Thickness(1);
         CornerRadius = new CornerRadius(8);
-        Margin = new Thickness(0, 0, 0, 12);
+        Margin = new Thickness(0);
+        HorizontalAlignment = HorizontalAlignment.Stretch;
         Padding = new Thickness(16, 14, 12, 14);
         Child = Build(name, out _cpu, out _memory, out _network);
         Cursor = Cursors.Hand;
@@ -196,7 +197,11 @@ public sealed class RunningInstanceCard : Border
     private void Remove()
     {
         _timer.Stop();
-        if (Parent is Panel panel) panel.Children.Remove(this);
+        if (Parent is Panel panel)
+        {
+            panel.Children.Remove(this);
+            RunningInstanceCards.Arrange(panel);
+        }
     }
 
     private static bool IsInsideButton(DependencyObject? source)

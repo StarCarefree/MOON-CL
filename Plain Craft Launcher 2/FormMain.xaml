@@ -218,24 +218,35 @@
                     </Rectangle>
                 </Grid>
                 <Grid x:Name="PanMain" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="1*" />
                     </Grid.ColumnDefinitions>
-                    <Border x:Name="PanRightSlot" Grid.Column="1" Grid.IsSharedSizeScope="True" UseLayoutRounding="True"
+                    <StackPanel x:Name="HybridGameHeading" Grid.ColumnSpan="2" Visibility="Collapsed" Margin="28,24,16,16" VerticalAlignment="Center">
+                        <TextBlock Text="PLAY / YOUR SPACE" Foreground="{StaticResource Hybrid.Accent}" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,7" />
+                        <TextBlock Text="{DynamicResource Hybrid.Games}" Foreground="{StaticResource Hybrid.Text}" FontSize="26" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <Border x:Name="PanRightSlot" Grid.Column="1" Grid.RowSpan="3" Grid.IsSharedSizeScope="True" UseLayoutRounding="True"
                             SnapsToDevicePixels="True">
                         <Border x:Name="PanMainRight" RenderOptions.BitmapScalingMode="NearestNeighbor"
                                 UseLayoutRounding="False" SnapsToDevicePixels="False" />
                     </Border>
-                    <Border x:Name="PanLeftSlot" Grid.Column="0" Grid.IsSharedSizeScope="True" UseLayoutRounding="True"
-                            SnapsToDevicePixels="True">
-                        <Border x:Name="PanMainLeft" RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                SizeChanged="PanMainLeft_SizeChanged"
-                                UseLayoutRounding="False" SnapsToDevicePixels="False" />
-                    </Border>
+                    <Grid x:Name="PanLaunchLayer" Grid.Column="0" Grid.RowSpan="3" Background="{x:Null}">
+                        <Border x:Name="PanLeftSlot" Grid.IsSharedSizeScope="True" UseLayoutRounding="True"
+                                SnapsToDevicePixels="True">
+                            <Border x:Name="PanMainLeft" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                    SizeChanged="PanMainLeft_SizeChanged"
+                                    UseLayoutRounding="False" SnapsToDevicePixels="False" />
+                        </Border>
+                    </Grid>
                 </Grid>
                 <Grid x:Name="PanBrowse" Grid.Row="1" Grid.Column="1" Background="{StaticResource Hybrid.Background}" Panel.ZIndex="1" Visibility="Collapsed" />
-                <local:HybridRooms x:Name="HybridRoomsView" Grid.Row="1" Grid.Column="1" Panel.ZIndex="1" Visibility="Collapsed" />
+                <local:HybridMultiplayer x:Name="HybridMultiplayerView" Grid.Row="1" Grid.Column="1" Panel.ZIndex="1" Visibility="Collapsed" />
                 <local:HybridFriends x:Name="HybridFriendsView" Grid.Row="1" Grid.Column="1" Panel.ZIndex="1" Visibility="Collapsed" />
                 <StackPanel x:Name="PanHint" UseLayoutRounding="True"
                             SnapsToDevicePixels="True" HorizontalAlignment="Left" VerticalAlignment="Bottom"

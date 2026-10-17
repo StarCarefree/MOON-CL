@@ -1325,6 +1325,7 @@ public partial class FormMain
         ShowWindowToTop();
         _ = NavigateHybridAsync("rooms");
         UpdateHybridShell();
+        HybridMultiplayerView.SelectRooms();
         HybridRoomsView.OfferJoin(code);
     }
 
@@ -1335,19 +1336,19 @@ public partial class FormMain
         try { text = Clipboard.GetText(); }
         catch (ExternalException) { return; }
         var code = RoomFlowPresentation.RoomInviteCode(text);
-        if (code is null || text == _promptedClipboard) return;
+        if (code is null || text == _promptedClipboard || HybridRoomsView.OwnsClipboard(text)) return;
         _promptedClipboard = text;
         _promptingClipboard = true;
         try
         {
             ShowWindowToTop();
-            if (ModMain.MyMsgBox("检测到复制的房间邀请，邀请码 " + code + "。是否加入房间？", "加入房间", "加入", "稍后", forceWait: true) != 1) return;
-            ShowWindowToTop();
             _ = NavigateHybridAsync("rooms");
             UpdateHybridShell();
+            HybridMultiplayerView.SelectRooms();
             HybridRoomsView.OfferJoin(code);
         }
         finally { _promptingClipboard = false; }
+
     }
 
     [DllImport("user32.dll", SetLastError = true)]

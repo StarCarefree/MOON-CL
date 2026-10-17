@@ -19,7 +19,7 @@ public partial class PageLaunchRight
     private string _dashboardVersion = "";
     private McInstance? _dashboardSelected;
     private readonly Dictionary<string, ContentControl> _dashboardContents = new();
-    private static string DashboardPath => Path.Combine(Paths.Data, "game-dashboard.json");
+    private static string DashboardPath => Path.Combine(Paths.SharedData, "game-dashboard.json");
     private const string DashboardDragFormat = "MOONCL.GameDashboard.Widget";
     private static readonly (string Kind, string Title, string Icon, string Group, string Description)[] DashboardCatalog =
     [
@@ -42,7 +42,15 @@ public partial class PageLaunchRight
     {
         Resources.MergedDictionaries.Add(new ResourceDictionary
         { Source = new Uri("/Plain Craft Launcher 2;component/Modules/HybridUi/GameDashboardTheme.xaml", UriKind.Relative) });
-        _dashboard = GameDashboardLayout.Load(DashboardPath);
+        // Layout is a user preference: keep it across launcher directory/version changes.
+        var legacyPath = Path.Combine(Paths.Data, "game-dashboard.json");
+        var migrate = !File.Exists(DashboardPath) && File.Exists(legacyPath);
+        _dashboard = GameDashboardLayout.Load(migrate ? legacyPath : DashboardPath);
+        if (migrate)
+        {
+            try { _dashboard.Save(DashboardPath); }
+            catch (Exception ex) { ModBase.Log(ex, "迁移游戏组件布局失败，保留旧布局", ModBase.LogLevel.Debug); }
+        }
         // Keep the original named hero and its launch/version hooks; only reparent its presentation.
         PanMain.Children.Remove(HeroCard);
         Unloaded += (_, _) =>
@@ -205,9 +213,17 @@ public partial class PageLaunchRight
                 HeroCard.Visibility = Visibility.Visible;
                 content.Margin = new Thickness(0);
                 if (HeroCard.Parent is null) content.Content = HeroCard;
+                if (PanRunning.Parent is Panel previous && previous != panel) previous.Children.Remove(PanRunning);
+                PanRunning.Margin = new Thickness(16, 0, 16, 16);
+                RunningInstanceCards.Arrange(PanRunning);
             }
             else content.Content = CreateDashboardContent(widget);
             panel.Children.Add(content);
+            if (widget.Kind == "hero" && PanRunning.Parent is null)
+            {
+                var heroIndex = panel.Children.IndexOf(content);
+                panel.Children.Insert(heroIndex + 1, PanRunning);
+            }
             var card = new Border
             {
                 Background = DashboardBrush("Hybrid.Surface"), BorderBrush = DashboardBrush(_dashboardEditing ? "Hybrid.Accent" : "Hybrid.Line"),
