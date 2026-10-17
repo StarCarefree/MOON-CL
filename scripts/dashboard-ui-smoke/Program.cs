@@ -10,7 +10,7 @@ using PCL;
 using PCL.Core.App;
 using PCL.Core.UI;
 
-internal static class Program
+internal static partial class Program
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private static int _checks;
@@ -181,6 +181,7 @@ internal static class Program
         Render(page, 480, 700, "empty.png");
         Click(page, "DashboardCancel_Click");
         Check(Control<Border>(page, "HeroCard").Parent is ContentControl, "Hero must survive repeated detach/rebuild");
+        CheckDashboardInsights(page);
         app.Shutdown();
     }
 }

@@ -44,9 +44,16 @@ public partial class PageLaunchRight
         _dashboardRefreshed = DateTime.UtcNow;
         RefreshDashboardRecent();
         if (_dashboardEditing) return;
+        RefreshDashboardFiles();
         foreach (var widget in _dashboard.Widgets)
-            if (widget.Kind is not ("hero" or "note") && _dashboardContents.TryGetValue(widget.Id, out var content))
-                content.Content = CreateDashboardContent(widget);
+        {
+            if (widget.Kind is "hero" or "note" || !_dashboardContents.TryGetValue(widget.Id, out var content)) continue;
+            if (content.Content is FrameworkElement { Tag: Action refresh } interactive)
+            {
+                if (!interactive.IsKeyboardFocusWithin && !interactive.IsMouseOver) refresh();
+            }
+            else content.Content = CreateDashboardContent(widget);
+        }
     }
 
     private async void RefreshDashboardRecent()
@@ -108,26 +115,20 @@ public partial class PageLaunchRight
                 panel.Children.Add(date);
                 break;
             case "calendar":
-                return CreateDashboardCalendar();
+                return CreateDashboardCalendar(widget);
             case "note":
                 var note = DashboardText(string.IsNullOrWhiteSpace(widget.Text) ? "还没有内容。进入编辑布局，打开组件设置写下你的计划。" : widget.Text, 14, string.IsNullOrWhiteSpace(widget.Text));
                 note.Margin = new Thickness(0, 6, 0, 0);
                 panel.Children.Add(note);
                 break;
             case "stats":
-                var all = DashboardInstances();
-                var seconds = all.Sum(instance => (long)InstanceActivity.PlayedSeconds(instance.PathInstance));
-                var launches = all.Sum(instance => (long)Math.Max(0, States.Instance.LaunchCount[instance.PathInstance]));
-                var total = DashboardText($"{seconds / 3600:N0} 小时 {(seconds % 3600) / 60:N0} 分钟", 24);
-                total.Foreground = DashboardBrush("Hybrid.Accent");
-                total.Margin = new Thickness(0, 6, 0, 8);
-                panel.Children.Add(total);
-                panel.Children.Add(DashboardText($"累计启动 {launches:N0} 次  ·  {all.Length} 个版本", 12, true));
-                panel.Children.Add(DashboardText($"当前运行 {InstanceActivity.DistinctCount()} 个版本", 12, true));
-                var hint = DashboardText("基于本启动器已记录的数据，不含历史未记录时长。", 10, true);
-                hint.Margin = new Thickness(0, 14, 0, 0);
-                panel.Children.Add(hint);
-                break;
+                return CreateDashboardStats(widget);
+            case "favorites":
+            case "worlds":
+            case "servers":
+            case "actions":
+            case "folders":
+                return CreateDashboardTools(widget);
             case "shortcut":
                 var target = DashboardInstances().FirstOrDefault(instance => string.Equals(instance.PathInstance, widget.Target, StringComparison.OrdinalIgnoreCase));
                 if (target is null)
@@ -208,42 +209,4 @@ public partial class PageLaunchRight
         catch (Exception ex) { ModMain.MyMsgBox(ex.Message, "无法打开页面"); }
     }
 
-    private FrameworkElement CreateDashboardCalendar()
-    {
-        var today = DateTime.Today;
-        var panel = new StackPanel();
-        var month = DashboardText(today.ToString("yyyy 年 M 月"), 20);
-        month.FontWeight = FontWeights.SemiBold;
-        month.Margin = new Thickness(0, 4, 0, 12);
-        panel.Children.Add(month);
-        var grid = new Grid();
-        for (var column = 0; column < 7; column++) grid.ColumnDefinitions.Add(new ColumnDefinition());
-        var first = new DateTime(today.Year, today.Month, 1);
-        var offset = ((int)first.DayOfWeek + 6) % 7;
-        var days = DateTime.DaysInMonth(today.Year, today.Month);
-        var weeks = (offset + days + 6) / 7;
-        for (var row = 0; row <= weeks; row++) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });
-        var labels = new[] { "一", "二", "三", "四", "五", "六", "日" };
-        for (var column = 0; column < 7; column++)
-        {
-            var label = DashboardText(labels[column], 10, true);
-            label.HorizontalAlignment = HorizontalAlignment.Center;
-            Grid.SetColumn(label, column);
-            grid.Children.Add(label);
-        }
-        for (var day = 1; day <= days; day++)
-        {
-            var value = DashboardText(day.ToString(), 12, day != today.Day);
-            value.HorizontalAlignment = HorizontalAlignment.Center;
-            value.VerticalAlignment = VerticalAlignment.Center;
-            var plate = new Border { Child = value, CornerRadius = new CornerRadius(6), Margin = new Thickness(2), Background = day == today.Day ? DashboardBrush("Hybrid.Accent") : Brushes.Transparent };
-            if (day == today.Day) { value.Foreground = DashboardBrush("Hybrid.Background"); value.FontWeight = FontWeights.Bold; }
-            var position = offset + day - 1;
-            Grid.SetRow(plate, position / 7 + 1);
-            Grid.SetColumn(plate, position % 7);
-            grid.Children.Add(plate);
-        }
-        panel.Children.Add(grid);
-        return panel;
-    }
 }

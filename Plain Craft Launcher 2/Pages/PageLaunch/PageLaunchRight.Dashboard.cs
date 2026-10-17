@@ -27,17 +27,32 @@ public partial class PageLaunchRight
         ("recent", "最近游玩", "↶", "游戏与收藏", "按游戏日志更新时间列出最近玩过的版本。"),
         ("library", "我的游戏库", "▦", "游戏与收藏", "查看已安装版本，收藏的版本优先显示。"),
         ("shortcut", "版本快捷入口", "↗", "游戏与收藏", "固定一个版本，点击选择后从右侧启动。"),
+        ("favorites", "收藏游戏", "★", "游戏与收藏", "集中查看已收藏的本地版本，快速切换游戏。"),
+        ("worlds", "单人世界", "◇", "游戏与收藏", "查看当前版本的世界与最近保存时间，打开存档目录。"),
+        ("servers", "已保存服务器", "☷", "游戏与收藏", "读取当前版本的服务器列表，一键复制地址。"),
+        ("actions", "常用操作", "⌘", "日常与工具", "安装版本、管理游戏、下载任务和联机入口。"),
+        ("folders", "游戏文件夹", "↗", "日常与工具", "直达当前版本的模组、存档、截图和日志目录。"),
         ("greeting", "今日问候", "☀", "日常与工具", "随时间变化的问候和当前账号。"),
-        ("calendar", "日历", "▦", "日常与工具", "查看本月日期，高亮今天。"),
-        ("stats", "游玩统计", "◷", "日常与工具", "查看已记录时长、启动次数与运行状态。"),
+        ("calendar", "日历", "▦", "日常与工具", "翻月查看游玩热力、每日明细与日期便签。"),
+        ("stats", "游玩统计", "◷", "日常与工具", "按时间与版本筛选，查看趋势、排行并导出 CSV。"),
         ("note", "便签", "✎", "日常与工具", "记下建造计划、坐标或下一次冒险。")
     ];
 
     private void InitializeDashboard()
     {
+        Resources.MergedDictionaries.Add(new ResourceDictionary
+        { Source = new Uri("/Plain Craft Launcher 2;component/Modules/HybridUi/GameDashboardTheme.xaml", UriKind.Relative) });
         _dashboard = GameDashboardLayout.Load(DashboardPath);
         // Keep the original named hero and its launch/version hooks; only reparent its presentation.
         PanMain.Children.Remove(HeroCard);
+        Unloaded += (_, _) =>
+        {
+            _dashboardFilesCancellation?.Cancel();
+            _dashboardFilesCancellation?.Dispose();
+            _dashboardFilesCancellation = null;
+            _dashboardFilesLoading = false;
+            _dashboardFilesChecked = default;
+        };
         RenderDashboard();
     }
 
@@ -218,6 +233,7 @@ public partial class PageLaunchRight
             DashboardGrid.Children.Add(card);
         }
         ArrangeDashboard();
+        if (!_dashboardEditing) RefreshDashboardFiles();
     }
 
     private bool ValidDashboardDrag(DragEventArgs args, GameDashboardWidget target) => _dashboardEditing &&
@@ -274,9 +290,9 @@ public partial class PageLaunchRight
                     var add = DashboardButton(body, () =>
                     {
                         if (_dashboard!.Widgets.Count >= 40) return;
-                        var singleton = entry.Kind is "hero" or "recent" or "library" or "greeting" or "calendar" or "stats";
+                        var singleton = entry.Kind is not ("shortcut" or "note");
                         if (singleton && _dashboard.Widgets.Any(item => item.Kind == entry.Kind)) return;
-                        var widget = new GameDashboardWidget { Kind = entry.Kind, Wide = entry.Kind == "hero" };
+                        var widget = new GameDashboardWidget { Kind = entry.Kind, Wide = entry.Kind is "hero" or "stats" };
                         if (entry.Kind == "shortcut")
                         {
                             widget.Target = _dashboardSelected?.PathInstance ?? "";

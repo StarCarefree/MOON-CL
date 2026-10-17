@@ -25,7 +25,8 @@ public sealed class GameDashboardLayout
 
     private static readonly HashSet<string> AllowedKinds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "hero", "greeting", "recent", "library", "calendar", "stats", "shortcut", "note"
+        "hero", "greeting", "recent", "library", "calendar", "stats", "shortcut", "note",
+        "favorites", "worlds", "servers", "actions", "folders"
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()

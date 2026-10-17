@@ -1,7 +1,9 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using PCL.Core.App;
 using PCL.Core.App.Localization;
+using PCL.Core.Minecraft.Launcher;
 
 namespace PCL;
 
@@ -11,6 +13,15 @@ public static class InstanceActivity
     private static readonly object Gate = new();
     private static readonly Dictionary<string, DateTime> Opened = new(StringComparer.OrdinalIgnoreCase);
     private static readonly List<WeakReference<RunningBadge>> Badges = [];
+
+    private static readonly Lazy<GamePlayHistory> History = new(() => new GamePlayHistory(Path.Combine(Paths.SharedData, "game-play-history.json")));
+    private static string? _historyError;
+
+    public static IReadOnlyList<GamePlayDay> HistorySnapshot() => History.Value.Snapshot(DateTimeOffset.Now);
+
+    public static DateTimeOffset HistoryTrackingSince => History.Value.TrackingSince;
+
+    public static string? HistoryError => History.Value.LastError;
 
     public sealed class RunningBadge
     {
@@ -70,6 +81,7 @@ public static class InstanceActivity
             }
         }
         Commit(finished);
+        TrackHistory(live, DateTimeOffset.Now);
         RefreshBadges();
     }
 
@@ -87,6 +99,8 @@ public static class InstanceActivity
             }
         }
         Commit(finished);
+        try { History.Value.Flush(DateTimeOffset.Now); NoteHistoryError(); }
+        catch (Exception ex) { NoteHistoryError(ex.Message); }
     }
 
     public static int PlayedSeconds(string? path)
@@ -161,6 +175,32 @@ public static class InstanceActivity
     }
 
     private static int Elapsed(DateTime start, DateTime now) => Math.Max(0, (int)(now - start).TotalSeconds);
+
+    private static void TrackHistory(HashSet<string> live, DateTimeOffset now)
+    {
+        try
+        {
+            var instances = new List<GamePlayInstance>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var watcher in Snapshot())
+            {
+                if (!IsLive(watcher) || watcher.version?.PathInstance is not { } path || !live.Contains(path) || !seen.Add(path)) continue;
+                instances.Add(new GamePlayInstance(path, watcher.version.Name ?? path));
+            }
+            History.Value.Update(instances, now);
+            NoteHistoryError();
+        }
+        catch (Exception ex) { NoteHistoryError(ex.Message); }
+    }
+
+    private static void NoteHistoryError(string? thrown = null)
+    {
+        var error = thrown ?? History.Value.LastError;
+        if (error == _historyError) return;
+        _historyError = error;
+        if (!string.IsNullOrEmpty(error))
+            ModBase.Log("[Launch] 游玩历史保存失败：" + error, ModBase.LogLevel.Debug);
+    }
 
     private static string Format(int seconds)
     {
