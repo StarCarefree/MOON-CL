@@ -1,4 +1,4 @@
-# MoonCL 整合包预设目录源
+# PCL-MOON 整合包预设目录源
 
 ## 配置入口
 
@@ -75,5 +75,5 @@ http://127.0.0.1:8080/index.json
 ## 验证
 
 - `.NET` 测试：`dotnet test PCL.Core.Test/PCL.Core.Test.csproj --filter FullyQualifiedName~PackCatalogClientTest`。
-- Java 云服务：在 `mooncl-cloud` 内执行 `gradlew test bootJar`。
-- 网页桥接测试：`node scripts/Test-CatalogSources.mjs`（本机 Edge/Chrome + Node 22+，可设置 `MOONCL_BROWSER`）。
+- Java 云服务：在 `pcl-moon-cloud` 内执行 `gradlew test bootJar`。
+- 网页桥接测试：`node scripts/Test-CatalogSources.mjs`（本机 Edge/Chrome + Node 22+，可设置 `PCL_MOON_BROWSER`）。

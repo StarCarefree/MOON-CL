@@ -19,7 +19,7 @@ internal static class GameLinkLaunch
             using var output = new MemoryStream();
             stream.CopyTo(output);
             var bytes = output.ToArray();
-            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "game-link");
+            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PCL-MOON", "game-link");
             Directory.CreateDirectory(root);
             var jar = Path.Combine(root, Convert.ToHexString(SHA256.HashData(bytes)) + ".jar");
             if (!File.Exists(jar) || !SHA256.HashData(File.ReadAllBytes(jar)).AsSpan().SequenceEqual(SHA256.HashData(bytes)))

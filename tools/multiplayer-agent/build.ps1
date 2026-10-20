@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$OutputJar = (Join-Path $PSScriptRoot 'build\mooncl-multiplayer-agent.jar'),
+    [string]$OutputJar = (Join-Path $PSScriptRoot 'build\pcl-moon-multiplayer-agent.jar'),
     [string]$JavaHome = $env:JAVA_HOME
 )
 $ErrorActionPreference = 'Stop'
@@ -12,10 +12,10 @@ $javac = JavaTool 'javac'
 $jar = JavaTool 'jar'
 $java = JavaTool 'java'
 $tempRoot = if ($env:PI_SCRATCH_DIR) { $env:PI_SCRATCH_DIR } else { [IO.Path]::GetTempPath() }
-$temp = Join-Path $tempRoot ('mooncl-agent-' + [Guid]::NewGuid().ToString('N'))
+$temp = Join-Path $tempRoot ('pcl-moon-agent-' + [Guid]::NewGuid().ToString('N'))
 $classes = Join-Path $temp 'agent'
 $testClasses = Join-Path $temp 'test'
-$stagedJar = Join-Path $temp 'mooncl-multiplayer-agent.jar'
+$stagedJar = Join-Path $temp 'pcl-moon-multiplayer-agent.jar'
 $savedEnv = @{}
 try {
     New-Item -ItemType Directory -Path $classes, $testClasses -Force | Out-Null
@@ -35,11 +35,11 @@ try {
         $count++
     }
     Write-Host "Bytecode validation: $count classes have major version 52"
-    foreach ($key in @('MOONCL_LINK_PORT', 'MOONCL_LINK_TOKEN', 'MOONCL_LINK_MAPPINGS')) {
+    foreach ($key in @('PCL_MOON_LINK_PORT', 'PCL_MOON_LINK_TOKEN', 'PCL_MOON_LINK_MAPPINGS')) {
         $savedEnv[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
         [Environment]::SetEnvironmentVariable($key, $null, 'Process')
     }
-    & $java "-javaagent:$stagedJar" -cp "$stagedJar$([IO.Path]::PathSeparator)$testClasses" mooncl.agent.AgentHarness
+    & $java "-javaagent:$stagedJar" -cp "$stagedJar$([IO.Path]::PathSeparator)$testClasses" pclmoon.agent.AgentHarness
     if ($LASTEXITCODE -ne 0) { throw 'Synthetic harness / premain smoke test failed' }
     $destination = [IO.Path]::GetFullPath($OutputJar)
     New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($destination)) -Force | Out-Null

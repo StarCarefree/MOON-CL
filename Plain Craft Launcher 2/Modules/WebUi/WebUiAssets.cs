@@ -6,7 +6,7 @@ namespace PCL;
 internal static class WebUiAssets
 {
     public const string HostName = "pcl.webui";
-    private static readonly string[] Files = ["index.html", "app.css", "explorer-identity.js", "app.js", "starcarefree-banner.png"];
+    private static readonly string[] Files = ["index.html", "app.css", "explorer-identity.js", "app.js"];
 
     public static string Extract()
     {

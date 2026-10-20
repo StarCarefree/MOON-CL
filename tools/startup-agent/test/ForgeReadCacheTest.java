@@ -112,7 +112,7 @@ public class ForgeReadCacheTest {
         second[1] = 99;
         check(read(reader, ref, "sample.Payload")[1] == 8, "hits must return independent clones");
         long count = (Long) invoke(hits);
-        check(Boolean.getBoolean("mooncl.startup.metrics") ? count >= 2 : count == 0, "metrics opt-in");
+        check(Boolean.getBoolean("pclmoon.startup.metrics") ? count >= 2 : count == 0, "metrics opt-in");
         Reader otherReader = new Reader();
         otherReader.content = new byte[] { 22 };
         check(read(otherReader, ref, "sample.Payload")[0] == 22 && otherReader.opens.get() == 1, "reader identity isolation");
@@ -234,7 +234,7 @@ public class ForgeReadCacheTest {
         invoke(start, 120L);
         Object expiry = ticket(new Reader(), ref, "expiry");
         save(new byte[] { 1 }, expiry, "expiry");
-        check(Thread.getAllStackTraces().keySet().stream().anyMatch(t -> t.getName().equals("mooncl-forge-read-cache") && t.isDaemon()),
+        check(Thread.getAllStackTraces().keySet().stream().anyMatch(t -> t.getName().equals("pcl-moon-forge-read-cache") && t.isDaemon()),
                 "expiry timer is daemon");
         Thread.sleep(350);
         save(new byte[] { 1 }, expiry, "expiry");
@@ -325,7 +325,7 @@ public class ForgeReadCacheTest {
                     if (method.getName().equals("redefineModule")) return null;
                     throw new AssertionError("Unexpected instrumentation operation: " + method.getName());
                 });
-        ClassFileTransformer transformer = (ClassFileTransformer) Class.forName("mooncl.startup.ForgeReadTransformer")
+        ClassFileTransformer transformer = (ClassFileTransformer) Class.forName("pclmoon.startup.ForgeReadTransformer")
                 .getConstructor(Instrumentation.class, Module.class).newInstance(instrumentation, cache.getModule());
         check(transformer.transform(null, "unrelated/Type", null, null, loaderBytes) == null, "unmatched class stays unchanged");
         check(transformer.transform(null, loaderName, null, null, readerBytes) == null, "mismatched internal name stays unchanged");
@@ -372,9 +372,9 @@ public class ForgeReadCacheTest {
     public static void main(String[] args) throws Exception {
         Path root = Path.of(args[0]);
         Files.createDirectories(root);
-        try { cache = Class.forName("mooncl.startup.ForgeReadCache", true, null); }
-        catch (ClassNotFoundException standalone) { cache = Class.forName("mooncl.startup.ForgeReadCache"); }
-        Class<?> ticket = Class.forName("mooncl.startup.ForgeReadCache$Ticket", false, cache.getClassLoader());
+        try { cache = Class.forName("pclmoon.startup.ForgeReadCache", true, null); }
+        catch (ClassNotFoundException standalone) { cache = Class.forName("pclmoon.startup.ForgeReadCache"); }
+        Class<?> ticket = Class.forName("pclmoon.startup.ForgeReadCache$Ticket", false, cache.getClassLoader());
         start = cache.getMethod("start", long.class); stop = cache.getMethod("stop");
         begin = cache.getMethod("begin", ModuleReader.class, ModuleReference.class, String.class);
         cached = cache.getMethod("cached", ticket, String.class);

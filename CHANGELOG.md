@@ -101,7 +101,7 @@
 ### 🐛 问题修复
 
 - *browse*: 整合包设置按钮和已下载更新的项目匹配
-- *brand*: 元数据和界面文案从 PCL CE 改为 MOONCL
+- *brand*: 元数据和界面文案从 PCL CE 改为 PCL-MOON
 
 ### 📚 文档调整
 

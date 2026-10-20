@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using PCL.Core.App;
+using PCL.Core.Minecraft;
 using PCL.Core.Utils;
 using PCL.Core.Utils.Exts;
 using PCL.Core.Utils.OS;
@@ -414,7 +415,7 @@ public static class ModLibrary
             if (mainJar is not null)
                 result.Add(mainJar);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not DownloadRegionBlockedException)
         {
             ModBase.Log(ex, "实例缺失主 Jar 文件所必须的信息", ModBase.LogLevel.Developer);
         }

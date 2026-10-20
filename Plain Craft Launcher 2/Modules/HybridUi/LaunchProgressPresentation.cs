@@ -68,7 +68,7 @@ internal sealed class LaunchProgressPresentation : IDisposable
         }
         try
         {
-            var uri = new Uri("pack://application:,,,/Plain Craft Launcher 2;component/Resources/mooncl-mls-bridge.jar");
+            var uri = new Uri("pack://application:,,,/Plain Craft Launcher 2;component/Resources/pcl-moon-mls-bridge.jar");
             using var resource = Application.GetResourceStream(uri)?.Stream ?? throw new IOException("Loading progress bridge is missing");
             using var data = new MemoryStream(); resource.CopyTo(data);
             var bytes = data.ToArray();

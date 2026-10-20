@@ -1,4 +1,4 @@
-# MoonCL multiplayer premain agent
+# PCL-MOON multiplayer premain agent
 
 无第三方依赖，不修改/重转换游戏字节码。Java 8 classfile（major 52）；构建需要支持 `javac --release 8` 的 JDK 9+，游戏 JVM 仍须满足游戏自身版本要求。**这是保守的反射适配器，不是所有 Minecraft/Forge/Fabric 版本的兼容保证；尚未进行真实游戏验证。**
 
@@ -9,20 +9,20 @@
 .\tools\multiplayer-agent\build.ps1
 
 # 自定义输出；本仓库启动器 MSBuild 已自动构建并内嵌默认路径的 JAR
-.\tools\multiplayer-agent\build.ps1 -OutputJar 'D:\path\to\launcher\Resources\mooncl-multiplayer-agent.jar'
+.\tools\multiplayer-agent\build.ps1 -OutputJar 'D:\path\to\launcher\Resources\pcl-moon-multiplayer-agent.jar'
 # 可选 -JavaHome 'C:\path\to\jdk-21'
 ```
 
-默认输出 `tools/multiplayer-agent/build/mooncl-multiplayer-agent.jar`。相对 `-OutputJar` 路径相对于调用者当前目录。编译产物/测试映射临时文件仅使用 `$env:PI_SCRATCH_DIR` 或系统 temp；构建临时目录在 finally 中删除。jar 仅包含 agent，不包含测试夹具。
+默认输出 `tools/multiplayer-agent/build/pcl-moon-multiplayer-agent.jar`。相对 `-OutputJar` 路径相对于调用者当前目录。编译产物/测试映射临时文件仅使用 `$env:PI_SCRATCH_DIR` 或系统 temp；构建临时目录在 finally 中删除。jar 仅包含 agent，不包含测试夹具。
 
 游戏 JVM 参数：`-javaagent:<jar绝对路径>`。不使用 agentmain/动态 attach，不依赖游戏命令行地址参数。
 
 launcher 在启动游戏前监听 **IPv4 127.0.0.1，端口 0（ephemeral）**，读取实际端口后给游戏进程设置：
 
-- `MOONCL_LINK_PORT`：1..65535 十进制，无正负号/空格。
-- `MOONCL_LINK_TOKEN`：launcher 每次启动生成的随机 32 字节，编码为 64 个 hex 字符。认证时原样、区分大小写比较。
-- `MOONCL_LINK_MAPPINGS`（可选）：该游戏版本的官方 Mojang **client mappings txt** 路径。路径不存在或读取失败时仍尝试 named/SRG/intermediary，不下载映射。
-- `MOONCL_LINK_RUNTIME_MAPPINGS`（可选）：launcher 已下载并解压的 UTF-8 **文本文件**路径：Fabric `mappings/mappings.tiny` 或 Forge MCPConfig `config/joined.tsrg`。agent 不下载、不打开 jar/zip；用于把同版本 Mojang named→obf 映射链到实际 intermediary/SRG 名字。缺失/损坏时保留 known-alias fallback，不阻止游戏启动。
+- `PCL_MOON_LINK_PORT`：1..65535 十进制，无正负号/空格。
+- `PCL_MOON_LINK_TOKEN`：launcher 每次启动生成的随机 32 字节，编码为 64 个 hex 字符。认证时原样、区分大小写比较。
+- `PCL_MOON_LINK_MAPPINGS`（可选）：该游戏版本的官方 Mojang **client mappings txt** 路径。路径不存在或读取失败时仍尝试 named/SRG/intermediary，不下载映射。
+- `PCL_MOON_LINK_RUNTIME_MAPPINGS`（可选）：launcher 已下载并解压的 UTF-8 **文本文件**路径：Fabric `mappings/mappings.tiny` 或 Forge MCPConfig `config/joined.tsrg`。agent 不下载、不打开 jar/zip；用于把同版本 Mojang named→obf 映射链到实际 intermediary/SRG 名字。缺失/损坏时保留 known-alias fallback，不阻止游戏启动。
 
 缺少两个必需变量时安静禁用；配置错误或 agent 异常不会从 premain 抛出、阻止游戏启动。映射读取和网络工作在 daemon thread 内。所有 agent 自建线程均为 daemon；不注册阻止退出的 shutdown hook。
 
@@ -131,7 +131,7 @@ intermediary 名带 `net.minecraft.` 前缀。注意 `class_639` 是地址解析
 
 这四份真实文件也已完整通过 parser/链查找 smoke test：Tiny v1 5445 类/48547 成员，Tiny v2 8254 类/78922 成员，TSRG v1 5447 类/59840 成员，TSRG v2 8269 类/111338 成员。1.21.1 中 `ServerData.Type.OTHER` 链到 Fabric `field_45611`；`Minecraft.disconnect(Screen)` 链到 Fabric `method_56134` / Forge `m_91320_`。这些只是只读映射验证，不是真游戏验证。
 
-新增合成回归覆盖四种格式、v2 extra id/参数 metadata 跳过、跨命名空间 enum OTHER（含伪同名 OTHER 陷阱）、SRG disconnect/clearLevel 后实际切服、named-class + SRG-member 的 Forge 形状、完整 descriptor/重载/字段防混淆、named/official fallback，以及子 JVM 读取 `MOONCL_LINK_RUNTIME_MAPPINGS`。真实游戏依然未测。
+新增合成回归覆盖四种格式、v2 extra id/参数 metadata 跳过、跨命名空间 enum OTHER（含伪同名 OTHER 陷阱）、SRG disconnect/clearLevel 后实际切服、named-class + SRG-member 的 Forge 形状、完整 descriptor/重载/字段防混淆、named/official fallback，以及子 JVM 读取 `PCL_MOON_LINK_RUNTIME_MAPPINGS`。真实游戏依然未测。
 
 另只读检查当前 Mojang 正式版 26.3 客户端 JAR（SHA1 `e877b6a07acd633fb3bb475002175cec036e7b87`）：要求 Java 25，确认六参 startConnecting、enum ServerData、Minecraft.disconnect(Screen,boolean) 与已移除的 ClientLevel 无参 disconnect。新增合成回归覆盖新版完整断开以及无副作用单例存储读取。这不是 Java 25 / 26.3 实际游戏运行验证。
 

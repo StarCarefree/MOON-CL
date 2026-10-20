@@ -193,7 +193,7 @@ public sealed class GameDashboardInsightsTest
 
     private static string NewRoot()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mooncl-insights-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "pcl-moon-insights-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
     }

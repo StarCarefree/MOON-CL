@@ -13,7 +13,7 @@ public sealed class VisitedServerCatalogTest
     [TestMethod]
     public void ReadsServersDatAndDedupesDefaultPort()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mooncl-visited-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "pcl-moon-visited-" + Guid.NewGuid().ToString("N"));
         var first = Path.Combine(root, "a");
         var second = Path.Combine(root, "b");
         Directory.CreateDirectory(first);

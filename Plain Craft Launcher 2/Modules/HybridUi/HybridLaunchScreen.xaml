@@ -56,7 +56,7 @@
         <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="152" /></Grid.ColumnDefinitions>
             <StackPanel VerticalAlignment="Center" Margin="0,0,16,8">
-                <TextBlock Text="MOONCL  /  LAUNCH" Foreground="{StaticResource Hybrid.Accent}" FontSize="10" FontWeight="SemiBold" />
+                <TextBlock Text="PCL-MOON  /  LAUNCH" Foreground="{StaticResource Hybrid.Accent}" FontSize="10" FontWeight="SemiBold" />
                 <TextBlock x:Name="LaunchTitle" Text="正在准备启动" Foreground="{StaticResource Hybrid.Text}"
                            FontSize="24" FontWeight="SemiBold" Margin="0,8,0,8" TextTrimming="CharacterEllipsis" />
                 <TextBlock x:Name="VersionName" Text="等待选择游戏版本" Foreground="{StaticResource Hybrid.Muted}"

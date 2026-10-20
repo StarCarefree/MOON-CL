@@ -155,7 +155,7 @@ public sealed class McmodCatalog(HttpClient http)
             _nextRequestAt = DateTimeOffset.UtcNow.AddSeconds(1.5);
             var address = key.StartsWith("search:", StringComparison.Ordinal) ? new Uri(key[7..]) : new Uri(Origin, path);
             using var request = new HttpRequestMessage(HttpMethod.Get, address);
-            request.Headers.UserAgent.ParseAdd("MOONCL/1.0 (+https://www.mcmod.cn/modpack.html)");
+            request.Headers.UserAgent.ParseAdd("PCL-MOON/1.0 (+https://www.mcmod.cn/modpack.html)");
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {

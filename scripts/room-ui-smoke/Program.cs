@@ -240,10 +240,10 @@ internal static class Program
         using var game = new PCL.Core.Minecraft.Launcher.GameLinkSession(instance.Name);
         var info = new ProcessStartInfo("java") { UseShellExecute = false }; game.Configure(info, jar);
         using var client = new TcpClient();
-        await client.ConnectAsync(IPAddress.Loopback, int.Parse(info.Environment["MOONCL_LINK_PORT"]!));
+        await client.ConnectAsync(IPAddress.Loopback, int.Parse(info.Environment["PCL_MOON_LINK_PORT"]!));
         using var writer = new StreamWriter(client.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
         using var reader = new StreamReader(client.GetStream(), Encoding.UTF8, leaveOpen: true);
-        await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["MOONCL_LINK_TOKEN"]);
+        await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["PCL_MOON_LINK_TOKEN"]);
         Check(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)) == "OK", "Flow fixture Agent handshake failed");
         async Task State(string state, string request = "", string address = "")
         {
@@ -315,10 +315,10 @@ internal static class Program
         var info = new ProcessStartInfo("java") { UseShellExecute = false };
         game.Configure(info, jar);
         using var client = new TcpClient();
-        await client.ConnectAsync(IPAddress.Loopback, int.Parse(info.Environment["MOONCL_LINK_PORT"]!));
+        await client.ConnectAsync(IPAddress.Loopback, int.Parse(info.Environment["PCL_MOON_LINK_PORT"]!));
         using var writer = new StreamWriter(client.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
         using var reader = new StreamReader(client.GetStream(), Encoding.UTF8, leaveOpen: true);
-        await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["MOONCL_LINK_TOKEN"]);
+        await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["PCL_MOON_LINK_TOKEN"]);
         Check(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)) == "OK", "Mock Agent authentication failed");
         await writer.WriteLineAsync("STATE\t\tready\t\t");
         var deadline = DateTime.UtcNow.AddSeconds(3);
@@ -466,7 +466,7 @@ internal static class Program
                         if (Control<FrameworkElement>(host, field).IsVisible) AssertInViewport(host, Control<FrameworkElement>(host, field), "Visible mode field " + field);
                 }
                 Invoke(host, "PreparePublication");
-                Check(Control<TextBox>(host, "NetworkName").Text.StartsWith("mooncl-"), "EasyTier name not generated before publication");
+                Check(Control<TextBox>(host, "NetworkName").Text.StartsWith("pcl-moon-"), "EasyTier name not generated before publication");
                 Check(Control<PasswordBox>(host, "NetworkSecret").Password.Length >= 32, "EasyTier secret not generated");
                 Control<TextBox>(host, "NetworkName").Text = "custom-preserved-network";
                 Control<TextBox>(host, "LocalPort").Text = "51234";
@@ -498,7 +498,7 @@ internal static class Program
                 Click(host, "Rooms.CheckEasyTier"); await Idle(host);
                 Check(Control<TextBlock>(host, "EasyTierToolStatus").Text.Contains("工具面板"), "Missing EasyTier must show an actionable error inside the tools panel");
                 Control<TextBox>(host, "EasyTierPath").Text = priorTool;
-                var nativeEasyTier = Environment.GetEnvironmentVariable("MOONCL_TEST_EASYTIER_CORE");
+                var nativeEasyTier = Environment.GetEnvironmentVariable("PCL_MOON_TEST_EASYTIER_CORE");
                 if (!string.IsNullOrWhiteSpace(nativeEasyTier) && File.Exists(nativeEasyTier))
                 {
                     var leaseCount = Field<Dictionary<string, RoomTransportLease>>(host, "_leases").Count;

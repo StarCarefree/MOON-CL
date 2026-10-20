@@ -163,7 +163,7 @@ function Resolve-OutputFile {
         $dir = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutputDirectory))
     }
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    return (Join-Path $dir 'MOONCL.exe')
+    return (Join-Path $dir 'PCL-MOON.exe')
 }
 
 function Get-BuildOutputDirectory {
@@ -365,7 +365,7 @@ function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe, [string]$ZipP
     $info = Join-Path $script:WorkRoot 'BuildInfo.cs'
     $res = Join-Path $script:WorkRoot 'app.res'
     Write-BuildInfo $info $Architecture $Hash $WebViewBundled
-    Write-Win32Resource $res '2.15.2.0' 'MOONCL' (Join-Path $script:ProjectDir 'Images\icon.ico') (Join-Path $script:StubDir 'app.manifest')
+    Write-Win32Resource $res '2.15.2.0' 'PCL-MOON' (Join-Path $script:ProjectDir 'Images\icon.ico') (Join-Path $script:StubDir 'app.manifest')
     $obj = Join-Path $script:WorkRoot 'app.obj'
     $cvtres = Join-Path $fx 'cvtres.exe'
     if (-not (Test-Path -LiteralPath $cvtres -PathType Leaf)) { Throw-Single "缺少 cvtres.exe: $cvtres" }
@@ -381,7 +381,7 @@ function Compile-Bootstrapper([string]$DotNetExe, [string]$OutExe, [string]$ZipP
         '/codepage:65001',
         '/utf8output',
         ('/win32res:' + $obj),
-        ('/resource:' + $ZipPath + ',MOONCL.App'),
+        ('/resource:' + $ZipPath + ',PCL-MOON.App'),
         ('/out:' + $OutExe)
     ) + $refArgs
     $cscArgs += (Join-Path $script:StubDir 'Bootstrapper.cs')
@@ -404,11 +404,11 @@ function Invoke-SingleExeSelfCheck {
     $zip = Join-Path $script:WorkRoot 'payload.zip'
     $stub = Join-Path $script:WorkRoot 'stub.exe'
     New-Item -ItemType Directory -Force -Path $stage | Out-Null
-    [System.IO.File]::WriteAllText((Join-Path $stage 'Plain Craft Launcher 2.exe'), 'mooncl-self-check')
+    [System.IO.File]::WriteAllText((Join-Path $stage 'Plain Craft Launcher 2.exe'), 'pcl-moon-self-check')
     New-PayloadZip $stage $zip
     Compile-Bootstrapper $dotnet $stub $zip (Get-FileSha256 $zip) $false
     $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($stub)
-    if ($info.ProductName -ne 'MOONCL' -or $info.FileDescription -ne 'MOONCL') {
+    if ($info.ProductName -ne 'PCL-MOON' -or $info.FileDescription -ne 'PCL-MOON') {
         Throw-Single "版本信息资源未写入: Product=$($info.ProductName) Description=$($info.FileDescription)"
     }
     $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($stub))

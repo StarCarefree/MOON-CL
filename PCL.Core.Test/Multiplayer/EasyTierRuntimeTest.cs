@@ -16,9 +16,9 @@ public sealed class EasyTierRuntimeTest
 {
     private static string Core()
     {
-        var path = Environment.GetEnvironmentVariable("MOONCL_TEST_EASYTIER_CORE");
+        var path = Environment.GetEnvironmentVariable("PCL_MOON_TEST_EASYTIER_CORE");
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            Assert.Inconclusive("Set MOONCL_TEST_EASYTIER_CORE to a trusted EasyTier 2.6.4 executable for native tests.");
+            Assert.Inconclusive("Set PCL_MOON_TEST_EASYTIER_CORE to a trusted EasyTier 2.6.4 executable for native tests.");
         return path!;
     }
     private static int Port()
@@ -36,7 +36,7 @@ public sealed class EasyTierRuntimeTest
     public async Task Native264StartsGeneratedHostAndGuestPlans()
     {
         var executable = Core();
-        var connection = new RoomConnection("easytier", "10.144.14.1", 25565, SecretKey: "synthetic-test-only", NetworkName: "mooncl-check", Peers: ["tcp://127.0.0.1:11010"]);
+        var connection = new RoomConnection("easytier", "10.144.14.1", 25565, SecretKey: "synthetic-test-only", NetworkName: "pcl-moon-check", Peers: ["tcp://127.0.0.1:11010"]);
         foreach (var host in new[] { true, false })
         {
             var start = StartInfo(executable, EasyTierRoomConfiguration.Build(connection, host, 25565, Port(), Port()));
@@ -54,7 +54,7 @@ public sealed class EasyTierRuntimeTest
         using var game = new TcpListener(IPAddress.Loopback, 0); game.Start();
         var gamePort = ((IPEndPoint)game.LocalEndpoint).Port; var nodePort = Port();
         var connection = new RoomConnection("easytier", "10.144.14.1", gamePort, SecretKey: Guid.NewGuid().ToString("N"),
-            NetworkName: "mooncl-test-" + Guid.NewGuid().ToString("N"), Peers: ["tcp://127.0.0.1:" + nodePort]);
+            NetworkName: "pcl-moon-test-" + Guid.NewGuid().ToString("N"), Peers: ["tcp://127.0.0.1:" + nodePort]);
         var hostPlan = EasyTierRoomConfiguration.Build(connection, true, gamePort, 0, Port());
         hostPlan = hostPlan with { Arguments = hostPlan.Arguments.Select(a => a == "tcp://0.0.0.0:0" ? "tcp://127.0.0.1:" + nodePort : a).ToArray() };
         using var host = Process.Start(StartInfo(executable, hostPlan))!;

@@ -70,7 +70,7 @@ public sealed partial class FrpProcess : IDisposable
 
     private static string CreatePrivateDirectory()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "mooncl-frp-" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(Path.GetTempPath(), "pcl-moon-frp-" + Guid.NewGuid().ToString("N"));
         var security = new DirectorySecurity(); security.SetAccessRuleProtection(true, false);
         security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.FullControl,
             InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));

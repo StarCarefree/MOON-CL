@@ -11,7 +11,7 @@ namespace PCL.Core.Test.Multiplayer;
 public sealed class RoomSetupAutomationTest
 {
     private string _root = "";
-    [TestInitialize] public void Setup() { _root = Path.Combine(Path.GetTempPath(), "mooncl-setup-test-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(_root); }
+    [TestInitialize] public void Setup() { _root = Path.Combine(Path.GetTempPath(), "pcl-moon-setup-test-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(_root); }
     [TestCleanup] public void Cleanup() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
     private int? Parse(string contents)
     {
@@ -63,7 +63,7 @@ public sealed class RoomSetupAutomationTest
     public void GeneratedDefaultsAreValidUniqueAndDoNotIncludeUnsafeInput()
     {
         var name = RoomSetupAutomation.GenerateNetworkName("ABCD2345");
-        Assert.AreEqual("mooncl-abcd2345", name);
+        Assert.AreEqual("pcl-moon-abcd2345", name);
         Assert.IsFalse(RoomSetupAutomation.GenerateNetworkName("../BAD CODE\n").Contains('/'));
         var secrets = Enumerable.Range(0, 20).Select(_ => RoomSetupAutomation.GenerateNetworkSecret()).ToArray();
         Assert.AreEqual(20, secrets.Distinct().Count()); Assert.IsTrue(secrets.All(s => s.Length == 48 && s.All(char.IsAsciiHexDigit)));
@@ -75,11 +75,11 @@ public sealed class RoomSetupAutomationTest
     [TestMethod]
     public void JoinedServerUsesLatestConnectionAndClearsAfterDisconnect()
     {
-        var path = Path.Combine(Path.GetTempPath(), "mooncl-room-server-" + Guid.NewGuid().ToString("N") + ".log");
+        var path = Path.Combine(Path.GetTempPath(), "pcl-moon-room-server-" + Guid.NewGuid().ToString("N") + ".log");
         File.WriteAllText(path, "[12:00:00] [Render thread/INFO]: Connecting to play.example.com\n[12:01:00] [Render thread/INFO]: Connecting to 192.0.2.10:25566\n[12:02:00] [Render thread/INFO]: Lost connection: timed out\n");
         try { Assert.IsNull(RoomSetupAutomation.FindJoinedServer(path)); }
         finally { File.Delete(path); }
-        path = Path.Combine(Path.GetTempPath(), "mooncl-room-server-" + Guid.NewGuid().ToString("N") + ".log");
+        path = Path.Combine(Path.GetTempPath(), "pcl-moon-room-server-" + Guid.NewGuid().ToString("N") + ".log");
         File.WriteAllText(path, "[12:00:00] [Render thread/INFO]: Connecting to old.example.com\n[12:01:00] [Render thread/INFO]: Connected to a modded server. play.example.org:25566\n");
         try { Assert.AreEqual("play.example.org:25566", RoomSetupAutomation.FindJoinedServer(path)); }
         finally { File.Delete(path); }

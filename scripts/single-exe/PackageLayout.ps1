@@ -82,9 +82,9 @@ function New-VersionResourceBytes([string]$Version, [string]$Product) {
     foreach ($pair in @(
             @('FileDescription', $Product),
             @('FileVersion', $Version),
-            @('InternalName', 'MOONCL.exe'),
+            @('InternalName', 'PCL-MOON.exe'),
             @('LegalCopyright', 'Copyright'),
-            @('OriginalFilename', 'MOONCL.exe'),
+            @('OriginalFilename', 'PCL-MOON.exe'),
             @('ProductName', $Product),
             @('ProductVersion', $Version),
             @('CompanyName', $Product),

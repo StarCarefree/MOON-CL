@@ -14,13 +14,13 @@ $candidates = @($DotNetPath, $(if ($env:DOTNET_ROOT) { Join-Path $env:DOTNET_ROO
 $dotnet = $candidates | Where-Object { $_ -and (Test-Path $_) -and (Test-Path (Join-Path (Split-Path $_) 'sdk')) } | Select-Object -First 1
 if (!$dotnet) { throw 'Specify -DotNetPath pointing to a .NET 10 SDK, not a runtime-only host.' }
 $env:DOTNET_ROOT = Split-Path $dotnet
-if ($EasyTierPath) { $env:MOONCL_TEST_EASYTIER_CORE = (Resolve-Path $EasyTierPath).Path }
+if ($EasyTierPath) { $env:PCL_MOON_TEST_EASYTIER_CORE = (Resolve-Path $EasyTierPath).Path }
 $scratchBase = if ($env:PI_SCRATCH_DIR) { $env:PI_SCRATCH_DIR } else { [IO.Path]::GetTempPath() }
 $scratch = Join-Path $scratchBase ('rooms-check-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $scratch | Out-Null
 if (!$ScreenshotDirectory) { $ScreenshotDirectory = Join-Path $scratch 'screenshots' }
-if (!$JarPath) { $JarPath = Join-Path $repo 'mooncl-cloud\build\libs\mooncl-cloud-1.0.0.jar' }
-if (!(Test-Path $JarPath)) { throw 'Build mooncl-cloud bootJar first; the coordinator artifact is missing.' }
+if (!$JarPath) { $JarPath = Join-Path $repo 'pcl-moon-cloud\build\libs\pcl-moon-cloud-1.0.0.jar' }
+if (!(Test-Path $JarPath)) { throw 'Build pcl-moon-cloud bootJar first; the coordinator artifact is missing.' }
 function Check-Exit([string]$Step) { if ($LASTEXITCODE -ne 0) { throw "$Step failed (exit=$LASTEXITCODE). See $scratch" } }
 if (!$SkipLauncherBuild) {
     & $dotnet build (Join-Path $repo 'Plain Craft Launcher 2\Plain Craft Launcher 2.csproj') --no-restore -c Debug -p:Platform=x64 -p:UseSharedCompilation=false *> (Join-Path $scratch 'launcher-build.log')
@@ -44,12 +44,12 @@ $start = [Diagnostics.ProcessStartInfo]::new($java)
 $start.UseShellExecute = $false; $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
 $start.ArgumentList.Add('-Xms32m'); $start.ArgumentList.Add('-Xmx128m')
 $start.ArgumentList.Add('-jar'); $start.ArgumentList.Add((Resolve-Path $JarPath).Path)
-$start.Environment['MOONCL_PUBLIC_BIND'] = '127.0.0.1'
-$start.Environment['MOONCL_PUBLIC_PORT'] = "$publicPort"
-$start.Environment['MOONCL_ADMIN_PORT'] = "$adminPort"
-$start.Environment['MOONCL_ADMIN_BIND'] = '127.0.0.1'
-$start.Environment['MOONCL_ADMIN_TOKEN'] = [Guid]::NewGuid().ToString('N')
-$start.Environment['MOONCL_DATA_DIR'] = Join-Path $scratch 'coordinator-data'
+$start.Environment['PCL_MOON_PUBLIC_BIND'] = '127.0.0.1'
+$start.Environment['PCL_MOON_PUBLIC_PORT'] = "$publicPort"
+$start.Environment['PCL_MOON_ADMIN_PORT'] = "$adminPort"
+$start.Environment['PCL_MOON_ADMIN_BIND'] = '127.0.0.1'
+$start.Environment['PCL_MOON_ADMIN_TOKEN'] = [Guid]::NewGuid().ToString('N')
+$start.Environment['PCL_MOON_DATA_DIR'] = Join-Path $scratch 'coordinator-data'
 $process = [Diagnostics.Process]::Start($start)
 $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
 try {

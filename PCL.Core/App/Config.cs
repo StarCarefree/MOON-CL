@@ -204,7 +204,7 @@ public static partial class Config
         /// </summary>
         [ConfigItem<bool>("UiShowLaunchingHint", true, ConfigSource.Local)] public partial bool ShowLaunchingHint { get; set; }
 
-        /// <summary>游戏启动时显示 MOONCL 动画加载页；关闭后保留原启动面板。</summary>
+        /// <summary>游戏启动时显示 PCL-MOON 动画加载页；关闭后保留原启动面板。</summary>
         [ConfigItem<bool>("UiShowLaunchAnimation", true, ConfigSource.Local)] public partial bool ShowLaunchAnimation { get; set; }
 
         /// <summary>

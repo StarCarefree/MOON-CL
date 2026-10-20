@@ -27,7 +27,7 @@ public static class EasyTierRoomConfiguration
         {
             "--no-tun", "true", "--use-smoltcp", "true", "--private-mode", "true", "--bind-device", "false",
             "--latency-first", "true", "--rpc-portal", "127.0.0.1:" + rpcPort,
-            "--rpc-portal-whitelist", "127.0.0.1/32", "--hostname", "MOONCL-" + Guid.NewGuid().ToString("N")[..8],
+            "--rpc-portal-whitelist", "127.0.0.1/32", "--hostname", "PCL-MOON-" + Guid.NewGuid().ToString("N")[..8],
             "--machine-id", Guid.NewGuid().ToString("D"),
             "--console-log-level", "off", "--file-log-level", "off",
             "--listeners", "tcp://0.0.0.0:0", "udp://0.0.0.0:0",

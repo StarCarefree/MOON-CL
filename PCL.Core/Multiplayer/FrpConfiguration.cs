@@ -18,7 +18,7 @@ public static class FrpConfiguration
     {
         Validate(node);
         return new RoomConnection("p2p", ServerHost: node.Host, ServerPort: node.Port,
-            ProxyName: "mooncl_" + Guid.NewGuid().ToString("N"), SecretKey: Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
+            ProxyName: "pcl_moon_" + Guid.NewGuid().ToString("N"), SecretKey: Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
     }
     public static string Host(FrpNode node, RoomConnection connection, int localPort)
     {
@@ -26,7 +26,7 @@ public static class FrpConfiguration
         if (connection.Mode is not ("frp" or "p2p")) throw new ArgumentException("此模式无需 frpc。");
         var text = Header(node);
         text.AppendLine("[[proxies]]");
-        text.AppendLine("name = " + Q(connection.Mode == "p2p" ? connection.ProxyName : "mooncl_" + Guid.NewGuid().ToString("N")));
+        text.AppendLine("name = " + Q(connection.Mode == "p2p" ? connection.ProxyName : "pcl_moon_" + Guid.NewGuid().ToString("N")));
         text.AppendLine("type = " + Q(connection.Mode == "p2p" ? "xtcp" : "tcp"));
         text.AppendLine("localIP = \"127.0.0.1\"");
         text.AppendLine("localPort = " + localPort);

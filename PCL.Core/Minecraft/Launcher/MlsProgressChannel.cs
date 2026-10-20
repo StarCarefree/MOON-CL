@@ -17,7 +17,7 @@ public sealed class MlsProgressChannel : IDisposable
 
     public MlsProgressChannel(string temporaryRoot)
     {
-        DirectoryPath = Path.Combine(temporaryRoot, "MoonclLoading", Guid.NewGuid().ToString("N"));
+        DirectoryPath = Path.Combine(temporaryRoot, "PclMoonLoading", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(DirectoryPath);
     }
 
@@ -26,10 +26,10 @@ public sealed class MlsProgressChannel : IDisposable
         if (_disposed) throw new ObjectDisposedException(nameof(MlsProgressChannel));
         if (!File.Exists(bridgeJar) || bridgeJar.Contains('"')) throw new IOException("Invalid progress bridge JAR");
         startInfo.Arguments = "-javaagent:\"" + bridgeJar + "\" " + startInfo.Arguments;
-        startInfo.Environment["MOONCL_MLS_PROGRESS_FILE"] = SnapshotPath;
-        startInfo.Environment["MOONCL_MLS_PROGRESS_TOKEN"] = Token;
-        if (string.IsNullOrWhiteSpace(target)) startInfo.Environment.Remove("MOONCL_MLS_TARGET");
-        else startInfo.Environment["MOONCL_MLS_TARGET"] = target;
+        startInfo.Environment["PCL_MOON_MLS_PROGRESS_FILE"] = SnapshotPath;
+        startInfo.Environment["PCL_MOON_MLS_PROGRESS_TOKEN"] = Token;
+        if (string.IsNullOrWhiteSpace(target)) startInfo.Environment.Remove("PCL_MOON_MLS_TARGET");
+        else startInfo.Environment["PCL_MOON_MLS_TARGET"] = target;
     }
 
     public bool Poll(LaunchProgressState state)

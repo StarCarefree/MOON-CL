@@ -268,14 +268,14 @@ function Show-Notice([string]$Message, [string]$IconName) {
     $icon = [System.Windows.Forms.MessageBoxIcon]::Information
     if ($IconName -eq 'Error') { $icon = [System.Windows.Forms.MessageBoxIcon]::Error }
     if ($IconName -eq 'Question') { $icon = [System.Windows.Forms.MessageBoxIcon]::Question }
-     [void][System.Windows.Forms.MessageBox]::Show($Message, 'MOONCL', [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
+     [void][System.Windows.Forms.MessageBox]::Show($Message, 'PCL-MOON', [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
 }
 
 function Request-InstallConsent {
     Add-Type -AssemblyName System.Windows.Forms
     $result = [System.Windows.Forms.MessageBox]::Show(
         (Get-ConsentPrompt),
-         'MOONCL',
+         'PCL-MOON',
         [System.Windows.Forms.MessageBoxButtons]::YesNo,
         [System.Windows.Forms.MessageBoxIcon]::Question,
         [System.Windows.Forms.MessageBoxDefaultButton]::Button2)

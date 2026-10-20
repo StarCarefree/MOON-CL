@@ -9,7 +9,7 @@ import java.util.jar.JarOutputStream;
 public final class TimeoutTest {
     public static void main(String[] args) throws Exception {
         if (Runtime.version().feature() == 17) {
-            Class<?> forge = Class.forName("mooncl.startup.ForgeReadCache", true, null);
+            Class<?> forge = Class.forName("pclmoon.startup.ForgeReadCache", true, null);
             Field running = forge.getDeclaredField("running"); running.setAccessible(true);
             var bytes = forge.getMethod("storedBytes");
             bytes.invoke(null);
@@ -29,7 +29,7 @@ public final class TimeoutTest {
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(path))) {
             out.putNextEntry(new JarEntry("Existing.class")); out.write(1); out.closeEntry();
         }
-        Class<?> helper = Class.forName("mooncl.startup.NegativeCache", true, null);
+        Class<?> helper = Class.forName("pclmoon.startup.NegativeCache", true, null);
         var lookup = helper.getMethod("getJarEntry", JarFile.class, String.class);
         try (JarFile jar = new JarFile(path.toFile())) {
             if (lookup.invoke(null, jar, "Missing.class") != null) throw new AssertionError("Absent resource exists");

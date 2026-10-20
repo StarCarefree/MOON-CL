@@ -25,7 +25,7 @@ public sealed class GameLinkSessionTest
     [TestMethod]
     public async Task AuthenticatedChannelIsolatesSessionsReportsActualStateAndSendsCommands()
     {
-        var jar = Path.Combine(Path.GetTempPath(), "mooncl-link-" + Guid.NewGuid().ToString("N") + ".jar");
+        var jar = Path.Combine(Path.GetTempPath(), "pcl-moon-link-" + Guid.NewGuid().ToString("N") + ".jar");
         File.WriteAllText(jar, "fixture");
         try
         {
@@ -34,15 +34,15 @@ public sealed class GameLinkSessionTest
             var info = new ProcessStartInfo("java") { UseShellExecute = false, Arguments = "-javaagent:authlib.jar Main" };
             var other = new ProcessStartInfo("java") { UseShellExecute = false };
             first.Configure(info, jar); second.Configure(other, jar);
-            Assert.AreNotEqual(info.Environment["MOONCL_LINK_TOKEN"], other.Environment["MOONCL_LINK_TOKEN"]);
-            Assert.IsFalse(info.Arguments.Contains(info.Environment["MOONCL_LINK_TOKEN"]!));
+            Assert.AreNotEqual(info.Environment["PCL_MOON_LINK_TOKEN"], other.Environment["PCL_MOON_LINK_TOKEN"]);
+            Assert.IsFalse(info.Arguments.Contains(info.Environment["PCL_MOON_LINK_TOKEN"]!));
             Assert.IsTrue(info.Arguments.EndsWith("-javaagent:authlib.jar Main"));
-            var port = int.Parse(info.Environment["MOONCL_LINK_PORT"]!);
+            var port = int.Parse(info.Environment["PCL_MOON_LINK_PORT"]!);
             using (var intruder = new TcpClient())
             {
                 await intruder.ConnectAsync("127.0.0.1", port);
                 using var badWriter = new StreamWriter(intruder.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                await badWriter.WriteLineAsync("HELLO\t1\t" + other.Environment["MOONCL_LINK_TOKEN"]);
+                await badWriter.WriteLineAsync("HELLO\t1\t" + other.Environment["PCL_MOON_LINK_TOKEN"]);
                 var one = new byte[1];
                 Assert.AreEqual(0, await intruder.GetStream().ReadAsync(one).AsTask().WaitAsync(TimeSpan.FromSeconds(3)));
             }
@@ -50,7 +50,7 @@ public sealed class GameLinkSessionTest
             await client.ConnectAsync("127.0.0.1", port);
             using var reader = new StreamReader(client.GetStream(), Encoding.UTF8, leaveOpen: true);
             using var writer = new StreamWriter(client.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-            await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["MOONCL_LINK_TOKEN"]);
+            await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["PCL_MOON_LINK_TOKEN"]);
             Assert.AreEqual("OK", await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)));
             await writer.WriteLineAsync("STATE\t\tready\t\t");
             await UntilAsync(() => first.State.State == "ready");
@@ -84,10 +84,10 @@ public sealed class GameLinkSessionTest
             var info = new ProcessStartInfo("java") { UseShellExecute = false };
             session.Configure(info, jar);
             using var client = new TcpClient();
-            await client.ConnectAsync("127.0.0.1", int.Parse(info.Environment["MOONCL_LINK_PORT"]!));
+            await client.ConnectAsync("127.0.0.1", int.Parse(info.Environment["PCL_MOON_LINK_PORT"]!));
             using var writer = new StreamWriter(client.GetStream(), new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(client.GetStream(), Encoding.UTF8, leaveOpen: true);
-            await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["MOONCL_LINK_TOKEN"]);
+            await writer.WriteLineAsync("HELLO\t1\t" + info.Environment["PCL_MOON_LINK_TOKEN"]);
             Assert.AreEqual("OK", await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)));
             await writer.WriteLineAsync(new string('x', 16400));
             await UntilAsync(() => session.State.State == "error");

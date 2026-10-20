@@ -2,9 +2,9 @@
 
 ## 中控产物在哪里
 
-- 仓库内：`mooncl-cloud/build/libs/mooncl-cloud-1.0.0.jar`
-- 当前工作区完整路径：`D:\pcl-cy\PCL-CY\mooncl-cloud\build\libs\mooncl-cloud-1.0.0.jar`
-- 构建：在 `mooncl-cloud` 运行 `./gradlew bootJar`，构建需要 JDK 17 或更高版本，生成的 JAR 支持 Java 17+（class 61）。协议和反向代理配置见 [中控接口](../mooncl-cloud/docs/rooms.md)。
+- 仓库内：`pcl-moon-cloud/build/libs/pcl-moon-cloud-1.0.0.jar`
+- 当前工作区完整路径：`D:\pcl-cy\PCL-CY\pcl-moon-cloud\build\libs\pcl-moon-cloud-1.0.0.jar`
+- 构建：在 `pcl-moon-cloud` 运行 `./gradlew bootJar`，构建需要 JDK 17 或更高版本，生成的 JAR 支持 Java 17+（class 61）。协议和反向代理配置见 [中控接口](../pcl-moon-cloud/docs/rooms.md)。
 
 此 JAR 已包含房间 v2 API，不需要额外数据库、Redis 或消息队列。房间为有界内存状态，重启清空；请部署单实例。中控只交换成员、游戏状态和线路配置，**不转发游戏流量**，也不是 frps、ZeroTier 控制器或 EasyTier 引导节点。
 
@@ -13,12 +13,12 @@
 最小 Windows 启动示例（在 JAR 所在目录运行）：
 
 ```powershell
-$env:MOONCL_PUBLIC_PORT = '6664'
-$env:MOONCL_ADMIN_PORT = '6665'
-$env:MOONCL_ADMIN_BIND = '127.0.0.1'
-$env:MOONCL_ADMIN_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-$env:MOONCL_DATA_DIR = '.\data'
-java -Xms32m -Xmx128m -jar .\mooncl-cloud-1.0.0.jar
+$env:PCL_MOON_PUBLIC_PORT = '6664'
+$env:PCL_MOON_ADMIN_PORT = '6665'
+$env:PCL_MOON_ADMIN_BIND = '127.0.0.1'
+$env:PCL_MOON_ADMIN_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+$env:PCL_MOON_DATA_DIR = '.\data'
+java -Xms32m -Xmx128m -jar .\pcl-moon-cloud-1.0.0.jar
 ```
 
 生产环境请安全持久保存环境变量；不要把管理令牌发给玩家。管理端口只绑定回环，不要对公网开放。房间 API 在获取端口上；TLS 反向代理必须保留 Authorization，禁止缓存及记录房间请求/响应正文。默认示例代理仅适用于整合包目录，需按中控协议文档增加房间路由，写请求上限 32 KiB。
@@ -26,7 +26,7 @@ java -Xms32m -Xmx128m -jar .\mooncl-cloud-1.0.0.jar
 ## 玩家流程（好友组队房间）
 
 1. 大厅选择 **创建房间**，确认自动建议的名称和可选密码后建房；或输入 8 位邀请码加入。默认官方中控，自定义中控和身份放在设置中。创建和加入不要求先配置穿透工具，也不表示游戏已经连通。
-2. 房间顶部放名称、邀请码、复制和好友邀请；左侧是当前游戏、整合包与队友，右侧只放连接概要及管理入口。底部只有一个主要操作，根据房主/访客及真实状态显示下一步。
+2. 房间顶部放名称、邀请码、复制邀请码；左侧是当前游戏、整合包与队友，右侧只放连接概要及管理入口。底部只有一个主要操作，根据房主/访客及真实状态显示下一步。
 3. **房主准备世界**：选择本地游戏启动 → 在游戏内进入世界并“对局域网开放” → 检测日志中的 LAN 端口并发布线路。启动器不会伪称自动开放 LAN；无法识别端口时可以手填。已有服务器通过“LAN 手动 / 已有服务器”进入线路向导，不必先启动本地世界。
 4. **访客连接并进入**：点主按钮检测启用线路，默认选择 Minecraft 握手延迟最低的线路，然后确认本地客户端。已有同版本且可控的游戏直接进服，否则启动所选同版本客户端。加载中、不可控或无法确定版本的游戏不被当成“没有运行”，避免重复启动。相同 Minecraft 版本不代表模组兼容，请和房主确认整合包及配置。
 5. 默认目标始终优先使用房间线路。只有没有房间线路且房主分享了服务器时，主按钮才引导进入该服务器。队友席位的“跟随队友”是玩家主动选择的另一个目标，不会自动抢占默认目标。已在其他服务器的客户端切服前会确认，不静默切服。
@@ -70,7 +70,7 @@ java -Xms32m -Xmx128m -jar .\mooncl-cloud-1.0.0.jar
 - 房间底部“工具”可直达工具面板。EasyTier 分组支持选择程序、检测版本和获取工具；“获取”经确认后复用启动器现有下载任务与下载源，任务区可取消，完成后回填路径，不自动加入网络。已有下载任务会复用，下载期间手动修改的路径不会被覆盖。工具版本检测限制输出与超时时间，只查询本机 Core，不启动组网实例。推荐 2.6.4；本轮已实测本机版本查询和真实端到端转发，未进行外网下载实测。
 - frpc / EasyTier 进程由独立 Windows 作业对象管理，只关闭本轮子进程；不按程序名杀进程。多条 ZeroTier 线路共享网络引用，已有用户网络不会因本轮退出而被移除。系统服务被强制终止时无法保证执行 ZeroTier leave，需在系统客户端中检查遗留成员状态。
 - ZeroTier Token 在本机密码框提供，或从 ProgramData 默认文件读取；只放在本机 API 请求头，不放进 URL、中控或日志。权限不足时提示用户配置，不静默提权。
-- 非敏感设置在 `%LOCALAPPDATA%\MOONCL\multiplayer.json`，仅保存自定义中控选择、地址及工具路径等。房间密码、成员令牌、frps Token、ZeroTier Token、EasyTier 密码不写入普通设置。
+- 非敏感设置在 `%LOCALAPPDATA%\PCL-MOON\multiplayer.json`，仅保存自定义中控选择、地址及工具路径等。房间密码、成员令牌、frps Token、ZeroTier Token、EasyTier 密码不写入普通设置。
 - 头像是有界小 PNG（最大 64×64，解码字节不超过 6144），皮肤源像素采用最近邻取样，透明帽子层使用预乘透明度合成；显示端等比例最近邻放大，避免先模糊缩放再放大的问题。不加载成员提供的远程图片地址，无头像时显示姓名首字。头像缓存有界，心跳不重复编码不变的头像。
 - 心跳独立于线路探测，正常每 15 秒一次，头像/游戏状态变化约 3 秒后更新；中控租约 75 秒。启动器关闭时尽力发送退出，异常结束依靠租约清理中控状态。
 - FRP 公网端口仍需依靠 Minecraft 正版验证、白名单等保护；邀请码和房间密码不能替代游戏服务器认证。只加入可信好友的房间和虚拟网络。
@@ -82,7 +82,7 @@ java -Xms32m -Xmx128m -jar .\mooncl-cloud-1.0.0.jar
 dotnet test .\scripts\room-tests\Room.Network.Test.csproj
 
 # 启用真实 EasyTier 原生启动/端到端测试；程序路径由开发者明确提供。
-$env:MOONCL_TEST_EASYTIER_CORE = 'C:\tools\easytier\easytier-core.exe'
+$env:PCL_MOON_TEST_EASYTIER_CORE = 'C:\tools\easytier\easytier-core.exe'
 dotnet test .\scripts\room-tests\Room.Network.Test.csproj
 
 # 完整 WPF + 隔离 Java 中控 + 游戏协议模拟端点，需先构建 bootJar。

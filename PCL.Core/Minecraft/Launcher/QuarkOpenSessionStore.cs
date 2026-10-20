@@ -17,7 +17,7 @@ public sealed class QuarkOpenSessionStore
     {
         _launcherDirectory = launcherDirectory;
         _dataDirectory = dataDirectory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL");
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PCL-MOON");
         SessionPath = Path.Combine(_dataDirectory, "quark-open-session.bin");
     }
 

@@ -80,8 +80,8 @@ public final class LookupTest {
             } finally { workers.shutdownNow(); }
         }
         // Closing a cached JarFile must still cause the original IllegalStateException.
-        if (!Boolean.getBoolean("mooncl.startup.disabled")) {
-            Class<?> cache = Class.forName("mooncl.startup.NegativeCache", true, null);
+        if (!Boolean.getBoolean("pclmoon.startup.disabled")) {
+            Class<?> cache = Class.forName("pclmoon.startup.NegativeCache", true, null);
             var lookup = cache.getMethod("getJarEntry", JarFile.class, String.class);
             JarFile jar = new JarFile(file.toFile());
             check(lookup.invoke(null, jar, "missing") == null, "Direct miss changed");

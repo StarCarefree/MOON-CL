@@ -26,7 +26,7 @@ internal sealed class ServerInstallWindow : Window
         ServerUi.ApplyTheme(this);
         _profile = profile ?? new ServerProfile { Name = "新服务端" };
         _refresh = refresh; _saved = profile is not null;
-        Title = profile is null ? "MOONCL · 创建服务端" : "MOONCL · 继续安装服务端";
+        Title = profile is null ? "PCL-MOON · 创建服务端" : "PCL-MOON · 继续安装服务端";
         Width = 800; Height = Math.Min(860, Math.Max(620, SystemParameters.WorkArea.Height - 70));
         MinWidth = 660; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         var root = new DockPanel();

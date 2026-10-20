@@ -1,5 +1,5 @@
 Manifest-Version: 1.0
-Premain-Class: mooncl.agent.MultiplayerAgent
+Premain-Class: pclmoon.agent.MultiplayerAgent
 Can-Redefine-Classes: false
 Can-Retransform-Classes: false
 

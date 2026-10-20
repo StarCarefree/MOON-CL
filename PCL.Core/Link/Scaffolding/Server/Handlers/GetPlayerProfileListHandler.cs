@@ -30,7 +30,7 @@ public class GetPlayerProfileListHandler : IRequestHandler
         {
             Name = context.PlayerName,
             MachineId = Utils.Secret.Identify.LauncherId,
-            Vendor = $"MOONCL {Basics.VersionName}, EasyTier {EasyTierMetadata.CurrentEasyTierVer}",
+            Vendor = $"PCL-MOON {Basics.VersionName}, EasyTier {EasyTierMetadata.CurrentEasyTierVer}",
             Kind = PlayerKind.HOST
         };
 

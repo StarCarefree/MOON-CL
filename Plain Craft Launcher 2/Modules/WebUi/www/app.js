@@ -89,7 +89,7 @@ const COPY = {
      phaseUpdate: "发现可更新版本",
      servicesTitle: "服务配置",
      pageTitle: "资源目录",
-     eyebrow: "MOONCL · DISCOVER"
+     eyebrow: "PCL-MOON · DISCOVER"
    },
    en: {
      connection: { offline: "Static preview · launcher not connected", connecting: "Connecting to launcher", live: "Launcher connected", lost: "Connection lost" },
@@ -148,7 +148,7 @@ const COPY = {
     phaseUpdate: "An update is available",
     servicesTitle: "Services",
     pageTitle: "Resource catalog",
-    eyebrow: "MOONCL · DISCOVER"
+    eyebrow: "PCL-MOON · DISCOVER"
   }
 };
 
@@ -629,7 +629,7 @@ function render() {
   const t = text();
   document.body.dataset.link = state.link;
   document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";
-   document.title = "MOONCL";
+   document.title = "PCL-MOON";
   setText("connection-text", t.connection[state.link] || t.connection.offline);
   buttonLabel(ui.refresh, t.refresh);
   buttonLabel(ui["open-services"], t.services);
@@ -1964,7 +1964,7 @@ function renderDetail() {
   const xyeSource = resourceTypeOf(item) === "modpack" && links.some(link => xyeIdentify(link.url));
   const presetGuidance = quarkSource && preset.length > 1 ? "Gitee 下载会打开发布页。夸克网盘不会直接打开网页，点击后可选跳转，或进入下载页自己选择版本。" : quarkSource && preset.length ? "夸克网盘不会直接打开网页。点击后可选跳转，或进入下载页自己选择版本。直接下载只会转存选中的一个文件。" : preset.length ? "Gitee 下载会打开发布页。也可以导入已有归档。" : "下载、夸克安装与更新在启动器预设卡片中操作；也可导入已有归档。";
   setText("detail-guidance", platformItem ? (mr ? "在启动器中选择版本并下载，或跳转到 Modrinth。" : "在启动器中选择版本并下载，也可访问项目网站查看说明。") : !remote ? presetGuidance : !loaded ? "完整详情加载后显示实际下载来源。" : quarkSource && (cf || mr) ? `可进入 ${cf ? "CurseForge" : "Modrinth"} 文件列表${cf && mr ? "，或跳转到 Modrinth" : ""}，或从夸克网盘进入下载页自己选择版本。` : quarkSource ? "夸克网盘不会直接打开网页。点击后可选跳转，或进入下载页自己选择版本。直接下载只会转存选中的一个文件。" : cf && mr ? "在启动器的 CurseForge 文件列表中选择版本下载，或跳转到 Modrinth。" : cf || mr ? `在启动器的 ${cf ? "CurseForge" : "Modrinth"} 文件列表中选择实际版本下载。${mr && !cf ? "也可跳转到 Modrinth。" : ""}` : resourceTypeOf(item) === "datapack" ? "请从作者链接下载，按说明放入存档的 datapacks 目录。" : "暂无平台下载入口，请从作者链接手动下载后导入。");
-  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 MOONCL 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
+  if (resourceTypeOf(item) === "plugin") setText("detail-guidance", "选择已安装的 Paper / Purpur 服务器后，沿用 PCL-MOON 文件列表选择版本，下载到该服务器的 plugins 目录。请先停止服务器，并确认插件来源与兼容版本。");
   if (xyeSource && resourceTypeOf(item) !== "plugin") setText("detail-guidance", `${ui["detail-guidance"].textContent} XyeBBS 点击后可选跳转，或读取下载页中的夸克分享再选择文件。`);
   const linkKey = JSON.stringify([links, live, resourceTypeOf(item)]);
   if (ui["detail-links"].dataset.key !== linkKey) {
@@ -2654,7 +2654,7 @@ function instanceMatches(entry, minecraft) {
 function openServerJoin(item) {
   servers.selected = item;
   setText("server-join-title", item.name);
-  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 支持原版客户端" : ""} · 使用 MoonCL javaagent 进入；加载失败时游戏继续启动，不会因此崩溃`);
+  setText("server-join-note", `${item.address} · MC ${item.minecraft || "版本未知"}${item.vanilla ? " · 支持原版客户端" : ""} · 使用 PCL-MOON javaagent 进入；加载失败时游戏继续启动，不会因此崩溃`);
   const box = ui["server-choices"];
   box.replaceChildren();
   const instances = Array.isArray(state.launcher?.instances) ? state.launcher.instances : [];

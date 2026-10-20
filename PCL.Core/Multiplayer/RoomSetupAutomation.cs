@@ -19,7 +19,7 @@ public static class RoomSetupAutomation
     public static string GenerateNetworkName(string roomCode)
     {
         var code = new string((roomCode ?? "").Where(char.IsAsciiLetterOrDigit).Take(16).ToArray());
-        return "mooncl-" + (code.Length == 0 ? Guid.NewGuid().ToString("N")[..12] : code.ToLowerInvariant());
+        return "pcl-moon-" + (code.Length == 0 ? Guid.NewGuid().ToString("N")[..12] : code.ToLowerInvariant());
     }
     public static string GenerateNetworkSecret() => Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
     public static string SuggestRouteName(string mode, int number) => (mode switch

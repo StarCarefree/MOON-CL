@@ -166,7 +166,7 @@ public partial class PageSetupLeft
                 }
                 case 2:
                 {
-                    ModBase.OpenWebsite("https://github.com/catmoon233/MOON-CL/issues/");
+                    ModBase.OpenWebsite("https://github.com/StarCarefree/PCL-MOON/issues/");
                     break;
                 }
             }

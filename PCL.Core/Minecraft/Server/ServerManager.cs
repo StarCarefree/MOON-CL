@@ -16,7 +16,8 @@ namespace PCL.Core.Minecraft.Server;
 
 public sealed class ServerManager
 {
-    private const string MetadataFile = ".mooncl-server.json";
+    private const string MetadataFile = ".pcl-moon-server.json";
+    private const string LegacyMetadataFile = ".mooncl-server.json";
     private static readonly ConcurrentDictionary<string, ServerSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
     private static readonly HttpClient SharedHttp = CreateHttp();
     private readonly HttpClient _http;
@@ -60,8 +61,21 @@ public sealed class ServerManager
      public string GetDirectory(ServerProfile profile)
      {
          if (!ServerCommands.IsFolderId(profile.Id)) throw new ArgumentException("服务端 ID 无效。");
-         return ServerPaths.Inside(RootDirectory, profile.Id);
+         var directory = ServerPaths.Inside(RootDirectory, profile.Id);
+         MigrateLegacyMetadata(directory);
+         return directory;
      }
+
+    private static void MigrateLegacyMetadata(string directory)
+    {
+        try
+        {
+            var legacy = Path.Combine(directory, LegacyMetadataFile);
+            var current = Path.Combine(directory, MetadataFile);
+            if (!File.Exists(current) && File.Exists(legacy)) File.Move(legacy, current);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
  
      public ServerSession GetSession(ServerProfile profile) => Sessions.GetOrAdd(GetDirectory(profile), _ => new ServerSession(this, profile.Id));
  
@@ -69,7 +83,7 @@ public sealed class ServerManager
      {
          if (!Directory.Exists(RootDirectory)) return [];
          return Directory.EnumerateDirectories(RootDirectory).Where(path => ServerCommands.IsFolderId(Path.GetFileName(path)))
-             .Where(path => File.Exists(Path.Combine(path, MetadataFile))).Select(path => Load(Path.GetFileName(path)))
+             .Where(path => { MigrateLegacyMetadata(path); return File.Exists(Path.Combine(path, MetadataFile)); }).Select(path => Load(Path.GetFileName(path)))
              .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
      }
  
@@ -200,7 +214,7 @@ public sealed class ServerManager
                     if (!trustScript) throw new InvalidOperationException("必须明确确认信任，才能执行安装脚本。");
                     var extension = Path.GetExtension(installScript).ToLowerInvariant();
                     if (extension is not ".bat" and not ".cmd" and not ".ps1") throw new ArgumentException("只支持 bat/cmd/ps1 安装脚本。");
-                    script = ServerPaths.Inside(directory, "mooncl-install-script" + extension);
+                    script = ServerPaths.Inside(directory, "pcl-moon-install-script" + extension);
                     if (!Path.GetFullPath(installScript).Equals(script, StringComparison.OrdinalIgnoreCase)) File.Copy(installScript, script, true);
                 }
                 else if (installerJar is null)
@@ -222,7 +236,7 @@ public sealed class ServerManager
                     await DownloadDirectCoreAsync(profile, directory, session, token).ConfigureAwait(false);
                 else if (installerJar is not null || packZip is null || DetectLoaderEntry(profile, directory) is null)
                 {
-                    var jar = ServerPaths.Inside(directory, "mooncl-loader-installer.jar");
+                    var jar = ServerPaths.Inside(directory, "pcl-moon-loader-installer.jar");
                     if (installerJar is not null)
                     {
                         if (!trustScript) throw new InvalidOperationException("必须明确确认信任，才能执行本地安装器。");
@@ -230,6 +244,8 @@ public sealed class ServerManager
                         if (!Path.GetFullPath(installerJar).Equals(jar, StringComparison.OrdinalIgnoreCase)) File.Copy(installerJar, jar, true);
                     }
                     else await DownloadInstallerAsync(profile, jar, session, token).ConfigureAwait(false);
+                    // Fabric/NeoForge 安装器运行时会下载原版服务端 JAR，同样受出口地区限制
+                    await DownloadRegionPolicy.EnsureAllowedAsync(_http, token).ConfigureAwait(false);
                      await session.RunInstallerAsync(ServerCommands.Installer(profile, directory, jar, JavaTempDirectory), token).ConfigureAwait(false);
                 }
                 token.ThrowIfCancellationRequested();
@@ -323,7 +339,8 @@ public sealed class ServerManager
             token.ThrowIfCancellationRequested(); var entry = files[i]; var relative = names[i];
             if (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) throw new IOException("服务端包不能包含符号链接。");
             var target = ServerPaths.Inside(directory, relative.Replace('/', Path.DirectorySeparatorChar));
-            if (Path.GetFileName(target).Equals(MetadataFile, StringComparison.OrdinalIgnoreCase)) throw new IOException("服务端包不能覆盖启动器元数据。");
+            if (Path.GetFileName(target).Equals(MetadataFile, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(target).Equals(LegacyMetadataFile, StringComparison.OrdinalIgnoreCase)) throw new IOException("服务端包不能覆盖启动器元数据。");
             if (relative.Equals("eula.txt", StringComparison.OrdinalIgnoreCase)) continue;
             total = checked(total + entry.Length);
             if (total > 8L * 1024 * 1024 * 1024 || entry.Length > 2L * 1024 * 1024 * 1024) throw new IOException("服务端包解压大小超过安全上限。");
@@ -409,6 +426,7 @@ public sealed class ServerManager
     private async Task DownloadDirectCoreAsync(ServerProfile profile, string directory, ServerSession session, CancellationToken token)
     {
          if (string.IsNullOrWhiteSpace(profile.MinecraftVersion)) throw new ArgumentException("请填写精确的 Minecraft 版本。");
+         if (profile.Loader == ServerLoader.Vanilla) await DownloadRegionPolicy.EnsureAllowedAsync(_http, token).ConfigureAwait(false);
          if (profile.Loader == ServerLoader.Spigot && string.IsNullOrWhiteSpace(profile.LoaderVersion))
              throw new ArgumentException("请选择 Spigot 版本。");
          var notice = ServerCoreCatalog.MirrorNotice(profile.Loader, DownloadSource);

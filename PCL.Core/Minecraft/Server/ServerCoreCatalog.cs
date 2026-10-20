@@ -32,7 +32,7 @@ public sealed class ServerCoreArtifact
 /// </summary>
 public static class ServerCoreCatalog
 {
-    public const string UserAgent = "MOONCL/ServerCore (+https://github.com/catmoon233/MOON-CL)";
+    public const string UserAgent = "PCL-MOON/ServerCore (+https://github.com/StarCarefree/PCL-MOON)";
     public const string MojangManifest = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
     public const string BmclapiManifest = "https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
      public const string PaperV3 = "https://fill.papermc.io/v3/projects/paper";

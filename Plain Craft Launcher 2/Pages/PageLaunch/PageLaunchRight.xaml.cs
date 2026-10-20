@@ -54,7 +54,7 @@ public partial class PageLaunchRight : IRefreshable
         if (string.IsNullOrWhiteSpace(input))
             return;
         input = new string(input.Where(char.IsAsciiLetter).ToArray()).ToLower();
-        if (input.Contains("mooncl") || input.Contains("pclcommunity"))
+        if (input.Contains("pclmoon") || input.Contains("mooncl") || input.Contains("pclcommunity"))
         {
             ModAnimation.AniDispose(PanHint, true);
             States.Hint.CEMessage = false;
@@ -233,7 +233,7 @@ public partial class PageLaunchRight : IRefreshable
                     break;
                 
                 case 14:
-                    LogWrapper.Info("[Page] 主页预设：MOONCL 公告栏");
+                    LogWrapper.Info("[Page] 主页预设：PCL-MOON 公告栏");
                     url = "https://s3.pysio.online/pcl2-ce/apiv2/pages/announce.xaml";
                     content = LoadFromNetwork(url);
                     break;

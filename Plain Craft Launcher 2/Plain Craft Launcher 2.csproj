@@ -28,9 +28,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Images\icon.ico</ApplicationIcon>
-         <AssemblyTitle>MOONCL</AssemblyTitle>
+         <AssemblyTitle>PCL-MOON</AssemblyTitle>
         <Description>Minecraft 启动器 (作者: 龙腾猫跃; 经社区二次开发版本)</Description>
-         <Product>MOONCL</Product>
+         <Product>PCL-MOON</Product>
         <Copyright>Copyright © 龙腾猫跃 2016. All Rights Reserved.</Copyright>
         <AssemblyVersion>2.15.2.0</AssemblyVersion>
         <FileVersion>2.15.2.0</FileVersion>
@@ -134,18 +134,15 @@
         <EmbeddedResource Include="Modules\WebUi\www\app.js">
             <LogicalName>PCL.WebUi.www.app.js</LogicalName>
         </EmbeddedResource>
-        <EmbeddedResource Include="Modules\WebUi\www\starcarefree-banner.png">
-            <LogicalName>PCL.WebUi.www.starcarefree-banner.png</LogicalName>
-        </EmbeddedResource>
     </ItemGroup>
     <ItemGroup>
-        <EmbeddedResource Include="..\tools\multiplayer-agent\build\mooncl-multiplayer-agent.jar">
+        <EmbeddedResource Include="..\tools\multiplayer-agent\build\pcl-moon-multiplayer-agent.jar">
             <LogicalName>PCL.GameLink.agent.jar</LogicalName>
         </EmbeddedResource>
         <Content Include="LICENCE" />
     </ItemGroup>
     <Target Name="BuildMultiplayerAgent" BeforeTargets="PrepareForBuild"
-            Inputs="@(GameLinkAgentSource)" Outputs="$(MSBuildProjectDirectory)\..\tools\multiplayer-agent\build\mooncl-multiplayer-agent.jar">
+            Inputs="@(GameLinkAgentSource)" Outputs="$(MSBuildProjectDirectory)\..\tools\multiplayer-agent\build\pcl-moon-multiplayer-agent.jar">
         <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\tools\multiplayer-agent\build.ps1&quot;" />
     </Target>
     <ItemGroup>

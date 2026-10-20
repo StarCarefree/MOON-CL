@@ -31,7 +31,7 @@ Agent 随启动器内嵌，每次启动自动注入，无需复制到 mods。可
 
 目标为 **1.16.5 至当前版本的原版、Fabric/Quilt、Forge、NeoForge**，不是对任意客户端修改版的无条件保证。
 
-适配 Mojang 官方 named/obf、Fabric intermediary 和 Forge SRG。启动器从 Mojang 官方版本元数据获取 `client_mappings`，从 Fabric 官方 Maven 获取 intermediary，从 Forge 官方 Maven 获取 MCPConfig，校验 SHA1、只解压指定映射条目，并在 `%LOCALAPPDATA%\MOONCL\game-link\mappings` 保存可校验的内容缓存。缓存存在时可离线使用；首次下载各分支有 20 秒上限并行执行，失败后尝试已知名称。
+适配 Mojang 官方 named/obf、Fabric intermediary 和 Forge SRG。启动器从 Mojang 官方版本元数据获取 `client_mappings`，从 Fabric 官方 Maven 获取 intermediary，从 Forge 官方 Maven 获取 MCPConfig，校验 SHA1、只解压指定映射条目，并在 `%LOCALAPPDATA%\PCL-MOON\game-link\mappings` 保存可校验的内容缓存。缓存存在时可离线使用；首次下载各分支有 20 秒上限并行执行，失败后尝试已知名称。
 
 当前官方元数据返回 26.3（Java 25），无 `client_mappings`；它走 named 路径。只读校验其官方客户端 JAR 后，补充了 `Minecraft.disconnect(Screen,boolean)` 形状。1.16.5/1.21.1 官方签名及真实 Fabric/Forge 映射文件也已核对。
 
@@ -50,7 +50,7 @@ Agent 随启动器内嵌，每次启动自动注入，无需复制到 mods。可
 .\scripts\Test-GameLink.ps1 -DotNetPath 'I:\dev\dotnet\dotnet.exe' -CheckMappings
 ```
 
-默认 JAR：`tools/multiplayer-agent/build/mooncl-multiplayer-agent.jar`。
+默认 JAR：`tools/multiplayer-agent/build/pcl-moon-multiplayer-agent.jar`。
 Debug 启动器：`Plain Craft Launcher 2/bin/Debug/net10.0-windows/win-x64/Plain Craft Launcher 2.exe`。
 
 本次结果：

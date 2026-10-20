@@ -197,7 +197,6 @@
       <TextBlock x:Name="Invitation" FontSize="16" FontWeight="SemiBold" Foreground="#D9BC75" VerticalAlignment="Center" Margin="0,0,12,0"/>
       <Button Content="复制" Style="{StaticResource Action}" Height="26" Padding="8,0" Click="CopyCode_Click" AutomationProperties.AutomationId="Rooms.CopyCode"/>
       <Button Content="分享" Style="{StaticResource Action}" Height="26" Padding="8,0" Click="ShareCode_Click" AutomationProperties.AutomationId="Rooms.ShareCode"/>
-      <Button Content="邀请好友" Style="{StaticResource Action}" Height="26" Padding="8,0" Click="InviteFriend_Click" AutomationProperties.AutomationId="Rooms.InviteFriend"/>
      </StackPanel>
     </Grid>
     <Grid Grid.Row="2">

@@ -92,7 +92,7 @@ java -jar <instance>/mod-loading-screen-*.jar --gameDir=<instance> --packwizUrl=
 
 实测（本机直接调用官方接口，未使用自建解析服务）：分享目录和目标 `.mrpack` 都存在，约 93,571,003 字节，匿名 `fr=win` 能解析出签名 URL，但 CDN GET 仍返回 **HTTP 412**。改用 `fr=pc` 时官方直接拒绝，业务码 `23018`，提示 `download file size limit`。已按官方协议唤起夸克网盘客户端 `qkclouddrive://openShareModal?pwdid=e3f623dd58d6&source=13&pwd_id=e3f623dd58d6&share_dn=e3f623dd58d6`（不带 user_token）。窗口标题为「分享链接」，监听的下载目录没有新的 `.mrpack`。浏览器本地接口 `127.0.0.1:9128` 只有通知路由，没有下载路由。因此未授权时，夸克客户端只能打开分享窗口。
 
-已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 及用户提供的 quarkclouddrive 1.0.24）：未授权时先询问，同意后才打开 `pan.quark.cn` 授权页。DPAPI 令牌固定保存在 `%LOCALAPPDATA%/MOONCL/quark-open-session.bin`，可迁移旧缓存授权；刷新令牌成功立即落盘，不依赖下载成功。已授权的夸克下载直接定位所选 `.mrpack`/`.zip`，只转存一个文件到 `MOONCL`（不传 `save_all`，仍保留 512 MiB 本地转存保护），等待任务完成后调用 `multi_get_download_url`，不再先尝试匿名下载或回退到单文件直链接口。当前账号自己的分享收到 41017 时使用原文件 FID。CDN 只携带该会话自己的授权 Cookie，不读取浏览器 Cookie，也不把令牌/签名直链发往 WebUI。拒绝授权且无普通地址时不转存、不打开分享窗口。
+已授权下载（参考 [wlor0623/quark-api](https://github.com/wlor0623/quark-api) 及用户提供的 quarkclouddrive 1.0.24）：未授权时先询问，同意后才打开 `pan.quark.cn` 授权页。DPAPI 令牌固定保存在 `%LOCALAPPDATA%/PCL-MOON/quark-open-session.bin`，可迁移旧缓存授权；刷新令牌成功立即落盘，不依赖下载成功。已授权的夸克下载直接定位所选 `.mrpack`/`.zip`，只转存一个文件到 `PCL-MOON`（不传 `save_all`，仍保留 512 MiB 本地转存保护），等待任务完成后调用 `multi_get_download_url`，不再先尝试匿名下载或回退到单文件直链接口。当前账号自己的分享收到 41017 时使用原文件 FID。CDN 只携带该会话自己的授权 Cookie，不读取浏览器 Cookie，也不把令牌/签名直链发往 WebUI。拒绝授权且无普通地址时不转存、不打开分享窗口。
 
 转存接口可能仅返回 `{task_id, task_sync}`，不能把缺少 `status` 当成完成；必须查询 `/open/v1/task/query` 到 `status=2` 后再取 `save_as_top_fids` 或回查目录。目录回查以 `save_as.to_pdir_fid` 为准（`"0"` 也是有效的根目录）；轮询响应省略目录时保留前一响应值，未返回目录才回退到请求目录。`file/list` 的 `parent_fid` 参数实测生效，`pdir_fid` 会被忽略。响应中的 `~…|…` 编码 FID 不可与原始 FID 或另一个编码 FID 直接比较；只能依赖已限定父目录的列表，并精确匹配文件名、大小，普通 FID 父目录不匹配和结果不唯一仍需拒绝。
 
@@ -110,7 +110,7 @@ HTTP 400 不能在读取 JSON 前直接丢弃响应；应保留安全的 `errno`
 
 静态检查用户提供的 `G:\download\quarkclouddrive-1.0.24\scripts\quark-drive.cjs`：该版本公开实现了 `POST /open/v1/file/multi_get_download_url`，请求体为 `{"fids":["已拥有文件FID"]}`；签名算法及默认客户端与现有实现相同，其网络层还附带当前账号的 `Authorization: Bearer`。下载直链仍使用该账号的 `x_pan_client_id` / `x_pan_access_token` Cookie；可选 clientToken 本次未使用。
 
-使用现有 DPAPI 授权，只读取 `MOONCL` 中已转存的 `【最新】Sword Strange Tales v2.1.11.zip`（235,008,058 字节，约 224 MiB），不新增转存、不安装 CLI、不读取浏览器 Cookie。同一编码 FID：单文件接口返回 HTTP 400 / 23018 / 52,428,800 字节限制（附带 Bearer 也一样）；批量接口仅传一个 FID，返回 HTTP 200 / status=0 / errno=0 及可用直链。该批量请求仅带 req_id/access_token 查询参数、签名头及 Bearer，未带 device_id。
+使用现有 DPAPI 授权，只读取 `PCL-MOON` 中已转存的 `【最新】Sword Strange Tales v2.1.11.zip`（235,008,058 字节，约 224 MiB），不新增转存、不安装 CLI、不读取浏览器 Cookie。同一编码 FID：单文件接口返回 HTTP 400 / 23018 / 52,428,800 字节限制（附带 Bearer 也一样）；批量接口仅传一个 FID，返回 HTTP 200 / status=0 / errno=0 及可用直链。该批量请求仅带 req_id/access_token 查询参数、签名头及 Bearer，未带 device_id。
 
 验证不仅生成直链：在偏移 52,428,800 字节读取 1 字节返回 HTTP 206；完整 GET 返回 HTTP 200，实际下载 235,008,058 字节，与网盘元数据一致。ZIP 全量 CRC 校验通过，6,587 个条目；本地 SHA256 为 `F1212EF8A29999EA8429A4AB47728D6F060A2A1AB504DE91CEF9E4F32EBF77A3`（仅本地摘要，未与服务端摘要比对）。测试文件保存在会话临时目录，没有导入或运行。
 
@@ -122,7 +122,7 @@ HTTP 400 不能在读取 JSON 前直接丢弃响应；应保留安全的 `errno`
 
 授权直链解析完成后，`QuarkNativeDownload` 建立真实 `LoaderCombo<string>` / `LoaderDownload`，登记 `LoaderTaskbarAdd` 并自动打开原生任务管理页。百分比、字节数、速度及取消使用启动器原生下载跟踪，不另建 Web 下载进度。下载完成并按分享文件大小校验后，再衔接现有原生整合包导入器。导入前弹出实例名，默认是压缩包文件名（去掉路径和 `.zip`/`.mrpack`），用户可改；取消则不安装。不再使用 `mcmod-<百科ID>-<随机后缀>`。同名已有实例时默认名自动加 ` (2)`。任务标题里的实例名因此是这个文件夹名，例如 `Modrinth 整合包安装：【最新】Sword Strange Tales v2.1.11`。
 
-本机下载缓存是 `PCL-PackDownloads`。未指定时优先放在系统临时目录，空间不足时才改用 `I:\tmp-pcl`、`D:\pcl-cy\tmp` 或 `G:\download`。设置 → 启动显示这个路径和文件数，可以打开、切换目录或一键清空；切换只保存新目录，不移动、不删除旧文件。正在下载时拒绝清空。夸克网盘里的转存位置仍是根目录 `MOONCL`，只在设置中展示，清空不会删除网盘文件或已安装实例。
+本机下载缓存是 `PCL-PackDownloads`。未指定时优先放在系统临时目录，空间不足时才改用 `I:\tmp-pcl`、`D:\pcl-cy\tmp` 或 `G:\download`。设置 → 启动显示这个路径和文件数，可以打开、切换目录或一键清空；切换只保存新目录，不移动、不删除旧文件。正在下载时拒绝清空。夸克网盘里的转存位置仍是根目录 `PCL-MOON`，只在设置中展示，清空不会删除网盘文件或已安装实例。
 
 `DownloadFile.RequestHeaders` 是每个文件独立的不可变快照；带授权头的文件走原生顺序通道，不执行缺少这些头的分段探测。专用 HTTP 客户端关闭 Cookie jar 和自动跳转，避免凭据串到其他文件；日志与异常不含签名 URL/令牌。普通无请求头下载保留原通道。取消使用永久标记和启动门闩，阻止完成覆盖取消和延迟子任务重启；等待下载线程退出、清理临时文件后才返回，因此取消不会继续安装。
 

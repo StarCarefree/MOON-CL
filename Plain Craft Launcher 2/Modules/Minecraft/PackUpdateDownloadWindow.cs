@@ -40,7 +40,7 @@ internal sealed class PackUpdateDownloadWindow : Window
     {
         _instance = instance;
         ServerUi.ApplyTheme(this);
-        Title = "MOONCL · 下载整合包更新";
+        Title = "PCL-MOON · 下载整合包更新";
         Width = 820; Height = Math.Min(750, SystemParameters.WorkArea.Height - 50);
         MinWidth = 620; MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -189,7 +189,7 @@ internal sealed class PackUpdateDownloadWindow : Window
         try
         {
             using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("MOONCL/2.15 (Minecraft launcher)");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("PCL-MOON/2.15 (Minecraft launcher)");
             var transfer = new PackTransfer(http);
             var work = _work;
             var progress = new Progress<double>(value =>

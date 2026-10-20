@@ -103,7 +103,7 @@ internal static partial class Program
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); app.Shutdown(1); }
         };
-        window.BeginLaunch("MOONCL · 星月之旅 1.21.1 / Fabric");
+        window.BeginLaunch("PCL-MOON · 星月之旅 1.21.1 / Fabric");
         app.Run();
     }
 }

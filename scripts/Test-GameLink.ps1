@@ -16,14 +16,14 @@ if (!$SkipLauncherBuild) {
     & $dotnet build (Join-Path $repo 'Plain Craft Launcher 2\Plain Craft Launcher 2.csproj') --no-restore -c Debug -v minimal *> (Join-Path $scratch 'launcher-build.log')
     Check-Exit 'Launcher build'
 }
-$previous = $env:MOONCL_TEST_LINK_MAPPINGS
+$previous = $env:PCL_MOON_TEST_LINK_MAPPINGS
 try {
-    if ($CheckMappings) { $env:MOONCL_TEST_LINK_MAPPINGS = '1' }
-    else { $env:MOONCL_TEST_LINK_MAPPINGS = '' }
+    if ($CheckMappings) { $env:PCL_MOON_TEST_LINK_MAPPINGS = '1' }
+    else { $env:PCL_MOON_TEST_LINK_MAPPINGS = '' }
     & $dotnet test (Join-Path $repo 'PCL.Core.Test\PCL.Core.Test.csproj') --no-restore --filter 'FullyQualifiedName~GameLink' --logger 'trx;LogFileName=game-link.trx' --results-directory $scratch *> (Join-Path $scratch 'core-tests.log')
     Get-Content (Join-Path $scratch 'core-tests.log') -Tail 8
     Check-Exit 'Game link core tests'
-} finally { $env:MOONCL_TEST_LINK_MAPPINGS = $previous }
+} finally { $env:PCL_MOON_TEST_LINK_MAPPINGS = $previous }
 & $dotnet build (Join-Path $repo 'scripts\room-ui-smoke\Room.UiSmoke.csproj') -p:NuGetAudit=false -v minimal *> (Join-Path $scratch 'ui-build.log')
 Check-Exit 'UI smoke build'
 & $dotnet (Join-Path $repo 'scripts\room-ui-smoke\bin\Debug\net10.0-windows\Room.UiSmoke.dll') 'http://127.0.0.1:1' $scratch (Join-Path $scratch 'screenshots') '--game-link-only' *> (Join-Path $scratch 'ui.log')

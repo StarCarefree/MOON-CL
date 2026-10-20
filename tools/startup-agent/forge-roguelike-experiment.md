@@ -74,7 +74,7 @@ A 为无 Agent，B 为自有 Forge 专用 Agent；同一副本、同一 Mod 集�
 - `first_atlas` 不是主菜单可交互时刻；未做存档/服务器/长时间游戏测试，也未测从点击启动到登录、补全下载等完整端到端时间。
 - 未清空系统文件缓存，运行前 CPU 约 17%–26%，无法排除所有磁盘/网络/系统负载影响。
 - 最终启动器 Release 构建通过，0 错误（有警告）；开发构建位于 `$PI_SCRATCH_DIR/forge-agent-dotnet/bin/Plain Craft Launcher 2.exe`，未覆盖用户安装的 EXE。
-- 交付 Agent 为 31,003 字节，全部类 major=61；SHA-256 `ba7e3c55d8b921a6c887b01af53caa1bf7fd6da737326d1d738bf7cff6be313d`。检查确认只含自有 `mooncl/startup` 类，不含 LightLoad 或测试 fixture。
+- 交付 Agent 为 31,003 字节，全部类 major=61；SHA-256 `ba7e3c55d8b921a6c887b01af53caa1bf7fd6da737326d1d738bf7cff6be313d`。检查确认只含自有 `pclmoon/startup` 类，不含 LightLoad 或测试 fixture。
 - 缓存文件状态检查不是完整内容校验；未知来源保守旁路，不承诺任意热替换与第三方 Agent 组合无错。
 - 任何验证都不等于所有 Mod 组合的无错误保证，保留整个 Agent / Forge 层 / 直接读取的关闭参数。
 

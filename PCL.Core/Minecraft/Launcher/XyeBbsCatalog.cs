@@ -188,7 +188,7 @@ public sealed class XyeBbsCatalog(HttpClient http)
             !address.Host.Equals("resource-api.xyeidc.com", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("XyeBBS 接口地址无效。");
         using var request = new HttpRequestMessage(HttpMethod.Get, address);
-        request.Headers.TryAddWithoutValidation("User-Agent", "MOONCL/1.0 (+https://www.xyebbs.com/)");
+        request.Headers.TryAddWithoutValidation("User-Agent", "PCL-MOON/1.0 (+https://www.xyebbs.com/)");
         request.Headers.TryAddWithoutValidation("Accept", "application/json");
         request.Headers.Referrer = new Uri("https://www.xyebbs.com/");
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);

@@ -35,7 +35,6 @@ public partial class FormMain
             _hybridTimer.Tick -= HybridTick;
             _webUi.Dispose();
             HybridRoomsView.Dispose();
-            HybridFriendsView.Dispose();
         };
         HybridAccountView.Closed += (_, _) => UpdateHybridShell();
         HybridSidebarView.PlayEntrance();
@@ -77,9 +76,9 @@ public partial class FormMain
     internal void SetBrowseVisible(bool visible)
     {
         if (PanBrowse is null) return;
-        if (visible) { HybridMultiplayerView.Visibility = Visibility.Collapsed; HybridFriendsView.Visibility = Visibility.Collapsed; }
+        if (visible) HybridMultiplayerView.Visibility = Visibility.Collapsed;
         PanBrowse.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || HybridMultiplayerView.Visibility == Visibility.Visible || HybridFriendsView.Visibility == Visibility.Visible;
+        var covered = visible || HybridMultiplayerView.Visibility == Visibility.Visible;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
         ModAnimation.AniStop("Hybrid Browse");
@@ -91,24 +90,11 @@ public partial class FormMain
     internal void SetRoomsVisible(bool visible)
     {
         var show = visible && HybridMultiplayerView.Visibility != Visibility.Visible;
-        if (visible) HybridFriendsView.Visibility = Visibility.Collapsed;
         HybridMultiplayerView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || HybridFriendsView.Visibility == Visibility.Visible || _webUi.IsPresented;
+        var covered = visible || _webUi.IsPresented;
         PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
         PanMain.IsHitTestVisible = !covered;
         if (show) HybridRoomsView.PlayPageSwitch();
-        UpdateHybridShell();
-    }
-
-    internal void SetFriendsVisible(bool visible)
-    {
-        var show = visible && HybridFriendsView.Visibility != Visibility.Visible;
-        if (visible) HybridMultiplayerView.Visibility = Visibility.Collapsed;
-        HybridFriendsView.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var covered = visible || HybridMultiplayerView.Visibility == Visibility.Visible || _webUi.IsPresented;
-        PanMain.Visibility = covered ? Visibility.Hidden : Visibility.Visible;
-        PanMain.IsHitTestVisible = !covered;
-        if (show) { HybridFriendsView.UpdateAccount(ProfileService.Current); HybridFriendsView.PlayPageSwitch(); }
         UpdateHybridShell();
     }
 
@@ -141,7 +127,7 @@ public partial class FormMain
         if (HybridSidebarView is null || PanMain is null) return;
         var browse = _webUi.IsPresented;
         var page = (PageType)pageCurrent;
-        var route = HybridFriendsView.Visibility == Visibility.Visible ? "friends" : HybridMultiplayerView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
+        var route = HybridMultiplayerView.Visibility == Visibility.Visible ? "rooms" : browse ? "browse" : page switch
         {
             PageType.Download or PageType.CompDetail => "download",
             PageType.Setup => "settings",
@@ -154,7 +140,6 @@ public partial class FormMain
         {
             "browse" => Lang.Text("Hybrid.Browse"),
             "rooms" => "多人游戏",
-            "friends" => "好友",
             "settings" => Lang.Text("Main.Tab.Settings"),
             "download" => Lang.Text("Main.Tab.Download"),
             "tools" => Lang.Text("Main.Tab.Tools"),
@@ -180,7 +165,6 @@ public partial class FormMain
             skin?.ImgBack?.Source, skin?.ImgFore?.Source);
         var selected = ModInstanceList.McMcInstanceSelected;
         HybridRoomsView.UpdateLocalState(account?.UserName ?? "Player", skin?.ImgBack?.Source, skin?.ImgFore?.Source, selected);
-        HybridFriendsView.UpdateAccount(account);
         var versionPath = selected?.PathInstance ?? "";
         var versionChanged = _hybridVersionPath is not null && !string.Equals(_hybridVersionPath, versionPath, StringComparison.OrdinalIgnoreCase);
         _hybridVersionPath = versionPath;
@@ -266,7 +250,6 @@ public partial class FormMain
         switch (route)
         {
             case "rooms": _webUi.Hide(); SetRoomsVisible(true); break;
-            case "friends": _webUi.Hide(); SetFriendsVisible(true); break;
             case "games":
                 _webUi.Hide();
                 var replayGames = (PageType)pageCurrent == PageType.Launch;

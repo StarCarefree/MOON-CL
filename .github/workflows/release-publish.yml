@@ -90,21 +90,21 @@ jobs:
 
       - name: Rename binaries
         run: |
-          mv "./artifact/Plain Craft Launcher 2.exe" "./artifact/mooncl-win-${{ matrix.architecture }}.exe"
-          cp "./artifact/mooncl-win-${{ matrix.architecture }}.exe" .
+          mv "./artifact/Plain Craft Launcher 2.exe" "./artifact/pcl-moon-win-${{ matrix.architecture }}.exe"
+          cp "./artifact/pcl-moon-win-${{ matrix.architecture }}.exe" .
 
       - name: Sign the binary
         uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
         with:
-          inputs: mooncl-win-${{ matrix.architecture }}.exe
+          inputs: pcl-moon-win-${{ matrix.architecture }}.exe
           verify: true
-          verify-cert-identity: https://github.com/catmoon233/MOON-CL/.github/workflows/release-publish.yml@refs/heads/dev
+          verify-cert-identity: https://github.com/StarCarefree/PCL-MOON/.github/workflows/release-publish.yml@refs/heads/dev
           verify-oidc-issuer: https://token.actions.githubusercontent.com
 
       - name: Package complete portable distribution
         run: |
-          cp "mooncl-win-${{ matrix.architecture }}.exe.sigstore.json" ./artifact/
-          (cd artifact && zip -qr "../mooncl-win-${{ matrix.architecture }}-portable.zip" .)
+          cp "pcl-moon-win-${{ matrix.architecture }}.exe.sigstore.json" ./artifact/
+          (cd artifact && zip -qr "../pcl-moon-win-${{ matrix.architecture }}-portable.zip" .)
 
       - name: Upload binary and signature to Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
@@ -112,9 +112,9 @@ jobs:
           draft: true
           tag_name: v${{ inputs.version }}
           files: |
-            mooncl-win-${{ matrix.architecture }}.exe
-            mooncl-win-${{ matrix.architecture }}.exe.sigstore.json
-            mooncl-win-${{ matrix.architecture }}-portable.zip
+            pcl-moon-win-${{ matrix.architecture }}.exe
+            pcl-moon-win-${{ matrix.architecture }}.exe.sigstore.json
+            pcl-moon-win-${{ matrix.architecture }}-portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

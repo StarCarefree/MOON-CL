@@ -71,7 +71,7 @@
                         <local:MyCheckBox Text="{DynamicResource Setup.Ui.Basic.ShowTriviaHint}" Margin="-1,0,0,7" Height="22"
                                            x:Name="CheckShowLaunchingHint" Tag="UiShowLaunchingHint"
                                            Change="CheckBoxChange" />
-                        <local:MyCheckBox Text="启用游戏启动动画（MOONCL）" Margin="-1,0,0,7" Height="22"
+                        <local:MyCheckBox Text="启用游戏启动动画（PCL-MOON）" Margin="-1,0,0,7" Height="22"
                                           x:Name="CheckShowLaunchAnimation" Tag="UiShowLaunchAnimation" Change="CheckBoxChange"
                                           ToolTip="启动游戏时显示独立窗口，覆盖启动器准备与整合包模组入口点加载进度；关闭后使用原有进度面板，下次启动生效。" />
                         <StackPanel x:Name="PanelBlur" Margin="0,0,0,10">

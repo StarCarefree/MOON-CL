@@ -15,7 +15,7 @@ public sealed class GameLinkMappingsTest
     [TestMethod]
     public async Task VerifiedVersionCacheCanBeUsedWithoutNetwork()
     {
-        var cache = Path.Combine(Path.GetTempPath(), "mooncl-mappings-" + Guid.NewGuid().ToString("N"));
+        var cache = Path.Combine(Path.GetTempPath(), "pcl-moon-mappings-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(cache);
         try
         {
@@ -32,9 +32,9 @@ public sealed class GameLinkMappingsTest
     [TestMethod]
     public async Task OfficialAndLoaderMappingDownloadsAreVerifiedWhenExplicitlyEnabled()
     {
-        if (Environment.GetEnvironmentVariable("MOONCL_TEST_LINK_MAPPINGS") != "1")
-            Assert.Inconclusive("Set MOONCL_TEST_LINK_MAPPINGS=1 to enable official mapping downloads");
-        var cache = Path.Combine(Environment.GetEnvironmentVariable("PI_SCRATCH_DIR") ?? Path.GetTempPath(), "mooncl-mapping-download-" + Guid.NewGuid().ToString("N"));
+        if (Environment.GetEnvironmentVariable("PCL_MOON_TEST_LINK_MAPPINGS") != "1")
+            Assert.Inconclusive("Set PCL_MOON_TEST_LINK_MAPPINGS=1 to enable official mapping downloads");
+        var cache = Path.Combine(Environment.GetEnvironmentVariable("PI_SCRATCH_DIR") ?? Path.GetTempPath(), "pcl-moon-mapping-download-" + Guid.NewGuid().ToString("N"));
         try
         {
             foreach (var version in new[] { "1.16.5", "1.21.1" })
@@ -58,7 +58,7 @@ public sealed class GameLinkMappingsTest
     public async Task CacheReadHonorsCancellation()
     {
         using var stop = new CancellationTokenSource(); stop.Cancel();
-        var cache = Path.Combine(Path.GetTempPath(), "mooncl-mappings-" + Guid.NewGuid().ToString("N"));
+        var cache = Path.Combine(Path.GetTempPath(), "pcl-moon-mappings-" + Guid.NewGuid().ToString("N"));
         try { await Assert.ThrowsAsync<OperationCanceledException>(() => GameLinkMappings.PrepareAsync("1.16.5", cache, stop.Token)); }
         finally { if (Directory.Exists(cache)) Directory.Delete(cache, true); }
     }

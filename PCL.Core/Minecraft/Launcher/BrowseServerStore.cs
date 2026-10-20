@@ -20,7 +20,7 @@ public static class BrowseServerStore
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     public static string FilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "browse-servers.json");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PCL-MOON", "browse-servers.json");
 
     public static IReadOnlyList<ServerDefinition> Load()
     {

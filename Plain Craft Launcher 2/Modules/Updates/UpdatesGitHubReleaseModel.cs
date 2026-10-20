@@ -8,13 +8,13 @@ using PCL.Network.Loaders;
 namespace PCL;
 
 /// <summary>
-/// MOONCL 只从自己的 GitHub Release 检查和下载更新，不再走 PCL CE 的更新源。
+/// PCL-MOON 只从自己的 GitHub Release 检查和下载更新，不再走 PCL CE 的更新源。
 /// </summary>
-public static class MoonclRelease
+public static class PclMoonRelease
 {
-    public const string Owner = "catmoon233";
-    public const string Repo = "MOON-CL";
-    public const string Page = "https://github.com/catmoon233/MOON-CL/releases";
+    public const string Owner = "StarCarefree";
+    public const string Repo = "PCL-MOON";
+    public const string Page = "https://github.com/StarCarefree/PCL-MOON/releases";
     public const string LatestPage = Page + "/latest";
 
     public static string TagPage(string versionBaseName) => Page + "/v" + versionBaseName;
@@ -23,7 +23,7 @@ public static class MoonclRelease
 public class UpdatesGitHubReleaseModel : IUpdateSource
 {
     private const string ApiUrl =
-        "https://api.github.com/repos/" + MoonclRelease.Owner + "/" + MoonclRelease.Repo + "/releases?per_page=30";
+        "https://api.github.com/repos/" + PclMoonRelease.Owner + "/" + PclMoonRelease.Repo + "/releases?per_page=30";
 
     private List<GitHubRelease> _cache;
 
@@ -61,7 +61,7 @@ public class UpdatesGitHubReleaseModel : IUpdateSource
         {
             var picked = Pick(EnsureCache(), channel, arch);
             if (string.IsNullOrWhiteSpace(picked.Asset.Url))
-                throw new Exception("MOON-CL Release 没有可下载的程序");
+                throw new Exception("PCL-MOON Release 没有可下载的程序");
             load.output =
             [
                 new DownloadFile([picked.Asset.Url], output, useBrowserUserAgent: true)
@@ -108,7 +108,7 @@ public class UpdatesGitHubReleaseModel : IUpdateSource
     {
         using var doc = JsonDocument.Parse(json);
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            throw new Exception("MOON-CL Release 响应不是列表");
+            throw new Exception("PCL-MOON Release 响应不是列表");
         var list = new List<GitHubRelease>();
         foreach (var item in doc.RootElement.EnumerateArray())
         {
@@ -148,7 +148,7 @@ public class UpdatesGitHubReleaseModel : IUpdateSource
                 return (release, asset);
         }
 
-        throw new Exception($"MOON-CL 没有适合 {channel}/{arch} 的 Release");
+        throw new Exception($"PCL-MOON 没有适合 {channel}/{arch} 的 Release");
     }
 
     internal static bool Matches(string name, UpdateArch arch)

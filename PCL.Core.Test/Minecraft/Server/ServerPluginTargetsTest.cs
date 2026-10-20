@@ -12,7 +12,7 @@ public sealed class ServerPluginTargetsTest
     [TestMethod]
     public void PluginFolderIsManagedServerNotClientDirectory()
     {
-        var root=Path.Combine(Path.GetTempPath(),"mooncl-plugin-test-"+Guid.NewGuid().ToString("N"));
+        var root=Path.Combine(Path.GetTempPath(),"pcl-moon-plugin-test-"+Guid.NewGuid().ToString("N"));
         try {
             var manager=new ServerManager(root);var profile=PluginProfile();manager.Save(profile);
             Assert.ThrowsExactly<InvalidOperationException>(() => ServerPluginTargets.PluginsDirectory(manager, profile));
@@ -53,7 +53,7 @@ public sealed class ServerPluginTargetsTest
     {
         foreach(var loader in new[]{ServerLoader.NeoForge,ServerLoader.Fabric,Enum.Parse<ServerLoader>("Vanilla")}) Assert.IsFalse(ServerPluginTargets.SupportsPlugins(new ServerProfile{Loader=loader}));
         Assert.IsTrue(ServerPluginTargets.SupportsPlugins(PluginProfile()));
-        var root=Path.Combine(Path.GetTempPath(),"mooncl-plugin-test-"+Guid.NewGuid().ToString("N"));
+        var root=Path.Combine(Path.GetTempPath(),"pcl-moon-plugin-test-"+Guid.NewGuid().ToString("N"));
         try {var manager=new ServerManager(root);var profile=PluginProfile();profile.EntryPoint="";manager.Save(profile);Assert.ThrowsExactly<InvalidOperationException>(()=>ServerPluginTargets.PluginsDirectory(manager,profile));}
         finally {if(Directory.Exists(root))Directory.Delete(root,true);}
     }

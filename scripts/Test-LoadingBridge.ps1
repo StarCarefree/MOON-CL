@@ -12,15 +12,15 @@ $work = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory $work -Force | Out-Null
 & $javac --release 8 -Xlint:-options -encoding UTF-8 -d $work (Join-Path $root 'tools\loading-bridge\test\MlsIpcHarness.java')
 if ($LASTEXITCODE -ne 0) { throw 'IPC harness compilation failed' }
-$bridge = Join-Path $root 'Plain Craft Launcher 2\Resources\mooncl-mls-bridge.jar'
+$bridge = Join-Path $root 'Plain Craft Launcher 2\Resources\pcl-moon-mls-bridge.jar'
 $info = [Diagnostics.ProcessStartInfo]::new($java)
 $info.WorkingDirectory = $work; $info.UseShellExecute = $false
 $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
 foreach ($arg in @("-javaagent:$bridge", '-cp', "$work;$MlsJar;$FabricLoaderJar", 'MlsIpcHarness')) { $info.ArgumentList.Add($arg) }
 $path = Join-Path $work 'progress.json'
 Remove-Item $path -ErrorAction SilentlyContinue
-$info.Environment['MOONCL_MLS_PROGRESS_FILE'] = $path
-$info.Environment['MOONCL_MLS_PROGRESS_TOKEN'] = 'harness-token'
+$info.Environment['PCL_MOON_MLS_PROGRESS_FILE'] = $path
+$info.Environment['PCL_MOON_MLS_PROGRESS_TOKEN'] = 'harness-token'
 $process = [Diagnostics.Process]::Start($info)
 $out = $process.StandardOutput.ReadToEndAsync(); $err = $process.StandardError.ReadToEndAsync()
 $observed = [Collections.Generic.HashSet[string]]::new()

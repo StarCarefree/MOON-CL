@@ -99,13 +99,13 @@ def build_command(instance, java, output, jvm_args=(), agent=None, jfr=False, he
                     destination = natives / PurePosixPath(entry.filename.replace('\\', '/')).name
                     destination.write_bytes(archive.read(entry))
     replacements = {
-        'natives_directory': str(natives), 'launcher_name': 'MOONCL-benchmark', 'launcher_version': '1',
+        'natives_directory': str(natives), 'launcher_name': 'PCL-MOON-benchmark', 'launcher_version': '1',
         'classpath': ';'.join(map(str, [*libraries, client])), 'classpath_separator': ';',
         'library_directory': (root / 'libraries').as_posix(), 'version_name': doc['id'],
         'auth_player_name': 'StartupBenchmark', 'game_directory': str(instance),
         'assets_root': str(root / 'assets'), 'assets_index_name': doc['assetIndex']['id'],
         'auth_uuid': '00000000000030008000000000000001', 'auth_access_token': '0',
-        'clientid': '0', 'auth_xuid': '0', 'user_type': 'legacy', 'version_type': 'MOONCL benchmark',
+        'clientid': '0', 'auth_xuid': '0', 'user_type': 'legacy', 'version_type': 'PCL-MOON benchmark',
         'resolution_width': '854', 'resolution_height': '480', 'user_properties': '{}',
     }
     jvm = expand_arguments(doc['arguments']['jvm'], replacements)
@@ -160,7 +160,7 @@ def main():
     result = None
     with logfile.open('w', encoding='utf-8') as console:
         process = subprocess.Popen(command, cwd=instance, stdout=console, stderr=subprocess.STDOUT,
-                                   env={k: v for k, v in os.environ.items() if not k.startswith('MOONCL_')})
+                                   env={k: v for k, v in os.environ.items() if not k.startswith('PCL_MOON_')})
         try:
             while time.perf_counter() - start < a.timeout:
                 elapsed = time.perf_counter() - start
@@ -196,7 +196,7 @@ def main():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-            for helper in output.glob('mooncl-startup-helper-*.jar'):
+            for helper in output.glob('pcl-moon-startup-helper-*.jar'):
                 helper.unlink()
     if 'first_atlas' not in marks:
         raise SystemExit('Resource milestone not reached; inspect the local console.log')

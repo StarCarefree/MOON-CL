@@ -20,7 +20,7 @@ public partial class PageLaunchRight
     private McInstance? _dashboardSelected;
     private readonly Dictionary<string, ContentControl> _dashboardContents = new();
     private static string DashboardPath => Path.Combine(Paths.SharedData, "game-dashboard.json");
-    private const string DashboardDragFormat = "MOONCL.GameDashboard.Widget";
+    private const string DashboardDragFormat = "PCL-MOON.GameDashboard.Widget";
     private static readonly (string Kind, string Title, string Icon, string Group, string Description)[] DashboardCatalog =
     [
         ("hero", "当前游戏", "◈", "游戏与收藏", "展示当前版本、加载器和游戏状态。"),

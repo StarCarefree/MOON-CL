@@ -12,7 +12,7 @@ public sealed class MlsProgressChannelTest
     [TestMethod]
     public void SessionsHaveIndependentFilesAndTokensAndDoNotTouchGameArgumentsWhenDisabled()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mooncl-channel-test-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "pcl-moon-channel-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
@@ -22,8 +22,8 @@ public sealed class MlsProgressChannelTest
             var info = new ProcessStartInfo("java") { Arguments = "-javaagent:original.jar Main", UseShellExecute = false };
             first.Configure(info, jar);
             Assert.IsTrue(info.Arguments.StartsWith("-javaagent:\"" + jar + "\" -javaagent:original.jar"));
-            Assert.AreEqual(first.SnapshotPath, info.Environment["MOONCL_MLS_PROGRESS_FILE"]);
-            Assert.AreEqual(first.Token, info.Environment["MOONCL_MLS_PROGRESS_TOKEN"]);
+            Assert.AreEqual(first.SnapshotPath, info.Environment["PCL_MOON_MLS_PROGRESS_FILE"]);
+            Assert.AreEqual(first.Token, info.Environment["PCL_MOON_MLS_PROGRESS_TOKEN"]);
             var state = new LaunchProgressState();
             Assert.IsFalse(first.Poll(state));
             File.WriteAllText(first.SnapshotPath, $$"""{"protocol":1,"token":"{{second.Token}}","status":"ready"}""");

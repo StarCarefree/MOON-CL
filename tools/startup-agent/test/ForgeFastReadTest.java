@@ -54,7 +54,7 @@ public final class ForgeFastReadTest {
         @Override public void close() { }
     }
     public static void main(String[] args) throws Exception {
-        Class<?> cache = Class.forName("mooncl.startup.ForgeReadCache", true, null);
+        Class<?> cache = Class.forName("pclmoon.startup.ForgeReadCache", true, null);
         read = cache.getMethod("read", ModuleReader.class, ModuleReference.class, String.class);
         cache.getMethod("start", long.class).invoke(null, 60000L);
         try {

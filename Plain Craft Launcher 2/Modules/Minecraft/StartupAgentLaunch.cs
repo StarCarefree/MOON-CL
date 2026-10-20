@@ -14,13 +14,13 @@ internal static class StartupAgentLaunch
         if (!StartupAccelerationPolicy.ShouldInject(javaMajor, is64Bit, process.Arguments)) return;
         try
         {
-            using var resource = ModBase.GetResourceStream("Resources/mooncl-startup-agent.jar");
+            using var resource = ModBase.GetResourceStream("Resources/pcl-moon-startup-agent.jar");
             using var buffer = new MemoryStream();
             resource.CopyTo(buffer);
             var bytes = buffer.ToArray();
             var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
             var directory = Path.Combine(ModBase.pathPure, "startup-agent");
-            var path = Path.Combine(directory, "mooncl-startup-agent-" + hash + ".jar");
+            var path = Path.Combine(directory, "pcl-moon-startup-agent-" + hash + ".jar");
             lock (ExtractLock)
             {
                 Directory.CreateDirectory(directory);

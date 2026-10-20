@@ -2,19 +2,19 @@
 
 <div align="center">
 
-<img src="Plain Craft Launcher 2/Images/icon.ico" alt="MOONCL" width="80" height="80">
+<img src="Plain Craft Launcher 2/Images/icon.ico" alt="PCL-MOON" width="80" height="80">
 
-# MOONCL
+# PCL-MOON
 
-[![Stars](https://img.shields.io/github/stars/catmoon233/MOON-CL?style=for-the-badge&label=stars&labelColor=444444&color=eac54f)](https://github.com/catmoon233/MOON-CL)
-[![Release](https://img.shields.io/github/v/release/catmoon233/MOON-CL?label=release&logo=github&style=for-the-badge)](https://github.com/catmoon233/MOON-CL/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/catmoon233/MOON-CL/build-test.yml?branch=dev&label=build&style=for-the-badge)](https://github.com/catmoon233/MOON-CL/actions/workflows/build-test.yml)
+[![Stars](https://img.shields.io/github/stars/StarCarefree/PCL-MOON?style=for-the-badge&label=stars&labelColor=444444&color=eac54f)](https://github.com/StarCarefree/PCL-MOON)
+[![Release](https://img.shields.io/github/v/release/StarCarefree/PCL-MOON?label=release&logo=github&style=for-the-badge)](https://github.com/StarCarefree/PCL-MOON/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/StarCarefree/PCL-MOON/build-test.yml?branch=dev&label=build&style=for-the-badge)](https://github.com/StarCarefree/PCL-MOON/actions/workflows/build-test.yml)
 
-[![Issues](https://img.shields.io/github/issues/catmoon233/MOON-CL?style=for-the-badge&label=issues&labelColor=444444&color=1F883D&logo=github)](https://github.com/catmoon233/MOON-CL/issues)
-[![Pull requests](https://img.shields.io/github/issues-pr/catmoon233/MOON-CL?style=for-the-badge&label=pull%20requests&labelColor=444444&color=1F883D&logo=github)](https://github.com/catmoon233/MOON-CL/pulls)
+[![Issues](https://img.shields.io/github/issues/StarCarefree/PCL-MOON?style=for-the-badge&label=issues&labelColor=444444&color=1F883D&logo=github)](https://github.com/StarCarefree/PCL-MOON/issues)
+[![Pull requests](https://img.shields.io/github/issues-pr/StarCarefree/PCL-MOON?style=for-the-badge&label=pull%20requests&labelColor=444444&color=1F883D&logo=github)](https://github.com/StarCarefree/PCL-MOON/pulls)
 
-[Download](https://github.com/catmoon233/MOON-CL/releases/latest) |
-[Issues](https://github.com/catmoon233/MOON-CL/issues) |
+[Download](https://github.com/StarCarefree/PCL-MOON/releases/latest) |
+[Issues](https://github.com/StarCarefree/PCL-MOON/issues) |
 [Contributing](CONTRIBUTING.md)
 
 [PCL upstream](https://github.com/Meloong-Git/PCL) |
@@ -22,15 +22,15 @@
 
 </div>
 
-MOONCL is a Windows Minecraft launcher. It continues from the open-source code of [PCL](https://github.com/Meloong-Git/PCL) and [PCL CE](https://github.com/PCL-Community/PCL-CE), but the product name, UI brand, and update source belong to this repository.
+PCL-MOON is a Windows Minecraft launcher. It continues from the open-source code of [PCL](https://github.com/Meloong-Git/PCL) and [PCL CE](https://github.com/PCL-Community/PCL-CE), but the product name, UI brand, and update source belong to this repository.
 
-Version numbers do not track PCL or PCL CE. Report MOONCL issues to [this repository](https://github.com/catmoon233/MOON-CL/issues), not upstream. Do not install a PCL CE `PCL2_CE_*.exe` or a mirror build as an update for this launcher.
+Version numbers do not track PCL or PCL CE. Report PCL-MOON issues to [this repository](https://github.com/StarCarefree/PCL-MOON/issues), not upstream. Do not install a PCL CE `PCL2_CE_*.exe` or a mirror build as an update for this launcher.
 
 ## What this tree adds
 
 - **Native shell**: accounts, launch, the instance list, and instance settings stay on .NET 10 / WPF. WebView2 only supplements Browse. It does not cover the title bar or sidebar.
 - **Resource browse**: datapacks, maps, modpacks, shaders, and resource packs. MCL, CurseForge, Modrinth, and MCMod can be selected together. Downloads open the existing file list; the player chooses the version.
-- **Modpack catalog**: configure one `index.json` primary source and up to eight fallbacks. The first valid source wins; sources are not merged. A Quark share saves only the selected `.mrpack` / `.zip` into the drive folder `MOONCL`, and only after the user agrees to authorize.
+- **Modpack catalog**: configure one `index.json` primary source and up to eight fallbacks. The first valid source wins; sources are not merged. A Quark share saves only the selected `.mrpack` / `.zip` into the drive folder `PCL-MOON`, and only after the user agrees to authorize.
 - **Multiplayer rooms**: the coordinator exchanges room, member, and route configuration. It does not relay game traffic, and it is not an FRP, ZeroTier, or EasyTier server. Hosts can publish IPv6, FRP, XTCP, ZeroTier, and EasyTier routes. One-click join is not available yet.
 - **Server management**: servers live under `servers/<id>/` in the launcher directory, separate from client instances, mods, and accounts. Vanilla, Paper, Purpur, or an author-provided server pack can be installed, with a console and `server.properties`. The launcher does not open firewall ports or port mappings.
 - **Launch animation**: on by default. Turn it off under Settings → Personalization → Basic. The original progress panel remains, and launching the game is unchanged.
@@ -39,14 +39,14 @@ See the docs below for limits. A verification note is not a claim that every onl
 
 ## Download
 
-Use [this repository's Releases](https://github.com/catmoon233/MOON-CL/releases/latest) only. The launcher checks `https://api.github.com/repos/catmoon233/MOON-CL/releases` and picks the `mooncl-win-*.exe` for the current architecture.
+Use [this repository's Releases](https://github.com/StarCarefree/PCL-MOON/releases/latest) only. The launcher checks `https://api.github.com/repos/StarCarefree/PCL-MOON/releases` and picks the `pcl-moon-win-*.exe` for the current architecture.
 
 | File | Use |
 | --- | --- |
-| `mooncl-win-x64.exe` | 64-bit Windows program. This is the file the updater downloads. |
-| `mooncl-win-ARM64.exe` | ARM64 Windows program. |
-| `mooncl-win-x64-portable.zip` | 64-bit portable package. Extract the whole directory, then run `Start-PCL-CY.cmd`. |
-| `mooncl-win-ARM64-portable.zip` | ARM64 portable package. Same entry point. |
+| `pcl-moon-win-x64.exe` | 64-bit Windows program. This is the file the updater downloads. |
+| `pcl-moon-win-ARM64.exe` | ARM64 Windows program. |
+| `pcl-moon-win-x64-portable.zip` | 64-bit portable package. Extract the whole directory, then run `Start-PCL-CY.cmd`. |
+| `pcl-moon-win-ARM64-portable.zip` | ARM64 portable package. Same entry point. |
 
 Releases do not bundle the .NET 10 Desktop Runtime. The portable package asks before downloading it from Microsoft. The single executable lists missing components first and downloads only after **Agree and download**. If only the browse component is missing, you can skip it and still start.
 
@@ -71,7 +71,7 @@ Install the [.NET 10 SDK](https://get.dot.net/10) on Windows, then from the repo
 .\scripts\Publish-SingleExe.ps1 -Architecture x64
 ```
 
-Or double-click `scripts/Publish-SingleExe.bat`. The local single-file output is named `MOONCL.exe`. That is not the same filename as `mooncl-win-x64.exe` on Releases.
+Or double-click `scripts/Publish-SingleExe.bat`. The local single-file output is named `PCL-MOON.exe`. That is not the same filename as `pcl-moon-win-x64.exe` on Releases.
 
 Portable package:
 
@@ -79,7 +79,7 @@ Portable package:
 .\scripts\Publish-Portable.ps1 -Architecture x64 -Configuration Release -FixedRuntimeDirectory <FixedVersion-root>
 ```
 
-Build `x64` and `arm64` separately. The catalog service and room coordinator live in `mooncl-cloud/` and need Java 17 or later. See [mooncl-cloud/README.md](mooncl-cloud/README.md).
+Build `x64` and `arm64` separately. The catalog service and room coordinator live in `pcl-moon-cloud/` and need Java 17 or later. See [pcl-moon-cloud/README.md](pcl-moon-cloud/README.md).
 
 ## Docs
 
@@ -99,4 +99,4 @@ Build `x64` and `arm64` separately. The catalog service and room coordinator liv
 
 ## Contributors
 
-[![](https://contrib.rocks/image?repo=catmoon233/MOON-CL)](https://github.com/catmoon233/MOON-CL/graphs/contributors)
+[![](https://contrib.rocks/image?repo=StarCarefree/PCL-MOON)](https://github.com/StarCarefree/PCL-MOON/graphs/contributors)

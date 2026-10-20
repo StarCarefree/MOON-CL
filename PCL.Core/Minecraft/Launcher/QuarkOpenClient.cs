@@ -106,7 +106,7 @@ public sealed class QuarkOpenClient
     public const string ClientId = "third_party_agent";
     public const long MaxSaveBytes = 512L * 1024 * 1024;
     private const string SignKey = "cf134812e2de4032bd1cb7c3727e84b3";
-    private const string FolderName = "MOONCL";
+    private const string FolderName = "PCL-MOON";
     private const int MaxJsonBytes = 1024 * 1024;
     private const string BatchDownloadPath = "/open/v1/file/multi_get_download_url";
     private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -136,8 +136,8 @@ public sealed class QuarkOpenClient
             using var document = await CallAsync(HttpMethod.Post, "/agent/v1/get_authorize_page_url", null,
                 new
                 {
-                    client_device_id = "mooncl-" + Guid.NewGuid().ToString("N"),
-                    device_name = "MOONCL",
+                    client_device_id = "pcl-moon-" + Guid.NewGuid().ToString("N"),
+                    device_name = "PCL-MOON",
                     agent_id = "mooncl",
                     client_id = ClientId,
                     work_dir = FolderName

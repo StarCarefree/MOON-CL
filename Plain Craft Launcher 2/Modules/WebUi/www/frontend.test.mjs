@@ -423,7 +423,7 @@ try {
   }
   if (process.env.UI_SCREENSHOT_DIR) {
     await page.setViewportSize({ width: 1280, height: 960 });
-    await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'mooncl-catalog.png'), fullPage: true });
+    await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'pcl-moon-catalog.png'), fullPage: true });
   }
   {
     const quarkPage = await setup();

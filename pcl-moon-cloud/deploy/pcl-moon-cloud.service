@@ -1,0 +1,24 @@
+[Unit]
+Description=PCL-MOON Cloud pack catalog
+After=network.target
+
+[Service]
+Type=simple
+User=pcl-moon
+Group=pcl-moon
+WorkingDirectory=/opt/pcl-moon
+EnvironmentFile=/etc/pcl-moon/pcl-moon.env
+ExecStart=/usr/bin/java -Xms64m -Xmx256m -jar /opt/pcl-moon/pcl-moon-cloud.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+StateDirectory=pcl-moon
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pcl-moon
+
+[Install]
+WantedBy=multi-user.target

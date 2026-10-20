@@ -49,7 +49,7 @@ internal static class RoomFlowPresentation
 
     private static readonly Regex RoomInvite = new(@"邀请码\s*([A-Za-z0-9]{8})\b", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    /// <summary>邀请码只认好友房间邀请文案，避免普通聊天里的 8 位词被当成房间。</summary>
+    /// <summary>邀请码只认房间邀请文案，避免普通聊天里的 8 位词被当成房间。</summary>
     internal static string? RoomInviteCode(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;

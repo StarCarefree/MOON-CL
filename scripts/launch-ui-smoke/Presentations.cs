@@ -25,10 +25,10 @@ internal static partial class Program
             await Task.Run(() => Call(second, "PrepareProcess", info, true));
             Check(info.Arguments.StartsWith("-javaagent:\""), "Real embedded bridge resource was not injected from the loader worker");
             Check(File.Exists(info.Arguments.Split('"')[1]), "Extracted bridge missing");
-            Check(info.Environment["MOONCL_MLS_PROGRESS_FILE"] == channel.SnapshotPath, "Wrong session progress path");
+            Check(info.Environment["PCL_MOON_MLS_PROGRESS_FILE"] == channel.SnapshotPath, "Wrong session progress path");
             var unsupported = new ProcessStartInfo("java") { Arguments = "Main", UseShellExecute = false };
             Call(first, "PrepareProcess", unsupported, false);
-            Check(unsupported.Arguments == "Main" && !unsupported.Environment.ContainsKey("MOONCL_MLS_PROGRESS_FILE"), "Unsupported loaders must not be instrumented");
+            Check(unsupported.Arguments == "Main" && !unsupported.Environment.ContainsKey("PCL_MOON_MLS_PROGRESS_FILE"), "Unsupported loaders must not be instrumented");
             Call(second, "GameStarted");
             File.WriteAllText(channel.SnapshotPath, $$"""{"protocol":1,"token":"{{channel.Token}}","status":"loading","stage":"测试阶段","current":3,"total":5}""");
             await Task.Run(() => Call(second, "Poll")); await Task.Delay(200);

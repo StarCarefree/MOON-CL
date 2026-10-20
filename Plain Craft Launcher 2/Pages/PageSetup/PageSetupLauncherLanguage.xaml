@@ -115,7 +115,7 @@
                                         FontSize="42"
                                         FontWeight="Bold"
                                         Foreground="{DynamicResource ColorBrush1}"
-                                        Text="MOONCL"
+                                        Text="PCL-MOON"
                                         TextWrapping="Wrap" />
 
                                     <TextBlock
@@ -177,7 +177,7 @@
                             Text="{DynamicResource Setup.Language.Banner.SubmitPullRequest}"
                             SvgIcon="lucide/git-pull-request-arrow"
                             local:CustomEventService.EventType="OpenUrl"
-                            local:CustomEventService.EventData="https://github.com/catmoon233/MOON-CL/pulls" />
+                            local:CustomEventService.EventData="https://github.com/StarCarefree/PCL-MOON/pulls" />
                     </StackPanel>
                 </StackPanel>
             </local:MyCard>

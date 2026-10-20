@@ -3,7 +3,7 @@
 **默认关闭。需要按实例测量，不保证所有整合包更快或绝对无错。** 在启动器实例的额外 JVM 参数中添加：
 
 ```text
--Dmooncl.startup.enabled=true
+-Dpclmoon.startup.enabled=true
 ```
 
 启动器只对 **64 位 Java 17 / 21** 自动注入；其他 Java、外部参数文件、不完整引号或重复 Agent 保持原启动路径。Agent 以 Java 17 字节码编译，在 Java 17 和 21 分别验证。
@@ -19,12 +19,12 @@
 ## 关闭与诊断
 
 ```text
--Dmooncl.startup.disabled=true                 # 禁用整个 Agent
--Dmooncl.startup.forgeCache.disabled=true      # 禁用整个 Forge 读取优化层
--Dmooncl.startup.forgeFastRead.disabled=true   # 只禁用哈希限定的直接读取替换
--Dmooncl.startup.classpathCache.disabled=true  # 禁用 Java 21 整条类路径缓存
--Dmooncl.startup.metrics=true                  # 开启诊断计数，默认关闭
--Dmooncl.startup.durationMs=60000               # 缓存窗口，限制在 1000..120000 ms
+-Dpclmoon.startup.disabled=true                 # 禁用整个 Agent
+-Dpclmoon.startup.forgeCache.disabled=true      # 禁用整个 Forge 读取优化层
+-Dpclmoon.startup.forgeFastRead.disabled=true   # 只禁用哈希限定的直接读取替换
+-Dpclmoon.startup.classpathCache.disabled=true  # 禁用 Java 21 整条类路径缓存
+-Dpclmoon.startup.metrics=true                  # 开启诊断计数，默认关闭
+-Dpclmoon.startup.durationMs=60000               # 缓存窗口，限制在 1000..120000 ms
 ```
 
 删除启用参数即可恢复启动器原始注入策略。提取资源失败不追加 Agent；未知类/方法形态不修改原字节码。Agent 成功安装后保留转换器，供后续正常重转换重新应用钩子。直接读取的方法替换在缓存到期后仍保留其等价读取逻辑，但不再缓存字节。
@@ -54,7 +54,7 @@ python -X utf8 scripts/benchmark-instance-startup.py \
   --instance '<隔离副本目录>' --minecraft-root 'D:/StarRailHarpyExpress' \
   --java 'H:/eclipse_adoptium-17-amd64-windows/jdk-17.0.20+8/bin/java.exe' \
   --output "$PI_SCRATCH_DIR/new-baseline" --heap 6G --timeout 180 --settle-seconds 12
-# 对照仅增加：--agent 'Plain Craft Launcher 2/Resources/mooncl-startup-agent.jar'
+# 对照仅增加：--agent 'Plain Craft Launcher 2/Resources/pcl-moon-startup-agent.jar'
 ```
 
 输出目录必须不存在。`--jfr` 与 `--jvm-arg=-Dname=value` 用于独立诊断，不把带采样/统计的时间混入无采样组。`first_atlas` 只是首次图集创建日志，不是主菜单可交互时间；命令生成、原生库准备、登录及启动器准备时间不包含在 Java 进程阶段计时内。

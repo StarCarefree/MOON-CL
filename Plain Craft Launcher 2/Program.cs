@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO;
 using System.Windows.Input;
 using PCL.Core.App;
 using PCL.Core.App.Essentials;
@@ -17,7 +16,7 @@ internal static class Program
     [STAThread]
     public static void Main()
     {
-        if (TryHandJoinToRunning()) return;
+        LegacyDataMigration.Migrate();
         if (Basics.CommandLineArguments.Contains("--console")) KernelInterop.AllocateConsole();
 
 #if DEBUG
@@ -48,22 +47,5 @@ internal static class Program
         Lifecycle.OnInitialize();
     }
 
-    private static bool TryHandJoinToRunning()
-    {
-        var args = Basics.CommandLineArguments;
-        var index = Array.IndexOf(args, "--join-room");
-        if (index < 0 || index + 1 >= args.Length) return false;
-        var code = args[index + 1].Trim().ToUpperInvariant();
-        if (code.Length != 8 || !code.All(char.IsAsciiLetterOrDigit)) return false;
-        FormMain.QueueJoinRoom(code);
-        var existing = Process.GetProcessesByName(Basics.ExecutableNameWithoutExtension)
-            .FirstOrDefault(process => process.Id != Environment.ProcessId && process.MainWindowHandle != 0);
-        if (existing is null) return false;
-        var handoff = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "join-room.txt");
-        Directory.CreateDirectory(Path.GetDirectoryName(handoff)!);
-        File.WriteAllText(handoff, code);
-        ModMain.ShowWindowToTop(existing.MainWindowHandle);
-        return true;
-    }
 }
 

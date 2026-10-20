@@ -47,7 +47,7 @@ public partial class FormMain
                 changelog = Lang.Text("Main.UpdateLog.Empty");
             if (ModMain.MyMsgBoxMarkdown(changelog,
                     Lang.Text("Main.UpdateLog.Title", ModBase.versionBranchName, ModBase.versionBaseName), Lang.Text("Common.Action.Confirm"), Lang.Text("Main.UpdateLog.FullChangelog")) ==
-                2) ModBase.OpenWebsite(MoonclRelease.Page);
+                2) ModBase.OpenWebsite(PclMoonRelease.Page);
         }, "UpdateLog Output");
     }
 
@@ -214,7 +214,6 @@ public partial class FormMain
         // Left = (GetWPFSize(My.Computer.Screen.WorkingArea.Width) - Width) / 2
         isSizeSaveable = true;
         ShowWindowToTop();
-        AcceptJoinRoom();
 
         var hwndSource = (HwndSource)PresentationSource.FromVisual(this);
         hwndSource.AddHook(WndProc);
@@ -267,7 +266,7 @@ public partial class FormMain
                         $"{hint}{"\r\n"}{"\r\n"}{Lang.Text("Main.SpecialVersion.HideHintNotice")}",
                         Lang.Text("Main.SpecialVersion.Title"), Lang.Text("Main.SpecialVersion.IUnderstand"), Lang.Text("Main.SpecialVersion.OpenDownloadPageAndExit"), isWarn: true, button2Action: () =>
                         {
-                            ModBase.OpenWebsite(MoonclRelease.LatestPage);
+                            ModBase.OpenWebsite(PclMoonRelease.LatestPage);
                             EndProgram(false);
                         });
                 }
@@ -612,7 +611,7 @@ public partial class FormMain
             if (!isLogShown)
             {
                 ModBase.FeedbackInfo();
-                ModBase.Log("请在 https://github.com/catmoon233/MOON-CL/issues 提交错误报告，以便于解决此问题！（这也有可能是原版 PCL 或上游 PCL CE 的问题）");
+                ModBase.Log("请在 https://github.com/StarCarefree/PCL-MOON/issues 提交错误报告，以便于解决此问题！（这也有可能是原版 PCL 或上游 PCL CE 的问题）");
                 isLogShown = true;
                 ModBase.ShellOnly(LogWrapper.CurrentLogger.CurrentLogFiles.Last());
             }
@@ -1283,7 +1282,6 @@ public partial class FormMain
             }
 
             ShowWindowToTop();
-            AcceptJoinRoom();
             handled = true;
         }
 
@@ -1306,28 +1304,6 @@ public partial class FormMain
 
     private string? _promptedClipboard;
     private bool _promptingClipboard;
-    private static string? _joinRoomCode;
-
-    internal static void QueueJoinRoom(string code) => _joinRoomCode = code;
-
-    private void AcceptJoinRoom()
-    {
-        var code = _joinRoomCode;
-        var handoff = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "join-room.txt");
-        if (File.Exists(handoff))
-        {
-            try { code = File.ReadAllText(handoff).Trim(); File.Delete(handoff); }
-            catch (IOException) { }
-        }
-
-        if (string.IsNullOrWhiteSpace(code) || !isWindowLoadFinished) return;
-        _joinRoomCode = null;
-        ShowWindowToTop();
-        _ = NavigateHybridAsync("rooms");
-        UpdateHybridShell();
-        HybridMultiplayerView.SelectRooms();
-        HybridRoomsView.OfferJoin(code);
-    }
 
     private void TryPromptCopiedRoomInvite()
     {
@@ -1766,7 +1742,6 @@ public partial class FormMain
     {
         _webUi.Hide();
         SetRoomsVisible(false);
-        SetFriendsVisible(false);
         if (string.IsNullOrEmpty(PageNameGet(stack)))
         {
             // 切换到主页面

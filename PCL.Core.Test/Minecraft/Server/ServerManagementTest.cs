@@ -52,7 +52,7 @@ public sealed class ServerManagementTest
         var guid = Guid.NewGuid().ToString("N");
         var renamed = new ServerProfile { Id = guid, Name = "测试服务端" };
         Directory.CreateDirectory(Path.Combine(_manager.RootDirectory, guid));
-        File.WriteAllText(Path.Combine(_manager.RootDirectory, guid, ".mooncl-server.json"), "{\"Id\":\"" + guid + "\",\"EntryPoint\":\"\"}");
+        File.WriteAllText(Path.Combine(_manager.RootDirectory, guid, ".pcl-moon-server.json"), "{\"Id\":\"" + guid + "\",\"EntryPoint\":\"\"}");
         _manager.Save(renamed);
         Assert.AreEqual("测试服务端-2", renamed.Id);
         Assert.IsFalse(Directory.Exists(Path.Combine(_manager.RootDirectory, guid)));
@@ -125,7 +125,7 @@ public sealed class ServerManagementTest
         await Assert.ThrowsAsync<IOException>(() => _manager.InstallAsync(_profile, Zip(("../escape.txt", "x")), null, null, false));
         Assert.IsFalse(File.Exists(Path.Combine(_manager.RootDirectory, "escape.txt")));
         await Assert.ThrowsAsync<IOException>(() => _manager.InstallAsync(_profile, Zip(("pack/manifest.json", "{}")), null, null, false));
-        await Assert.ThrowsAsync<IOException>(() => _manager.InstallAsync(_profile, Zip((".mooncl-server.json", "{}")), null, null, false));
+        await Assert.ThrowsAsync<IOException>(() => _manager.InstallAsync(_profile, Zip((".pcl-moon-server.json", "{}")), null, null, false));
         Assert.AreEqual("", _manager.List().Single().EntryPoint);
         Assert.IsFalse(_manager.GetSession(_profile).IsInstalling);
     }

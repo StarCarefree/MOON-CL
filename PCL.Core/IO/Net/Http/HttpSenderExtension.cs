@@ -26,7 +26,7 @@ public static class HttpSenderExtension
             if(addMetedata)
             {
                 request
-                    .WithHeader("User-Agent", $"MOONCL/{Basics.VersionName} (https://github.com/catmoon233/MOON-CL)")
+                    .WithHeader("User-Agent", $"PCL-MOON/{Basics.VersionName} (https://github.com/StarCarefree/PCL-MOON)")
                     .WithHeader("Referer", $"https://{Basics.VersionCode}.ce.open.pcl2.server/");
             }
 

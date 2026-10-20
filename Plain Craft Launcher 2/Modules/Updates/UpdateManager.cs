@@ -66,7 +66,7 @@ public static class UpdateManager
 
     public static void UpdateStart(UpdateEnums.UpdateType type, string receivedKey = null, bool forceValidated = false)
     {
-        var dlTargetPath = ModBase.exePath + @"PCL\MOONCL.exe";
+        var dlTargetPath = ModBase.exePath + @"PCL\PCL-MOON.exe";
         ModBase.RunInNewThread(() =>
         {
             try
@@ -161,7 +161,7 @@ public static class UpdateManager
     {
         try
         {
-            var fileName = ModBase.exePath + @"PCL\MOONCL.exe";
+            var fileName = ModBase.exePath + @"PCL\PCL-MOON.exe";
             if (!File.Exists(fileName))
             {
                 ModBase.Log("[System] 更新失败：未找到更新文件");

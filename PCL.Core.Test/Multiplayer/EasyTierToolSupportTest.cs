@@ -30,7 +30,7 @@ public sealed class EasyTierToolSupportTest
     [TestMethod]
     public async Task NativeCoreVersionCheckDoesNotStartAnOverlay()
     {
-        var executable = Environment.GetEnvironmentVariable("MOONCL_TEST_EASYTIER_CORE");
+        var executable = Environment.GetEnvironmentVariable("PCL_MOON_TEST_EASYTIER_CORE");
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) Assert.Inconclusive("Native EasyTier path not provided.");
         var result = await EasyTierToolSupport.CheckAsync(executable!, CancellationToken.None);
         Assert.IsTrue(result.Supported); Assert.AreEqual("2.6.4", result.Version);

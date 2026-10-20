@@ -172,7 +172,7 @@ Fixed Version **不会**像 Evergreen 那样随系统自动升级。分发者/�
 
 ## 单个 exe
 
-双击 `scripts/Publish-SingleExe.bat`（或运行 `scripts/Publish-SingleExe.ps1 -Architecture x64`）打出一个 `MOONCL.exe`。不要在其它编译还在跑时执行。它不自包含、不修剪，原生库缺失会直接失败。
+双击 `scripts/Publish-SingleExe.bat`（或运行 `scripts/Publish-SingleExe.ps1 -Architecture x64`）打出一个 `PCL-MOON.exe`。不要在其它编译还在跑时执行。它不自包含、不修剪，原生库缺失会直接失败。
 
 这个 exe 不再把压缩包接在 PE 尾部。银狐类规则会把「很小的壳 + 文件尾超大 overlay」报成 `Trojan.Win64.SilverFox`。启动文件改成普通嵌入资源，并写入版本信息和图标。这不能代替代码签名；未签名的新文件仍可能被个别引擎误报，需要向该引擎提交误报。
 

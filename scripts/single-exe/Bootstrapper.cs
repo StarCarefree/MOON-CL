@@ -18,16 +18,16 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("MOONCL")]
-[assembly: AssemblyProduct("MOONCL")]
-[assembly: AssemblyCompany("MOONCL")]
+[assembly: AssemblyTitle("PCL-MOON")]
+[assembly: AssemblyProduct("PCL-MOON")]
+[assembly: AssemblyCompany("PCL-MOON")]
 [assembly: AssemblyDescription("Minecraft launcher")]
 [assembly: AssemblyCopyright("Copyright")]
 
 internal static class Program
 {
     private const string ReleasesUrl = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json";
-    private const string ResourceName = "MOONCL.App";
+    private const string ResourceName = "PCL-MOON.App";
     private const string WebViewSetupUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124708";
 
     private static readonly string[] TrustedSuffixes = new string[]
@@ -58,7 +58,7 @@ internal static class Program
                 return 1;
             }
             EnsureVisualStyles();
-            MessageBox.Show(ex.Message, "MOONCL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, "PCL-MOON", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
     }
@@ -110,7 +110,7 @@ internal static class Program
             {
                 VerifyHash(stream);
                 stream.Position = 0;
-                var dir = Path.Combine(Path.GetTempPath(), "mooncl-self-check-" + Process.GetCurrentProcess().Id);
+                var dir = Path.Combine(Path.GetTempPath(), "pcl-moon-self-check-" + Process.GetCurrentProcess().Id);
                 try
                 {
                     if (Directory.Exists(dir)) Directory.Delete(dir, true);
@@ -132,7 +132,7 @@ internal static class Program
             _payloadHash = BuildInfo.PayloadSha256;
             _extractDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "MOONCL", "single", _payloadHash);
+                "PCL-MOON", "single", _payloadHash);
             var missing = CollectMissing();
             if (missing.Count > 0)
             {
@@ -365,7 +365,7 @@ internal static class Program
             psi.WorkingDirectory = Path.GetDirectoryName(exe);
             psi.UseShellExecute = false;
             psi.Arguments = JoinArgs(args);
-            var bundle = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "bundle");
+            var bundle = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PCL-MOON", "bundle");
             Directory.CreateDirectory(bundle);
             psi.EnvironmentVariables["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = bundle;
             psi.EnvironmentVariables["DOTNET_TieredPGO"] = "1";
@@ -473,7 +473,7 @@ internal static class Program
                 AssertHttps(current, false);
                 var req = (HttpWebRequest)WebRequest.Create(current);
                 req.AllowAutoRedirect = false;
-                req.UserAgent = "MOONCL/2.15";
+                req.UserAgent = "PCL-MOON/2.15";
                 req.Timeout = 180000;
                 req.ReadWriteTimeout = 180000;
                 HttpWebResponse resp = null;
@@ -525,7 +525,7 @@ internal static class Program
             AssertHttps(url, false);
             var req = (HttpWebRequest)WebRequest.Create(url);
             req.AllowAutoRedirect = false;
-            req.UserAgent = "MOONCL/2.15";
+            req.UserAgent = "PCL-MOON/2.15";
             req.Timeout = 60000;
             using (var resp = (HttpWebResponse)req.GetResponse())
             using (var reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
@@ -850,7 +850,7 @@ internal static class Program
             _host = host;
             _args = args;
             _missing = missing;
-            Text = "MOONCL";
+            Text = "PCL-MOON";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -967,7 +967,7 @@ internal static class Program
                         ConsentAccepted = false;
                         SetBusy(false);
                         _status.Text = ex.Message;
-                        MessageBox.Show(this, ex.Message, "MOONCL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(this, ex.Message, "PCL-MOON", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }));
                 }
             });
@@ -994,7 +994,7 @@ internal static class Program
                         _busy = false;
                         SetBusy(false);
                         _status.Text = ex.Message;
-                        MessageBox.Show(this, ex.Message, "MOONCL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(this, ex.Message, "PCL-MOON", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }));
                 }
             });
@@ -1016,7 +1016,7 @@ internal static class Program
             EnsureVisualStyles();
             using (var form = new Form())
             {
-                form.Text = "MOONCL";
+                form.Text = "PCL-MOON";
                 form.FormBorderStyle = FormBorderStyle.FixedDialog;
                 form.ControlBox = false;
                 form.StartPosition = FormStartPosition.CenterScreen;

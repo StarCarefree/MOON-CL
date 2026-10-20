@@ -163,10 +163,10 @@ public sealed class RoomClientTest
     {
         var executable = System.IO.Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT")!, "dotnet.exe");
         Assert.IsTrue(System.IO.File.Exists(executable), "Tests require DOTNET_ROOT pointing to the SDK used to run them.");
-        var before = new HashSet<string>(System.IO.Directory.GetDirectories(System.IO.Path.GetTempPath(), "mooncl-frp-*"));
+        var before = new HashSet<string>(System.IO.Directory.GetDirectories(System.IO.Path.GetTempPath(), "pcl-moon-frp-*"));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await Assert.ThrowsExactlyAsync<System.IO.IOException>(() => FrpProcess.StartAsync(executable, "", timeout.Token));
-        foreach (var directory in System.IO.Directory.GetDirectories(System.IO.Path.GetTempPath(), "mooncl-frp-*"))
+        foreach (var directory in System.IO.Directory.GetDirectories(System.IO.Path.GetTempPath(), "pcl-moon-frp-*"))
             Assert.IsTrue(before.Contains(directory), "Private temporary config leaked: " + directory);
     }
 

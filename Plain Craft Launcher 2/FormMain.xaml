@@ -10,7 +10,7 @@
     Closing="FormMain_Closing" Activated="FormMain_Activated" Drop="FrmMain_Drop" StateChanged="WindowStateChanged"
     MouseMove="FormMain_MouseMove"
     x:Name="WindMain" x:Class="PCL.FormMain" Style="{StaticResource MyWindow}"
-     AllowDrop="True" Topmost="True" Title="MOONCL" MinHeight="760" MinWidth="1120"
+     AllowDrop="True" Topmost="True" Title="PCL-MOON" MinHeight="760" MinWidth="1120"
     ScrollViewer.VerticalScrollBarVisibility="Disabled" Icon="/Plain Craft Launcher 2;component/Images/icon.ico"
     ResizeMode="CanResize" Background="#111315" d:DesignWidth="1664" d:DesignHeight="1014" Width="1664" Height="1014"
     WindowStartupLocation="CenterScreen" WindowStyle="SingleBorderWindow" AllowsTransparency="False">
@@ -247,7 +247,6 @@
                 </Grid>
                 <Grid x:Name="PanBrowse" Grid.Row="1" Grid.Column="1" Background="{StaticResource Hybrid.Background}" Panel.ZIndex="1" Visibility="Collapsed" />
                 <local:HybridMultiplayer x:Name="HybridMultiplayerView" Grid.Row="1" Grid.Column="1" Panel.ZIndex="1" Visibility="Collapsed" />
-                <local:HybridFriends x:Name="HybridFriendsView" Grid.Row="1" Grid.Column="1" Panel.ZIndex="1" Visibility="Collapsed" />
                 <StackPanel x:Name="PanHint" UseLayoutRounding="True"
                             SnapsToDevicePixels="True" HorizontalAlignment="Left" VerticalAlignment="Bottom"
                             Margin="0,0,0,20"

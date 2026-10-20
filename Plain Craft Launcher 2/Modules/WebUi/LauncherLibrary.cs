@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Windows.Media.Imaging;
 using PCL.Core.App;
+using PCL.Core.Minecraft;
 using PCL.Core.Minecraft.Launcher;
 using PCL.Core.Minecraft.Profile;
 using PCL.Core.Minecraft.Profile.Models;
@@ -433,7 +434,7 @@ internal sealed class LauncherLibrary : IDisposable
         }
         if (operation == "authorizeQuark")
         {
-            if (ModMain.MyMsgBox("将打开夸克官方授权页。完成后，通过夸克下载只会把目标整合包转存到你的网盘目录 MOONCL，不会转存整个分享，也不会读取浏览器 Cookie。",
+            if (ModMain.MyMsgBox("将打开夸克官方授权页。完成后，通过夸克下载只会把目标整合包转存到你的网盘目录 PCL-MOON，不会转存整个分享，也不会读取浏览器 Cookie。",
                 "授权夸克网盘", "打开授权页", "取消") != 1) return;
             await RunAsync(AuthorizeQuarkAsync);
             return;
@@ -591,7 +592,7 @@ internal sealed class LauncherLibrary : IDisposable
             throw new InvalidOperationException("这个游戏已经在服务器里，请先退出当前服务器。");
         if (session.State is not ("ready" or "disconnected" or "error"))
             throw new InvalidOperationException(session.State == "unsupported"
-                ? "这个游戏的 MoonCL javaagent 没有适配成功，游戏会继续运行，但不能自动进入。"
+                ? "这个游戏的 PCL-MOON javaagent 没有适配成功，游戏会继续运行，但不能自动进入。"
                 : "游戏还在加载，请等主菜单出现后再进入。");
         await GameLinkSession.SendAsync(sessionId, address);
     }
@@ -628,7 +629,7 @@ internal sealed class LauncherLibrary : IDisposable
                 await Task.Delay(400);
             }
             if (loader.State != ModBase.LoadState.Finished && VanillaInstance(minecraft) is null)
-                throw new InvalidOperationException(loader.Error?.Message ?? "原版下载没有完成。");
+                throw new InvalidOperationException(DownloadRegionPolicy.RegionBlockMessage(loader.Error) ?? loader.Error?.Message ?? "原版下载没有完成。");
         }
         ModInstanceList.mcInstanceListForceRefresh = true;
         await Task.Run(() => ModInstanceList.mcInstanceListLoader.WaitForExit(ModFolder.mcFolderSelected, isForceRestart: true));
@@ -782,7 +783,7 @@ internal sealed class LauncherLibrary : IDisposable
     internal static string PackDownloadRoot()
         => PCL.Core.IO.PackDownloadCache.Resolve(Config.Launch.PackDownloadRoot, Path.GetTempPath());
 
-    internal static string QuarkDriveFolder => "夸克网盘根目录 / MOONCL";
+    internal static string QuarkDriveFolder => "夸克网盘根目录 / PCL-MOON";
 
     internal static bool TryClearDownloadCache(out string message)
     {

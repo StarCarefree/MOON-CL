@@ -44,12 +44,12 @@ public sealed class GameLinkSession : IDisposable
         var existing = info.Arguments ?? "";
         if (!existing.Contains("-javaagent:\"" + agentJar + "\"", StringComparison.OrdinalIgnoreCase))
             info.Arguments = "-javaagent:\"" + agentJar + "\" " + existing;
-        info.Environment["MOONCL_LINK_PORT"] = ((IPEndPoint)_listener.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        info.Environment["MOONCL_LINK_TOKEN"] = _token;
-        if (!string.IsNullOrEmpty(mappings)) info.Environment["MOONCL_LINK_MAPPINGS"] = mappings;
-        else info.Environment.Remove("MOONCL_LINK_MAPPINGS");
-        if (!string.IsNullOrEmpty(runtimeMappings)) info.Environment["MOONCL_LINK_RUNTIME_MAPPINGS"] = runtimeMappings;
-        else info.Environment.Remove("MOONCL_LINK_RUNTIME_MAPPINGS");
+        info.Environment["PCL_MOON_LINK_PORT"] = ((IPEndPoint)_listener.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        info.Environment["PCL_MOON_LINK_TOKEN"] = _token;
+        if (!string.IsNullOrEmpty(mappings)) info.Environment["PCL_MOON_LINK_MAPPINGS"] = mappings;
+        else info.Environment.Remove("PCL_MOON_LINK_MAPPINGS");
+        if (!string.IsNullOrEmpty(runtimeMappings)) info.Environment["PCL_MOON_LINK_RUNTIME_MAPPINGS"] = runtimeMappings;
+        else info.Environment.Remove("PCL_MOON_LINK_RUNTIME_MAPPINGS");
     }
 
     public void Attach(Process process)

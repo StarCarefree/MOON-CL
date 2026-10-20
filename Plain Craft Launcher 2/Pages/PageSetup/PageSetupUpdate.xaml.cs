@@ -26,7 +26,7 @@ public partial class PageSetupUpdate
         ComboSystemUpdateChannel.SelectedIndex = (int)Config.Update.UpdateChannel;
         ComboSystemUpdateMode.SelectedIndex = (int)Config.Update.UpdateMode;
 
-        TextCurrentVersion.Text = "MOONCL " + VersionNameFormat(ModBase.versionBaseName);
+        TextCurrentVersion.Text = "PCL-MOON " + VersionNameFormat(ModBase.versionBaseName);
         ModAnimation.AniControlEnabled -= 1;
         CheckUpdate();
     }
@@ -79,7 +79,7 @@ public partial class PageSetupUpdate
                         UpdateManager.IsCurrentVersionBeta
                             ? UpdateChannel.beta
                             : UpdateChannel.stable, SystemInfo.IsArm64System ? UpdateArch.arm64 : UpdateArch.x64);
-                    TextUpdateName.Text = "MOONCL " + VersionNameFormat(updateInfo.VersionName);
+                    TextUpdateName.Text = "PCL-MOON " + VersionNameFormat(updateInfo.VersionName);
                     var summary = updateInfo.Changelog.Between("<summary>", "</summary>");
                     if (!updateInfo.Changelog.Contains("<summary>") || string.IsNullOrWhiteSpace(summary.Trim()))
                         TextChangelog.Text = Lang.Text("Setup.Update.Changelog.Empty");
@@ -256,7 +256,7 @@ public partial class PageSetupUpdate
 
     private void BtnChangelog_Click(object sender, MouseButtonEventArgs e)
     {
-        ModBase.OpenWebsite(MoonclRelease.TagPage(ModBase.versionBaseName));
+        ModBase.OpenWebsite(PclMoonRelease.TagPage(ModBase.versionBaseName));
     }
 
     public string VersionNameFormat(string str)

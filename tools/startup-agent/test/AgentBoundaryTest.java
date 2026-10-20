@@ -48,7 +48,7 @@ public final class AgentBoundaryTest {
         if (prewarmed.getResource("BeforeInstall.class") != null) throw new AssertionError("Fixture is dirty");
     }
     public static void main(String[] args) throws Exception {
-        Class<?> helper = Class.forName("mooncl.startup.NegativeCache", true, null);
+        Class<?> helper = Class.forName("pclmoon.startup.NegativeCache", true, null);
         var get = helper.getMethod("getJarEntry", JarFile.class, String.class);
         var workers = Executors.newFixedThreadPool(2);
         try {

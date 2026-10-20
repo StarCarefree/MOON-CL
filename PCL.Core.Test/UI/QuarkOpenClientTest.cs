@@ -774,7 +774,7 @@ public sealed class QuarkOpenClientTest
     public void SessionFileDoesNotStorePlainToken()
     {
         var root = Directory.Exists(@"I:\tmp-pcl") ? @"I:\tmp-pcl" : Path.GetTempPath();
-        var dir = Path.Combine(root, "mooncl-quark-" + Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(root, "pcl-moon-quark-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "session.bin");
         try

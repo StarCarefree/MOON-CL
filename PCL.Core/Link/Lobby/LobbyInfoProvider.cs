@@ -64,7 +64,7 @@ public static class LobbyInfoProvider
             return null;
         }
 
-        if (code.Split("-".ToCharArray()).Length != 5) // PCL CE / MOONCL 大厅
+        if (code.Split("-".ToCharArray()).Length != 5) // PCL CE / PCL-MOON 大厅
         {
             try
             {

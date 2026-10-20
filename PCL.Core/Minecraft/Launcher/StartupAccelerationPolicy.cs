@@ -19,11 +19,14 @@ public static class StartupAccelerationPolicy
             // Do not guess options hidden in argument files, or inject the same agent twice.
             if (token.StartsWith('@') || token.StartsWith("-XX:Flags=", StringComparison.Ordinal) ||
                 (token.StartsWith("-javaagent:", StringComparison.Ordinal) &&
-                 token.Contains("mooncl-startup-agent", StringComparison.OrdinalIgnoreCase))) return false;
-            if (token.StartsWith("-Dmooncl.startup.enabled=", StringComparison.Ordinal))
-                enabled = token[25..].Equals("true", StringComparison.OrdinalIgnoreCase);
-            if (token.StartsWith("-Dmooncl.startup.disabled=", StringComparison.Ordinal))
-                disabled = token[26..].Equals("true", StringComparison.OrdinalIgnoreCase);
+                 (token.Contains("pcl-moon-startup-agent", StringComparison.OrdinalIgnoreCase) ||
+                  token.Contains("mooncl-startup-agent", StringComparison.OrdinalIgnoreCase)))) return false;
+            foreach (var prefix in new[] { "-Dpclmoon.startup.enabled=", "-Dmooncl.startup.enabled=" })
+                if (token.StartsWith(prefix, StringComparison.Ordinal))
+                    enabled = token[prefix.Length..].Equals("true", StringComparison.OrdinalIgnoreCase);
+            foreach (var prefix in new[] { "-Dpclmoon.startup.disabled=", "-Dmooncl.startup.disabled=" })
+                if (token.StartsWith(prefix, StringComparison.Ordinal))
+                    disabled = token[prefix.Length..].Equals("true", StringComparison.OrdinalIgnoreCase);
         }
         return enabled && !disabled;
     }

@@ -49,7 +49,7 @@ public sealed class ServerCoreCatalogTest
         var manager = new ServerManager(Path.Combine(_root, "servers"));
         var profile = new ServerProfile { Name = "兼容", Loader = ServerLoader.Fabric, MinecraftVersion = "1.21.1", LoaderVersion = "0.16.14" };
          manager.Save(profile);
-         StringAssert.Contains(File.ReadAllText(Path.Combine(manager.GetDirectory(profile), ".mooncl-server.json")), "\"Loader\": 1");
+         StringAssert.Contains(File.ReadAllText(Path.Combine(manager.GetDirectory(profile), ".pcl-moon-server.json")), "\"Loader\": 1");
          var plugin = new ServerProfile { Loader = ServerLoader.Purpur, MinecraftVersion = "1.21.1" };
          Assert.IsTrue(ServerPluginTargets.SupportsEnvironments(plugin, ["purpur"]));
          plugin.Loader = ServerLoader.Folia;
@@ -57,7 +57,7 @@ public sealed class ServerCoreCatalogTest
          Assert.IsFalse(ServerPluginTargets.SupportsEnvironments(plugin, ["purpur"]));
         profile.Loader = ServerLoader.Paper;
         manager.Save(profile);
-        StringAssert.Contains(File.ReadAllText(Path.Combine(manager.GetDirectory(profile), ".mooncl-server.json")), "\"Loader\": 3");
+        StringAssert.Contains(File.ReadAllText(Path.Combine(manager.GetDirectory(profile), ".pcl-moon-server.json")), "\"Loader\": 3");
         Assert.AreEqual(ServerLoader.Paper, manager.List().Single().Loader);
     }
 
@@ -113,7 +113,7 @@ public sealed class ServerCoreCatalogTest
         using var http = Client((request, _) =>
         {
             seen.Add(request.RequestUri!.AbsoluteUri);
-            Assert.IsTrue(request.Headers.UserAgent.ToString().Contains("MOONCL", StringComparison.Ordinal));
+            Assert.IsTrue(request.Headers.UserAgent.ToString().Contains("PCL-MOON", StringComparison.Ordinal));
             var path = request.RequestUri.AbsolutePath;
             if (path.EndsWith("/builds/10", StringComparison.Ordinal)) return Task.FromResult(Json(PaperBuild(10, "ALPHA")));
             if (path.EndsWith("/builds", StringComparison.Ordinal)) return Task.FromResult(Json("[" + PaperBuild(10, "ALPHA") + "," + PaperBuild(9, "STABLE") + "]"));
@@ -257,7 +257,7 @@ public sealed class ServerCoreCatalogTest
         Assert.AreEqual("server.jar", imported.EntryPoint);
         Assert.IsFalse(local.IsEulaAccepted(imported));
         Assert.IsFalse(local.GetSession(imported).GetLog().Any(line => line.Contains("已启动", StringComparison.Ordinal)));
-        Assert.IsFalse(File.Exists(Path.Combine(local.GetDirectory(imported), "mooncl-loader-installer.jar")));
+        Assert.IsFalse(File.Exists(Path.Combine(local.GetDirectory(imported), "pcl-moon-loader-installer.jar")));
     }
 
     [TestMethod]

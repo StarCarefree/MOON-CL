@@ -52,9 +52,9 @@ public final class ClassPathCacheTest {
         jar(empty, null, null, null); jar(payload, ENTRY, bytes, null);
         try (MutableLoader loader = new MutableLoader(empty.toUri().toURL())) {
             for (int i = 0; i < 100; i++) absent(loader, CLASS);
-            if (Runtime.version().feature() == 21 && !Boolean.getBoolean("mooncl.startup.disabled")
-                    && !Boolean.getBoolean("mooncl.startup.classpathCache.disabled")) {
-                var metric = Class.forName("mooncl.startup.NegativeCache", true, null).getMethod("classMissHits");
+            if (Runtime.version().feature() == 21 && !Boolean.getBoolean("pclmoon.startup.disabled")
+                    && !Boolean.getBoolean("pclmoon.startup.classpathCache.disabled")) {
+                var metric = Class.forName("pclmoon.startup.NegativeCache", true, null).getMethod("classMissHits");
                 long before = (Long) metric.invoke(null);
                 for (int i = 0; i < 100; i++)
                     check(loader.getResource("first/query/Unique" + i + ".class") == null, "First-time missing class appeared");
@@ -97,9 +97,9 @@ public final class ClassPathCacheTest {
             check(loader.loadClass(CLASS).getMethod("value").invoke(null).equals("unchanged"), "Manifest directory masked");
             Files.delete(directory.resolve(ENTRY));
         }
-        if (Runtime.version().feature() == 21 && !Boolean.getBoolean("mooncl.startup.disabled")
-                && !Boolean.getBoolean("mooncl.startup.classpathCache.disabled")) {
-            Class<?> cache = Class.forName("mooncl.startup.NegativeCache", true, null);
+        if (Runtime.version().feature() == 21 && !Boolean.getBoolean("pclmoon.startup.disabled")
+                && !Boolean.getBoolean("pclmoon.startup.classpathCache.disabled")) {
+            Class<?> cache = Class.forName("pclmoon.startup.NegativeCache", true, null);
             Method metric = cache.getMethod("classMissHits");
             check(((Long) metric.invoke(null)) > 0, "No classpath scan avoided: optimization inactive");
             cache.getMethod("stop").invoke(null);

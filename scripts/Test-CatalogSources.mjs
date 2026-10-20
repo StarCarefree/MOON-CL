@@ -1,5 +1,5 @@
 // Node 22+ and local Chromium. Tests the real launcher webpage with a mocked native bridge.
-// No launcher process/account/game is touched. Output: mooncl-cloud/build/catalog-ui/.
+// No launcher process/account/game is touched. Output: pcl-moon-cloud/build/catalog-ui/.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const output = join(root, 'mooncl-cloud/build/catalog-ui', String(Date.now()));
+const output = join(root, 'pcl-moon-cloud/build/catalog-ui', String(Date.now()));
 await mkdir(output, { recursive: true });
 const files = new Map();
 for (const name of ['index.html', 'app.js', 'app.css']) files.set('/' + name, await readFile(join(root, 'Plain Craft Launcher 2/Modules/WebUi/www', name)));
@@ -22,9 +22,9 @@ const server = createServer((request, response) => {
 });
 await new Promise((accept) => server.listen(0, '127.0.0.1', accept));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const browserPath = process.env.MOONCL_BROWSER || [join(process.env['ProgramFiles(x86)'] || '', 'Microsoft/Edge/Application/msedge.exe'),
+const browserPath = process.env.PCL_MOON_BROWSER || [join(process.env['ProgramFiles(x86)'] || '', 'Microsoft/Edge/Application/msedge.exe'),
   join(process.env.ProgramFiles || '', 'Google/Chrome/Application/chrome.exe'), '/usr/bin/chromium'].find(existsSync);
-assert.ok(browserPath, 'Set MOONCL_BROWSER to a Chromium executable');
+assert.ok(browserPath, 'Set PCL_MOON_BROWSER to a Chromium executable');
 let browser, socket, browserLog = '', debugOrigin;
 const checks = [];
 async function until(predicate, label) {

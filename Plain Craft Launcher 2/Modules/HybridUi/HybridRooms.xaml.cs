@@ -52,7 +52,7 @@ public partial class HybridRooms : UserControl, IDisposable
 
     internal HybridRooms(string? settingsPath)
     {
-        _settingsPath = settingsPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MOONCL", "multiplayer.json");
+        _settingsPath = settingsPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PCL-MOON", "multiplayer.json");
         InitializeComponent();
         LoadSettings();
         Members.ItemsSource = _memberPage; HallMembers.ItemsSource = _hallPage; RouteList.ItemsSource = _routePage; RoomChat.ItemsSource = _chat;
@@ -532,17 +532,6 @@ public partial class HybridRooms : UserControl, IDisposable
         if (_chat.Count > 0) RoomChat.ScrollIntoView(_chat[^1]);
     }
 
-    private void InviteFriend_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_initialized || _closed) return;
-        var code = _session?.Room?.Code;
-        if (string.IsNullOrWhiteSpace(code)) { Status.Text = "还没有可邀请的房间。"; return; }
-        var main = Window.GetWindow(this) as FormMain;
-        if (main is null) return;
-        _ = main.NavigateHybridAsync("friends");
-        main.UpdateHybridShell();
-        main.HybridFriendsView.BeginRoomInvite(code, _session!.Room!.Name);
-    }
     private void CopyAddress_Click(object sender, RoutedEventArgs e)
     { if (_initialized && !_closed && GetLaunchTarget() is { } target) Copy(RoomConnection.FormatEndpoint(target.Host, target.Port)); }
     private void Copy(string? text)
@@ -696,7 +685,7 @@ public partial class HybridRooms : UserControl, IDisposable
     {
         var projects = PackUpdateDownloads.Projects(identity);
         using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("MOONCL");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("PCL-MOON");
         var key = PCL.Core.App.Secrets.CurseForgeAPIKey;
         if (!string.IsNullOrWhiteSpace(key)) http.DefaultRequestHeaders.TryAddWithoutValidation("x-api-key", key);
         var versions = new List<PackDownloadVersion>();
