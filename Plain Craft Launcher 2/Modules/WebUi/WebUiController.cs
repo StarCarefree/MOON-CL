@@ -195,7 +195,7 @@ internal sealed partial class WebUiController : IDisposable
 
     private async void OnTick(object? sender, EventArgs e)
     {
-        if (_disposed || !IsPresented || _form is not { } form || form.PanMsgBackground.Visibility == Visibility.Visible) return;
+        if (_disposed || !IsPresented || _form is not { } form || form.WindowState == WindowState.Minimized || form.Hidden || form.PanMsgBackground.Visibility == Visibility.Visible) return;
         try
         {
             try { _library?.Capture(); }

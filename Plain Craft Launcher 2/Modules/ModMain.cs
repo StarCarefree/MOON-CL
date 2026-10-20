@@ -175,17 +175,16 @@ public static class ModMain
         }
     }
 
+    private static DispatcherTimer? timerMain;
+
     public static void TimerMainStart()
     {
-        ModBase.RunInNewThread(() =>
+        timerMain = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(49) };
+        timerMain.Tick += (_, _) =>
         {
             try
             {
-                while (true)
-                {
-                    ModBase.RunInUiWait(TimerMain);
-                    Thread.Sleep((int)Math.Round(50d * 0.98d));
-                }
+                TimerMain();
             }
             catch (Exception ex)
             {
@@ -194,8 +193,10 @@ public static class ModMain
                     "程序主时钟出错",
                     ModBase.LogLevel.Feedback,
                     userSummary: Lang.Text("Main.Error.OperationFailed"));
+                timerMain.Stop();
             }
-        }, "Timer Main");
+        };
+        timerMain.Start();
         if (!isAprilEnabled)
             return;
         ModBase.RunInNewThread(() =>

@@ -42,6 +42,17 @@ public static partial class ModAnimation
                 ModBase.Log("[Animation] 动画线程开始");
                 while (true)
                 {
+                    if (aniGroups.IsEmpty)
+                    {
+                        aniWake.Reset();
+                        if (aniGroups.IsEmpty)
+                        {
+                            aniWake.Wait();
+                            // 空闲唤醒后重置计时，避免首帧间隔过大导致动画直接结束
+                            aniLastTick = TimeUtils.GetTimeTick();
+                        }
+                    }
+
                     // 两帧之间的间隔时间
                     var deltaTime =
                         (long)Math.Round(ModBase.MathClamp(TimeUtils.GetTimeTick() - aniLastTick, 0, 100000));
@@ -109,11 +120,22 @@ public static partial class ModAnimation
                 ModBase.Log("[Animation] 两个动画帧间隔 " + deltaTick + " ms", ModBase.LogLevel.Developer);
             var i = -1;
             // 循环每个动画组
-            while (i + 1 < aniGroups.Count)
+            var snapshotVersion = Volatile.Read(ref aniGroupsVersion);
+            var snapshot = aniGroups.Values.ToArray();
+            while (true)
             {
+                var version = Volatile.Read(ref aniGroupsVersion);
+                if (version != snapshotVersion)
+                {
+                    snapshot = aniGroups.Values.ToArray();
+                    snapshotVersion = version;
+                }
+
+                if (i + 1 >= snapshot.Length)
+                    break;
                 i += 1;
                 // 初始化
-                var entry = aniGroups.Values.ElementAtOrDefault(i);
+                var entry = snapshot[i];
                 if (entry.startTick > aniLastTick)
                     continue; // 跳过本刻之后开始的动画
                 var canRemoveAfter = true; // 是否应该去除“之后”标记
@@ -175,13 +197,14 @@ public static partial class ModAnimation
                 {
                     // 为了避免新添加的动画影响顺序，不能 RemoveAt(i)
                     // 为了允许动画在执行中添加同名动画组，不能按名字移除
-                    for (int current = 0, loopTo = aniGroups.Count - 1; current <= loopTo; current++)
-                        if (aniGroups.ElementAt(current).Value.Uuid == entry.Uuid)
+                    foreach (var pair in aniGroups)
+                        if (pair.Value.Uuid == entry.Uuid)
                         {
-                            aniGroups.Remove(aniGroups.ElementAt(current).Key, out _);
+                            aniGroups.TryRemove(pair);
                             break;
                         }
 
+                    Interlocked.Increment(ref aniGroupsVersion);
                     i -= 1;
                 }
             }
@@ -442,6 +465,9 @@ public static partial class ModAnimation
     ///     动画组列表。
     /// </summary>
     public static ConcurrentDictionary<string, AniGroupEntry> aniGroups = new();
+
+    private static readonly ManualResetEventSlim aniWake = new(false);
+    private static int aniGroupsVersion;
 
     public class AniGroupEntry
     {
@@ -1524,6 +1550,8 @@ public static partial class ModAnimation
         else
             AniStop(name);
         aniGroups.TryAdd(name, newEntry);
+        Interlocked.Increment(ref aniGroupsVersion);
+        aniWake.Set();
     }
 
     /// <summary>
@@ -1541,6 +1569,7 @@ public static partial class ModAnimation
     public static void AniStop(string name)
     {
         aniGroups.Remove(name, out _);
+        Interlocked.Increment(ref aniGroupsVersion);
     }
 
     /// <summary>

@@ -400,7 +400,7 @@ public static class ModLibrary
     /// <summary>
     ///     获取实例所需支持库文件的 NetFile。
     /// </summary>
-    public static List<DownloadFile> McLibNetFilesFromInstance(McInstance mcInstance)
+    public static List<DownloadFile> McLibNetFilesFromInstance(McInstance mcInstance, bool includeAuthlib = true)
     {
         if (!mcInstance.IsLoaded)
             mcInstance.Load();
@@ -424,42 +424,49 @@ public static class ModLibrary
         result.AddRange(McLibNetFilesFromTokens(McLibListGet(mcInstance, false)));
 
         // Authlib-Injector 文件
-        var authlibTargetFile = Path.Combine(ModBase.pathPure, "authlib-injector.jar");
-        JsonObject authlibDownloadInfo = null;
-        try
+        if (includeAuthlib)
         {
-            ModBase.Log("[Minecraft] 开始获取 Authlib-Injector 下载信息");
-            authlibDownloadInfo = (JsonObject)ModBase.GetJson(ModNet.NetGetCodeByLoader(
-                new[]
-                {
-                    "https://authlib-injector.yushi.moe/artifact/latest.json",
-                    "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json"
-                }, isJson: true));
-        }
-        catch (Exception ex)
-        {
-            ModBase.Log(ex, "获取 Authlib-Injector 下载信息失败");
-        }
-
-        // 校验文件
-        if (authlibDownloadInfo is not null)
-        {
-            var checker = new ModBase.FileChecker(hash: authlibDownloadInfo["checksums"]["sha256"].ToString());
-            if (checker.Check(authlibTargetFile) is not null)
+            var authlibTargetFile = Path.Combine(ModBase.pathPure, "authlib-injector.jar");
+            JsonObject authlibDownloadInfo = null;
+            try
             {
-                // 开始下载
-                var downloadAddress = authlibDownloadInfo["download_url"].ToString()
-                    .Replace("bmclapi2.bangbang93.com/mirrors/authlib-injector", "authlib-injector.yushi.moe");
-                ModBase.Log("[Minecraft] Authlib-Injector 需要更新：" + downloadAddress, ModBase.LogLevel.Developer);
-                result.Add(new DownloadFile(
+                ModBase.Log("[Minecraft] 开始获取 Authlib-Injector 下载信息");
+                authlibDownloadInfo = (JsonObject)ModBase.GetJson(ModNet.NetGetCodeByLoader(
                     new[]
                     {
-                        downloadAddress,
-                        downloadAddress.Replace("authlib-injector.yushi.moe",
-                            "bmclapi2.bangbang93.com/mirrors/authlib-injector")
-                    }, authlibTargetFile,
-                    new ModBase.FileChecker(hash: authlibDownloadInfo["checksums"]["sha256"].ToString())));
+                        "https://authlib-injector.yushi.moe/artifact/latest.json",
+                        "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json"
+                    }, isJson: true));
             }
+            catch (Exception ex)
+            {
+                ModBase.Log(ex, "获取 Authlib-Injector 下载信息失败");
+            }
+
+            // 校验文件
+            if (authlibDownloadInfo is not null)
+            {
+                var checker = new ModBase.FileChecker(hash: authlibDownloadInfo["checksums"]["sha256"].ToString());
+                if (checker.Check(authlibTargetFile) is not null)
+                {
+                    // 开始下载
+                    var downloadAddress = authlibDownloadInfo["download_url"].ToString()
+                        .Replace("bmclapi2.bangbang93.com/mirrors/authlib-injector", "authlib-injector.yushi.moe");
+                    ModBase.Log("[Minecraft] Authlib-Injector 需要更新：" + downloadAddress, ModBase.LogLevel.Developer);
+                    result.Add(new DownloadFile(
+                        new[]
+                        {
+                            downloadAddress,
+                            downloadAddress.Replace("authlib-injector.yushi.moe",
+                                "bmclapi2.bangbang93.com/mirrors/authlib-injector")
+                        }, authlibTargetFile,
+                        new ModBase.FileChecker(hash: authlibDownloadInfo["checksums"]["sha256"].ToString())));
+                }
+            }
+        }
+        else
+        {
+            ModBase.Log("[Minecraft] 当前档案无需 Authlib-Injector，跳过其检查");
         }
 
         // 修改渲染器
@@ -544,12 +551,20 @@ public static class ModLibrary
     {
         customMcFolder = customMcFolder ?? ModFolder.mcFolderSelected;
         var result = new List<DownloadFile>();
-        // 获取
-        foreach (var token in libs)
+        // 并行预校验所有文件，串行阶段直接使用结果
+        var checkErrors = new string[libs.Count];
+        Parallel.For(0, libs.Count, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8) }, index =>
         {
+            var token = libs[index];
+            checkErrors[index] = new ModBase.FileChecker(actualSize: token.size == 0L ? -1 : token.size, hash: token.Sha1).Check(token.LocalPath);
+        });
+        // 获取
+        for (var index = 0; index < libs.Count; index++)
+        {
+            var token = libs[index];
             // 检查文件
             var checker = new ModBase.FileChecker(actualSize: token.size == 0L ? -1 : token.size, hash: token.Sha1);
-            if (checker.Check(token.LocalPath) is null)
+            if (checkErrors[index] is null)
                 continue;
             if (token.IsLocal)
             {

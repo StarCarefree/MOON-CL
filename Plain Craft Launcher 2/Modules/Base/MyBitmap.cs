@@ -15,12 +15,27 @@ namespace PCL;
 public class MyBitmap
 {
     // 使用缓存
-    private readonly ConcurrentDictionary<string, MyBitmap> _Cache = new();
+    private static readonly ConcurrentDictionary<string, BitmapSource> _BuiltinSources = new();
+    private BitmapSource? _builtinSource;
+    private Bitmap? _pic;
 
     /// <summary>
     ///     存储的图片
     /// </summary>
-    public Bitmap pic;
+    public Bitmap pic
+    {
+        get
+        {
+            if (_pic is null && _builtinSource is not null)
+                _pic = new MyBitmap((ImageSource)_builtinSource).pic;
+            return _pic!;
+        }
+        set
+        {
+            _pic = value;
+            _builtinSource = null;
+        }
+    }
 
     // 构造函数
     public MyBitmap()
@@ -37,16 +52,9 @@ public class MyBitmap
                     filePathOrResourceName.Replace("pack://application:,,,/images/", ModBase.pathImage);
                 if (filePathOrResourceName.StartsWithF(ModBase.pathImage))
                 {
-                    if (_Cache.ContainsKey(filePathOrResourceName))
-                    {
-                        pic = _Cache[filePathOrResourceName].pic;
-                    }
-                    else
-                    {
-                        pic = new MyBitmap(
-                            (ImageSource)new ImageSourceConverter().ConvertFromString(filePathOrResourceName));
-                        _Cache.TryAdd(filePathOrResourceName, pic);
-                    }
+                    _builtinSource = _BuiltinSources.GetOrAdd(filePathOrResourceName,
+                        static key => (BitmapSource)(ImageSource)new MyBitmap(
+                            (ImageSource)new ImageSourceConverter().ConvertFromString(key)));
                 }
                 else
                 {
@@ -145,6 +153,8 @@ public class MyBitmap
     {
         if (image is null)
             return null;
+        if (image._pic is null && image._builtinSource is not null)
+            return image._builtinSource;
         var bitmapPic = image.pic;
         var rect = new Rectangle(0, 0, bitmapPic.Width, bitmapPic.Height);
         var bitmapData = bitmapPic.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);

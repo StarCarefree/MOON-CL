@@ -18,6 +18,7 @@ public partial class FormMain
     private bool? _hybridGameLayout;
     private string? _hybridVersionPath;
     private HybridRooms HybridRoomsView => HybridMultiplayerView.Rooms;
+    private bool _hybridShellStale;
 
     private void InitializeHybridShell()
     {
@@ -37,6 +38,16 @@ public partial class FormMain
             HybridRoomsView.Dispose();
         };
         HybridAccountView.Closed += (_, _) => UpdateHybridShell();
+        // 最小化/隐藏期间跳过的侧栏刷新在恢复时补一次
+        EventHandler refreshIfStale = (_, _) =>
+        {
+            if (!_hybridShellStale || WindowState == WindowState.Minimized || Hidden) return;
+            _hybridShellStale = false;
+            try { UpdateHybridShell(); }
+            catch (Exception ex) { ModBase.Log(ex, "恢复原生侧栏刷新失败", ModBase.LogLevel.Debug); }
+        };
+        StateChanged += refreshIfStale;
+        IsVisibleChanged += (_, _) => refreshIfStale(this, EventArgs.Empty);
         HybridSidebarView.PlayEntrance();
         UpdateHybridShell();
         var launch = ModMain.frmLaunchLeft;
@@ -59,9 +70,22 @@ public partial class FormMain
 
     private async void HybridTick(object? sender, EventArgs e)
     {
-        try { InstanceActivity.Tick(); UpdateHybridShell(); }
+        var dormant = WindowState == WindowState.Minimized || Hidden;
+        try
+        {
+            InstanceActivity.Tick();
+            if (dormant)
+            {
+                _hybridShellStale = true;
+                UpdateHybridRoomsPresence();
+            }
+            else
+            {
+                UpdateHybridShell();
+            }
+        }
         catch (Exception ex) { ModBase.Log(ex, "更新原生侧栏失败", ModBase.LogLevel.Debug); }
-        if (_packCheckRunning || PanMsgBackground.Visibility == Visibility.Visible || ModLaunch.isLaunching) return;
+        if (dormant || _packCheckRunning || PanMsgBackground.Visibility == Visibility.Visible || ModLaunch.isLaunching) return;
         _packCheckRunning = true;
         try
         {
@@ -120,6 +144,14 @@ public partial class FormMain
     {
         try { UpdateHybridShell(); }
         catch (Exception ex) { ModBase.Log(ex, "更新启动中的版本列表失败", ModBase.LogLevel.Debug); }
+    }
+
+    private void UpdateHybridRoomsPresence()
+    {
+        if (HybridSidebarView is null || PanMain is null) return;
+        var account = ProfileService.Current;
+        var skin = account is null ? null : ModMain.frmLoginProfileSkin?.Skin;
+        HybridRoomsView.UpdateLocalState(account?.UserName ?? "Player", skin?.ImgBack?.Source, skin?.ImgFore?.Source, ModInstanceList.McMcInstanceSelected);
     }
 
     internal void UpdateHybridShell()

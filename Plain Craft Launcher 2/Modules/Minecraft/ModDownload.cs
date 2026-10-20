@@ -78,7 +78,7 @@ public static class ModDownload
     ///     构造补全某 Minecraft 版本的所有文件的加载器列表。失败会抛出异常。
     /// </summary>
     public static List<ModLoader.LoaderBase> DlClientFix(McInstance version, bool checkAssetsHash,
-        AssetsIndexExistsBehaviour assetsIndexBehaviour)
+        AssetsIndexExistsBehaviour assetsIndexBehaviour, bool includeAuthlib = true)
     {
         var loaders = new List<ModLoader.LoaderBase>();
 
@@ -94,7 +94,7 @@ public static class ModDownload
             {
                 new ModLoader.LoaderTask<string, List<DownloadFile>>(
                     Lang.Text("Minecraft.Download.Stage.AnalyzeMissingLibraries"),
-                    task => task.output = ModLibrary.McLibNetFilesFromInstance(version)) { ProgressWeight = 1d },
+                    task => task.output = ModLibrary.McLibNetFilesFromInstance(version, includeAuthlib)) { ProgressWeight = 1d },
                 new LoaderDownload(Lang.Text("Minecraft.Download.Stage.DownloadLibraries"), new List<DownloadFile>())
                     { ProgressWeight = 15d }
             };

@@ -711,22 +711,49 @@ public partial class PageInstanceCompResource : IRefreshable
         if (showingMods.Any())
         {
             PanList.Visibility = Visibility.Visible;
-            PanList.Children.Clear();
-            foreach (var TargetMod in showingMods)
+            var entries = showingMods.Where(m => modItems.ContainsKey(m.RawPath)).ToList();
+            var items = entries.Select(m => modItems[m.RawPath]).ToList();
+            // 子项未变化时跳过重建，仅刷新文字与选中态
+            var unchanged = PanList.Children.Count == items.Count;
+            if (unchanged)
+                for (var i = 0; i < items.Count; i++)
+                    if (!ReferenceEquals(PanList.Children[i], items[i]))
+                    {
+                        unchanged = false;
+                        break;
+                    }
+
+            if (unchanged)
             {
-                if (!modItems.ContainsKey(TargetMod.RawPath))
-                    continue;
-                var item = modItems[TargetMod.RawPath];
+                for (var i = 0; i < items.Count; i++)
+                {
+                    var item = items[i];
+                    ModStyle.MinecraftFormatter.SetColorfulTextLab(item.LabTitle.Text, item.LabTitle,
+                        ThemeService.IsDarkMode);
+                    ModStyle.MinecraftFormatter.SetColorfulTextLab(item.LabInfo.Text, item.LabInfo,
+                        ThemeService.IsDarkMode);
+                    item.Checked = selectedMods.Contains(entries[i].RawPath); // 更新选中状态
+                }
+            }
+            else
+            {
+                PanList.Children.Clear();
+                foreach (var TargetMod in showingMods)
+                {
+                    if (!modItems.ContainsKey(TargetMod.RawPath))
+                        continue;
+                    var item = modItems[TargetMod.RawPath];
 
-                // 确保元素没有父容器，避免重复添加异常
-                if (item.Parent is not null) ((Panel)item.Parent).Children.Remove(item);
+                    // 确保元素没有父容器，避免重复添加异常
+                    if (item.Parent is not null) ((Panel)item.Parent).Children.Remove(item);
 
-                ModStyle.MinecraftFormatter.SetColorfulTextLab(item.LabTitle.Text, item.LabTitle,
-                    ThemeService.IsDarkMode);
-                ModStyle.MinecraftFormatter.SetColorfulTextLab(item.LabInfo.Text, item.LabInfo,
-                    ThemeService.IsDarkMode);
-                item.Checked = selectedMods.Contains(TargetMod.RawPath); // 更新选中状态
-                PanList.Children.Add(item);
+                    ModStyle.MinecraftFormatter.SetColorfulTextLab(item.LabTitle.Text, item.LabTitle,
+                        ThemeService.IsDarkMode);
+                    ModStyle.MinecraftFormatter.SetColorfulTextLab(item.LabInfo.Text, item.LabInfo,
+                        ThemeService.IsDarkMode);
+                    item.Checked = selectedMods.Contains(TargetMod.RawPath); // 更新选中状态
+                    PanList.Children.Add(item);
+                }
             }
         }
         else
@@ -735,8 +762,8 @@ public partial class PageInstanceCompResource : IRefreshable
         }
 
         ModAnimation.AniControlEnabled -= 1;
-        selectedMods =
-            new HashSet<string>(selectedMods.Where(m => showingMods.Any(s => (s.RawPath ?? "") == (m ?? ""))));
+        var showingPaths = new HashSet<string>(showingMods.Select(s => s.RawPath ?? ""));
+        selectedMods = new HashSet<string>(selectedMods.Where(m => showingPaths.Contains(m ?? "")));
         RefreshBars();
     }
 

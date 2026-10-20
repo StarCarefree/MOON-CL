@@ -579,7 +579,8 @@ public static partial class ModLaunch
                 mcLoginLoader,
                 new ModLoader.LoaderCombo<string>(Lang.Text("Minecraft.Launch.Stage.CompleteFiles"),
                         ModDownload.DlClientFix(LaunchingInstance, false,
-                            ModDownload.AssetsIndexExistsBehaviour.DownloadInBackground))
+                            ModDownload.AssetsIndexExistsBehaviour.DownloadInBackground,
+                            includeAuthlib: ProfileService.Current?.ProfileType is not (ProfileType.Microsoft or ProfileType.Offline)))
                     { ProgressWeight = 15d, show = false },
                 new ModLoader.LoaderTask<string, List<ModLibrary.McLibToken>>(Lang.Text("Minecraft.Launch.Stage.GetArguments"), McLaunchArgumentMain)
                     { ProgressWeight = 2d },

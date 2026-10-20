@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using fNbt;
@@ -2544,38 +2545,95 @@ public static class ModLocalComp
                 DeferJijOnMiss = true;
             }
 
-            foreach (var ModEntry in modList)
+            void CollectCompCache(LocalCompFile entry)
             {
-                loader.Progress += 0.94d / modList.Count;
-                if (loader.IsAborted)
-                    return;
-                if (ModEntry.IsFolder)
-                    continue;
-
-                if (jijEnabled) ModEntry.PreferredLoader = preferredLoader;
-                // 优化：对于原理图文件，只进行基础加载，不解析NBT数据
-                if (loader.input.compType == CompType.Schematic)
-                    ModEntry.LoadBasicInfo();
-                else
-                    // 加载 McMod 对象
-                    ModEntry.Load();
-                
-                // 读取 Comp 缓存
-                if (ModEntry.State == LocalCompFile.LocalFileStatus.Unavailable)
-                    continue;
-                var cacheKey = ModEntry.ModrinthHash + loader.input.gameVersion.Info.VanillaName +
+                var cacheKey = entry.ModrinthHash + loader.input.gameVersion.Info.VanillaName +
                                loader.input.loaders.Join("");
                 if (cache.ContainsKey(cacheKey))
                 {
-                    ModEntry.FromJson((JsonObject)cache[cacheKey]);
+                    entry.FromJson((JsonObject)cache[cacheKey]);
                     // 如果缓存中的信息在 6 小时以内更新过，则无需重新获取
-                    if (ModEntry.compLoaded &&
+                    if (entry.compLoaded &&
                         DateTime.Now - cache[cacheKey]["Comp"]["CacheTime"].ToObject<DateTime>() <
                         new TimeSpan(6, 0, 0))
-                        continue;
+                        return;
                 }
 
-                modUpdateList.Add(ModEntry);
+                modUpdateList.Add(entry);
+            }
+
+            if (loader.input.compType != CompType.Schematic)
+            {
+                // Phase 1 并行化：文件 Load + ModrinthHash 计算分到工作线程，进度按文件数推进
+                var phaseTaskId = Task.CurrentId ?? -1;
+                var step = 0.94d / modList.Count;
+                var files = modList.Where(m => !m.IsFolder).ToList();
+                loader.Progress += step * (modList.Count - files.Count);
+                var progressLock = new object();
+                try
+                {
+                    Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 6) },
+                        () =>
+                        {
+                            // [ThreadStatic] 状态需在每个工作线程上重新设置
+                            ModJarInJarCache.UseInstance(jijInstancePath);
+                            DeferJijOnMiss = jijEnabled;
+                            return 0;
+                        },
+                        (entry, state, local) =>
+                        {
+                            if (loader.IsAbortedWithThread(phaseTaskId)) { state.Stop(); return local; }
+                            if (jijEnabled) entry.PreferredLoader = preferredLoader;
+                            entry.Load();
+                            if (entry.State != LocalCompFile.LocalFileStatus.Unavailable)
+                                try { _ = entry.ModrinthHash; } catch (Exception) { /* 顺序阶段会再次读取并按原逻辑抛出 */ }
+                            lock (progressLock) loader.Progress += step;
+                            return 0;
+                        },
+                        _ =>
+                        {
+                            DeferJijOnMiss = false;
+                            ModJarInJarCache.UseInstance(null);
+                        });
+                }
+                catch (AggregateException ex) when (ex.InnerExceptions.Count > 0)
+                {
+                    ExceptionDispatchInfo.Capture(ex.InnerExceptions[0]).Throw();
+                }
+                // Parallel.ForEach 可能把当前线程当作工作线程，需恢复本线程的 [ThreadStatic] 状态
+                ModJarInJarCache.UseInstance(jijInstancePath);
+                DeferJijOnMiss = jijEnabled;
+                if (loader.IsAborted) return;
+                foreach (var ModEntry in modList)
+                {
+                    if (ModEntry.IsFolder || ModEntry.State == LocalCompFile.LocalFileStatus.Unavailable) continue;
+                    // 读取 Comp 缓存
+                    CollectCompCache(ModEntry);
+                }
+            }
+            else
+            {
+                foreach (var ModEntry in modList)
+                {
+                    loader.Progress += 0.94d / modList.Count;
+                    if (loader.IsAborted)
+                        return;
+                    if (ModEntry.IsFolder)
+                        continue;
+
+                    if (jijEnabled) ModEntry.PreferredLoader = preferredLoader;
+                    // 优化：对于原理图文件，只进行基础加载，不解析NBT数据
+                    if (loader.input.compType == CompType.Schematic)
+                        ModEntry.LoadBasicInfo();
+                    else
+                        // 加载 McMod 对象
+                        ModEntry.Load();
+
+                    // 读取 Comp 缓存
+                    if (ModEntry.State == LocalCompFile.LocalFileStatus.Unavailable)
+                        continue;
+                    CollectCompCache(ModEntry);
+                }
             }
 
             if (jijEnabled)
