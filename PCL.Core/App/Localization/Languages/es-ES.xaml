@@ -10,4 +10,6 @@
     <sys:String x:Key="Meta.Code">es-ES</sys:String>
     <sys:String x:Key="Meta.Name">Español (España)</sys:String>
 
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles">Lectura previa de archivos del juego al iniciar</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles.ToolTip">Durante el inicio, lee en segundo plano los archivos de mods y otros en la caché del sistema con prioridad de E/S baja, reduciendo la espera de disco en arranques en frío (por ejemplo, el primer inicio tras encender el equipo). Se omite automáticamente si hay poca memoria disponible. Desactívelo si nota que es más lento con un disco duro mecánico.</sys:String>
 </ResourceDictionary>

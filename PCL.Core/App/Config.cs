@@ -550,6 +550,11 @@ public static partial class Config
         [ConfigItem<bool>("LaunchAdvanceDisableLwjglUnsafeAgent", false)] public partial bool DisableLwjglUnsafeAgent { get; set; }
 
         /// <summary>
+        /// 启动前预读游戏文件。
+        /// </summary>
+        [ConfigItem<bool>("LaunchAdvancePrefetchFiles", true)] public partial bool PrefetchFiles { get; set; }
+
+        /// <summary>
         /// 禁用自动崩溃分析。
         /// </summary>
         [ConfigItem<bool>("LaunchAdvanceDisableCrashAnalysis", false, ConfigSource.Local)] public partial bool DisableCrashAnalysis { get; set; }

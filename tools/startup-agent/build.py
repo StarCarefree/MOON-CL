@@ -25,13 +25,13 @@ with tempfile.TemporaryDirectory(prefix='pcl-moon-startup-build-', dir=os.enviro
     helper = work / 'bootstrap-helper.jar'
     with zipfile.ZipFile(helper, 'w', zipfile.ZIP_DEFLATED) as jar:
         for file in sorted((classes / 'pclmoon/startup').glob('*.class')):
-            if file.name.startswith(('NegativeCache', 'ForgeReadCache')):
+            if file.name.startswith(('NegativeCache', 'ForgeDirectRead')):
                 jar.write(file, file.relative_to(classes).as_posix())
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, 'w', zipfile.ZIP_DEFLATED) as jar:
         jar.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nPremain-Class: pclmoon.startup.StartupAgent\nCan-Retransform-Classes: true\n\n')
         jar.write(helper, 'bootstrap-helper.jar')
         for file in sorted(classes.rglob('*.class')):
-            if not file.name.startswith(('NegativeCache', 'ForgeReadCache')):
+            if not file.name.startswith(('NegativeCache', 'ForgeDirectRead')):
                 jar.write(file, file.relative_to(classes).as_posix())
 print('Built', args.output)

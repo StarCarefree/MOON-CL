@@ -119,6 +119,7 @@
         <Page Include="**\*.xaml" Exclude="bin\**;obj\**;@(ApplicationDefinition)" />
         <Resource Include="Images\**" />
         <Resource Include="Resources\**" />
+        <Resource Remove="Resources\pcl-moon-startup-helper-*.jar" />
         <EmbeddedResource Include="metadata.json" />
     </ItemGroup>
     <ItemGroup>

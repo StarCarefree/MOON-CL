@@ -7,6 +7,7 @@ using System.Windows;
 using PCL.Core.App;
 using PCL.Core.App.Localization;
 using PCL.Core.Minecraft;
+using PCL.Core.Minecraft.Launcher;
 using PCL.Core.Minecraft.Launch.Utils;
 using PCL.Core.Utils;
 using PCL.Core.Utils.OS;
@@ -309,6 +310,7 @@ public static partial class ModLaunch
         public string Argument { get; set; }
         public string AbortHint { get; set; }
         public LaunchProgressPresentation Presentation { get; set; }
+        public LaunchFilePrefetcher Prefetcher { get; set; }
 
         private void RunSession(ModLoader.LoaderTask<McLaunchOptions, object> loader)
         {
@@ -321,6 +323,7 @@ public static partial class ModLaunch
                 _loginFallback = Login;
                 Active = false;
                 lock (_launchSessionsLock) _launchSessions.Remove(this);
+                Prefetcher?.Dispose();
                 Presentation?.Dispose();
                 _launchSession.Value = previous;
                 ModBase.RunInUi(() => ModMain.frmMain?.RefreshHybridVersions());
@@ -568,6 +571,10 @@ public static partial class ModLaunch
                 HintService.Hint(Lang.Text("Minecraft.Launch.Precheck.Failed.WithDetail", ex.Message), HintType.Error);
             throw;
         }
+
+        // 预读实例 Mod 等文件到系统缓存（可选优化，失败不影响启动；导出脚本不启动游戏，跳过）
+        if (currentLaunchOptions?.SaveBatch is null && _launchSession.Value is { } prefetchSession)
+            prefetchSession.Prefetcher = LaunchPrefetch.Start(LaunchingInstance);
 
         // 正式加载
         try
@@ -2343,6 +2350,11 @@ public static partial class ModLaunch
 
     private static void McLaunchNatives(ModLoader.LoaderTask<List<ModLibrary.McLibToken>, int> loader)
     {
+        // 无 SHA1 的本地库未经过补全阶段的哈希校验，补进预读队列；有 SHA1 的已被完整读过
+        _launchSession.Value?.Prefetcher?.Enqueue(loader.input
+            .Where(token => !token.IsNatives && string.IsNullOrEmpty(token.Sha1))
+            .Select(token => token.LocalPath));
+
         // 创建文件夹
         var target = GetNativesFolder() + @"\";
         Directory.CreateDirectory(target);

@@ -9,20 +9,11 @@ import java.util.jar.JarOutputStream;
 public final class TimeoutTest {
     public static void main(String[] args) throws Exception {
         if (Runtime.version().feature() == 17) {
-            Class<?> forge = Class.forName("pclmoon.startup.ForgeReadCache", true, null);
-            Field running = forge.getDeclaredField("running"); running.setAccessible(true);
-            var bytes = forge.getMethod("storedBytes");
-            bytes.invoke(null);
-            if (!running.getBoolean(null)) throw new AssertionError("Forge timer was not started by premain");
-            long deadline = System.nanoTime() + 5_000_000_000L;
-            while (System.nanoTime() < deadline) {
-                bytes.invoke(null); // synchronize with the timer before inspecting its state
-                if (!running.getBoolean(null)) break;
-                Thread.sleep(20);
-            }
-            bytes.invoke(null);
-            if (running.getBoolean(null)) throw new AssertionError("Forge timer did not expire");
-            System.out.println("PASS: Java 17 premain starts and expires the Forge cache timer");
+            // The Forge-only path has no cache timer; verify premain installed the bootstrap helper.
+            Class<?> direct = Class.forName("pclmoon.startup.ForgeDirectRead", true, null);
+            if (direct.getClassLoader() != null) throw new AssertionError("ForgeDirectRead must live on the bootstrap loader");
+            direct.getMethod("summary").invoke(null);
+            System.out.println("PASS: Java 17 premain installs the Forge direct-read helper without a cache timer");
             return;
         }
         Path path = Path.of(args[0]).resolve("timeout.jar");

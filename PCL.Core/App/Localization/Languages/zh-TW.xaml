@@ -2760,6 +2760,8 @@
     <sys:String x:Key="Setup.Launch.Advanced.LockMemory.ToolTip">啟用後，啟動器會額外追加 -Xms 參數並令其等於最大堆 -Xmx，從而固定堆大小。這會隱式停用堆記憶體歸還（Uncommit），減少作業系統取消對映/重新分配記憶體頁帶來的延遲抖動，也有利於 ZGC 的回收預測。代價是遊戲全程會佔用接近最大分配的記憶體。</sys:String>
     <sys:String x:Key="Setup.Launch.Advanced.DisableLwjglUnsafeAgent">停用 LWJGL Unsafe Agent</sys:String>
     <sys:String x:Key="Setup.Launch.Advanced.DisableLwjglUnsafeAgent.ToolTip">Minecraft 26.1 使用了 LWJGL 3.4.1，LWJGL 3.4.1 使用了 FFM API 以在 JDK 25+ 上存取原生記憶體。由於 JDK 最佳化能力限制，某些情況下這會產生嚴重的效能問題。&#xA;PCL-MOON 會使用 LWJGL Unsafe Agent 修復這個問題，以解決可能存在的效能問題。&#xA;一般情況下沒有停用該選項的必要，但如果你遇到了額外問題，也可以嘗試暫時停用該選項以排查錯誤。&#xA;&#xA;該功能僅會在 LWJGL 版本為 3.4.1 時生效。</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles">啟動前預讀遊戲檔案</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles.ToolTip">啟動時在背景以低 I/O 優先權預先讀取 Mod 等檔案到系統快取，減少冷啟動（如開機後首次啟動）時的磁碟等待。可用記憶體不足時自動跳過。若使用機械硬碟時感覺更慢，可關閉。</sys:String>
     <sys:String x:Key="Setup.Launch.Advanced.GameTail">遊戲參數尾部</sys:String>
     <sys:String x:Key="Setup.Launch.Advanced.GameTail.ToolTip">文字方塊中的內容將會被直接拼合在啟動參數的末尾。&#xA;例如，輸入 --demo 則會以試玩模式啟動遊戲。&#xA;支援 Minecraft 實例 JSON 中的字串取代標記，例如 ${library_directory}。</sys:String>
     <sys:String x:Key="Setup.Launch.Advanced.GpuPreference">要求 Java 使用高效能顯示卡</sys:String>

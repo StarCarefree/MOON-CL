@@ -19,7 +19,9 @@ public final class ForgeFastReadTest {
         checks++;
         if (!condition) throw new AssertionError(message);
     }
+    private static int invokes;
     private static byte[] invoke(ModuleReader reader, ModuleReference ref, String name) throws Exception {
+        invokes++;
         try { return (byte[]) read.invoke(null, reader, ref, name); }
         catch (InvocationTargetException error) {
             if (error.getCause() instanceof Exception cause) throw cause;
@@ -54,49 +56,46 @@ public final class ForgeFastReadTest {
         @Override public void close() { }
     }
     public static void main(String[] args) throws Exception {
-        Class<?> cache = Class.forName("pclmoon.startup.ForgeReadCache", true, null);
-        read = cache.getMethod("read", ModuleReader.class, ModuleReference.class, String.class);
-        cache.getMethod("start", long.class).invoke(null, 60000L);
-        try {
-            Reader reader = new Reader();
-            check(invoke(reader, null, "a.b.C")[0] == 1, "Successful byte read changed");
-            check(reader.resource.equals("a/b/C.class"), "Binary name conversion changed");
-            invoke(reader, null, "a.b.C");
-            check(reader.opens == 2 && reader.closes == 2, "Ineligible source must still read and close each time");
-            reader.content = null;
-            check(invoke(reader, null, "absent").length == 0, "Missing class must return empty byte array");
-            check(reader.closes == 2, "Missing stream must not be closed");
-            reader.content = new byte[0];
-            check(invoke(reader, null, "empty").length == 0 && reader.closes == 3, "Empty stream close changed");
-            IOException open = new IOException("open failure"); reader.openError = open;
-            try { invoke(reader, null, "fail"); throw new AssertionError("Open failure swallowed"); }
-            catch (IOException expected) { check(expected == open, "Open exception identity changed"); }
-            reader.openError = null;
-            IOException body = new IOException("read failure"), close = new IOException("close failure");
-            reader.readError = body; reader.closeError = close;
-            try { invoke(reader, null, "fail"); throw new AssertionError("Read failure swallowed"); }
-            catch (IOException expected) {
-                check(expected == body, "Primary read exception changed");
-                check(expected.getSuppressed().length == 1 && expected.getSuppressed()[0] == close,
-                      "Close failure must be suppressed on original read failure");
-            }
-            reader.readError = null;
-            Path file = Path.of(args[0]).resolve("source.jar"); Files.write(file, new byte[] {1});
-            ModuleReference ref = new ModuleReference(ModuleDescriptor.newModule("fixture").build(), file.toUri()) {
-                @Override public ModuleReader open() { throw new AssertionError("Do not reopen a reference"); }
-            };
-            try { invoke(reader, ref, "closeFailure"); throw new AssertionError("Close failure swallowed"); }
-            catch (IOException expected) { check(expected == close, "Successful read must still propagate close failure"); }
-            check((Long) cache.getMethod("storedBytes").invoke(null) == 0, "Failed close must never populate cache");
-            reader.closeError = null; reader.invalidNullBytes = true;
-            int before = reader.closes;
-            try { invoke(reader, null, "invalid"); throw new AssertionError("Invalid null byte result accepted"); }
-            catch (NullPointerException expected) { check(reader.closes == before + 1, "Invalid read result must still close stream"); }
-            try { invoke(reader, null, null); throw new AssertionError("Null name accepted"); }
-            catch (NullPointerException expected) { checks++; }
-            try { invoke(null, null, "name"); throw new AssertionError("Null reader accepted"); }
-            catch (NullPointerException expected) { checks++; }
-        } finally { cache.getMethod("stop").invoke(null); }
+        Class<?> direct = Class.forName("pclmoon.startup.ForgeDirectRead", true, null);
+        read = direct.getMethod("read", ModuleReader.class, ModuleReference.class, String.class);
+        Reader reader = new Reader();
+        check(invoke(reader, null, "a.b.C")[0] == 1, "Successful byte read changed");
+        check(reader.resource.equals("a/b/C.class"), "Binary name conversion changed");
+        invoke(reader, null, "a.b.C");
+        check(reader.opens == 2 && reader.closes == 2, "Every call reads and closes again; nothing cached");
+        reader.content = null;
+        check(invoke(reader, null, "absent").length == 0, "Missing class must return empty byte array");
+        check(reader.closes == 2, "Missing stream must not be closed");
+        reader.content = new byte[0];
+        check(invoke(reader, null, "empty").length == 0 && reader.closes == 3, "Empty stream close changed");
+        IOException open = new IOException("open failure"); reader.openError = open;
+        try { invoke(reader, null, "fail"); throw new AssertionError("Open failure swallowed"); }
+        catch (IOException expected) { check(expected == open, "Open exception identity changed"); }
+        reader.openError = null;
+        IOException body = new IOException("read failure"), close = new IOException("close failure");
+        reader.readError = body; reader.closeError = close;
+        try { invoke(reader, null, "fail"); throw new AssertionError("Read failure swallowed"); }
+        catch (IOException expected) {
+            check(expected == body, "Primary read exception changed");
+            check(expected.getSuppressed().length == 1 && expected.getSuppressed()[0] == close,
+                  "Close failure must be suppressed on original read failure");
+        }
+        reader.readError = null;
+        Path file = Path.of(args[0]).resolve("source.jar"); Files.write(file, new byte[] {1});
+        ModuleReference ref = new ModuleReference(ModuleDescriptor.newModule("fixture").build(), file.toUri()) {
+            @Override public ModuleReader open() { throw new AssertionError("Do not reopen a reference"); }
+        };
+        try { invoke(reader, ref, "closeFailure"); throw new AssertionError("Close failure swallowed"); }
+        catch (IOException expected) { check(expected == close, "Successful read must still propagate close failure"); }
+        reader.closeError = null; reader.invalidNullBytes = true;
+        int before = reader.closes;
+        try { invoke(reader, null, "invalid"); throw new AssertionError("Invalid null byte result accepted"); }
+        catch (NullPointerException expected) { check(reader.closes == before + 1, "Invalid read result must still close stream"); }
+        try { invoke(reader, null, null); throw new AssertionError("Null name accepted"); }
+        catch (NullPointerException expected) { checks++; }
+        try { invoke(null, null, "name"); throw new AssertionError("Null reader accepted"); }
+        catch (NullPointerException expected) { checks++; }
+        check((Long) direct.getMethod("directReadCount").invoke(null) == invokes, "Direct read counter drifted");
         System.out.println("PASS: " + checks + " Forge direct-read byte/open/close/exception checks");
     }
 }

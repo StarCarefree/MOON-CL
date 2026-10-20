@@ -98,7 +98,7 @@ public final class NegativeCache {
         synchronized (LOCK) { indexes = Collections.emptyMap(); closing.clear(); }
         System.err.println("[PCL-MOON Startup] cache released" + (METRICS
             ? "; JAR misses avoided=" + hits.sum() + "; classpath scans avoided=" + classHits.sum()
-                + "; " + ForgeReadCache.summary() : ""));
+                + "; " + ForgeDirectRead.summary() : ""));
     }
 
     public static void activateClasspaths() { classpathEnabled = CLASS_LOOKUPS && !manifestExpanded; }

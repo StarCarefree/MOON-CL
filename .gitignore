@@ -346,3 +346,5 @@ MaskFiles/
 # macOS
 
 **/.DS_Store
+# startup-agent extracted helper (generated beside the agent JAR at runtime)
+Plain Craft Launcher 2/Resources/pcl-moon-startup-helper-*.jar

@@ -22,4 +22,6 @@
     <sys:String x:Key="Application.EnvironmentWarning.TempFolder">- PCL-MOON は一時ディレクトリで実行中です。PCL-MOON をアーカイブから展開してからご使用ください。そうしないと、ゲームのセーブデータや設定が失われる可能性があります</sys:String>
     <sys:String x:Key="Application.EnvironmentWarning.Title">環境警報</sys:String>
     <sys:String x:Key="Application.EnvironmentWarning.WindowsVersion">- Windows 版本は推奨要件を満たしておらず、少なくともWindows 10 1809が推奨されており、Windowsシステムのアップグレードを検討することをお勧めします</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles">起動前にゲームファイルを先読み</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles.ToolTip">起動時にバックグラウンドで低 I/O 優先度で Mod などのファイルをシステムキャッシュへ先読みし、コールドスタート（PC 起動後の初回起動など）でのディスク待ちを減らします。空きメモリが不足している場合は自動的にスキップします。HDD でかえって遅く感じる場合は無効にしてください。</sys:String>
 </ResourceDictionary>

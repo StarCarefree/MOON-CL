@@ -12,32 +12,32 @@
 
 - **Java 17：Forge 专用试验路径。** 不安装 JDK `URLClassPath` / `ZipFile` 查找补丁，避免在 Forge 模块加载上承担收益很小的通用索引开销。
 - **Java 21：原有保守 JAR 位索引、整条类路径缺失判断。** 动态目录、Manifest 扩展路径、自定义 handler 等绕过或失效；追加路径/关闭前后递增 generation，在途旧结果不得重新登记。
-- **Forge 原始字节正缓存：** 按 reader/reference identity 与类名隔离。存入/命中均 clone；只记录成功、非空、至多 1 MiB 的转换前字节，最多 32 MiB、16,384 条目、128 个 reader 身份，默认 60 秒清空。只接受可核对的本地 JAR 或无过滤器、全部为本地 JAR 的 UnionFS；目录、未知来源、过滤器和检查失败均旁路。命中和写入复核 size/mtime/fileKey，关闭、到期、stop 后旧 Ticket 不得复活。不缓存转换结果或跨启动数据。
+- **Forge 原始字节正缓存：已移除。** 真实实例中 128 个已登记来源全部旁路、命中为 0，不值得保留资格检查与失效逻辑；现在只剩下面的哈希限定直接读取。
 - **Forge 直接读取：** 仅在 `securejarhandler 2.1.10` 的 `ModuleClassLoader.class` SHA-256 与已检查版本完全一致时，将 `getClassBytes` 的 Optional/Stream 包装替换为直接 open/readAllBytes/close。缺失返回空数组，读取/关闭异常和 suppressed 关系保留；后续 Access Transformer、Mixin、签名和 defineClass 仍执行。其他版本/已有字节码修改不启用此替换。
-- 当前肉鸽生化实例的原始字节缓存资格检查全部旁路，**不能把其启动变化归因于缓存命中**；直接读取路径已在真实 Forge 中确认执行。
+- 直接读取路径已在真实 Forge 中确认执行。
 
 ## 关闭与诊断
 
 ```text
 -Dpclmoon.startup.disabled=true                 # 禁用整个 Agent
--Dpclmoon.startup.forgeCache.disabled=true      # 禁用整个 Forge 读取优化层
--Dpclmoon.startup.forgeFastRead.disabled=true   # 只禁用哈希限定的直接读取替换
+-Dpclmoon.startup.forgeCache.disabled=true      # 禁用 Forge 读取优化层（保留兼容旧参数名）
+-Dpclmoon.startup.forgeFastRead.disabled=true   # 同样禁用哈希限定的直接读取替换（任一为 true 即不装）
 -Dpclmoon.startup.classpathCache.disabled=true  # 禁用 Java 21 整条类路径缓存
 -Dpclmoon.startup.metrics=true                  # 开启诊断计数，默认关闭
--Dpclmoon.startup.durationMs=60000               # 缓存窗口，限制在 1000..120000 ms
+-Dpclmoon.startup.durationMs=60000               # Java 21 JDK 查找缓存窗口；Java 17 仅为 metrics 打印时间，限制在 1000..120000 ms
 ```
 
-删除启用参数即可恢复启动器原始注入策略。提取资源失败不追加 Agent；未知类/方法形态不修改原字节码。Agent 成功安装后保留转换器，供后续正常重转换重新应用钩子。直接读取的方法替换在缓存到期后仍保留其等价读取逻辑，但不再缓存字节。
+删除启用参数即可恢复启动器原始注入策略。提取资源失败不追加 Agent；未知类/方法形态不修改原字节码。Agent 成功安装后保留转换器，供后续正常重转换重新应用钩子。bootstrap helper 按内容哈希命名（`pcl-moon-startup-helper-<sha256前16位>.jar`）写到 Agent JAR 同目录，跨启动复用、不写 %TEMP%。
 
-追加 bootstrap helper 可能限制应用类 CDS 共享，这是实测时必须包含的成本。文件状态校验不是内容哈希：相同 size/mtime 且 fileKey 不可用时，无法识别刻意保持元数据的原地替换。测试期间不要修改 JAR；开发目录与未知来源旁路。未验证任意 JVM、第三方 Agent 或 Mod 的组合，不能作无错误保证。
+追加 bootstrap helper 可能限制应用类 CDS 共享，这是实测时必须包含的成本。未验证任意 JVM、第三方 Agent 或 Mod 的组合，不能作无错误保证。
 
 ## 构建与检查
 
 无需下载 Java 依赖，使用 JDK 17+（建议用 JDK 17 编译同一交付 JAR）：
 
 ```bash
-python -X utf8 tools/startup-agent/build.py --javac 'H:/eclipse_adoptium-17-amd64-windows/jdk-17.0.20+8/bin/javac.exe'
-python -X utf8 tools/startup-agent/test.py --java 'H:/eclipse_adoptium-17-amd64-windows/jdk-17.0.20+8/bin/java.exe'
+python -X utf8 tools/startup-agent/build.py --javac 'C:/Program Files/Java/jdk-17/bin/javac.exe'
+python -X utf8 tools/startup-agent/test.py --java 'C:/Program Files/Java/jdk-17/bin/java.exe'
 python -X utf8 tools/startup-agent/test.py --java 'C:/Program Files/Zulu/zulu-21/bin/java.exe'
 python -X utf8 scripts/test-benchmark-instance-startup.py
 dotnet test PCL.Core.Test/PCL.Core.Test.csproj -c Release --filter 'FullyQualifiedName~StartupAccelerationPolicyTest|FullyQualifiedName~JvmLaunchTuningTest' -p:UseSharedCompilation=false
@@ -52,9 +52,12 @@ dotnet test PCL.Core.Test/PCL.Core.Test.csproj -c Release --filter 'FullyQualifi
 ```bash
 python -X utf8 scripts/benchmark-instance-startup.py \
   --instance '<隔离副本目录>' --minecraft-root 'D:/StarRailHarpyExpress' \
-  --java 'H:/eclipse_adoptium-17-amd64-windows/jdk-17.0.20+8/bin/java.exe' \
-  --output "$PI_SCRATCH_DIR/new-baseline" --heap 6G --timeout 180 --settle-seconds 12
-# 对照仅增加：--agent 'Plain Craft Launcher 2/Resources/pcl-moon-startup-agent.jar'
+  --java 'C:/Program Files/Java/jdk-17/bin/java.exe' \
+  --output "artifacts/test/startup-prefetch/new-baseline" --heap 6G --timeout 180 --settle-seconds 12
+# 对照仅增加 --agent。helper 会生成在 agent 同目录，先复制到产物目录再用副本，
+# 避免在 Resources/ 下产生运行期文件：
+cp 'Plain Craft Launcher 2/Resources/pcl-moon-startup-agent.jar' artifacts/test/startup-prefetch/
+#   --agent 'artifacts/test/startup-prefetch/pcl-moon-startup-agent.jar'
 ```
 
 输出目录必须不存在。`--jfr` 与 `--jvm-arg=-Dname=value` 用于独立诊断，不把带采样/统计的时间混入无采样组。`first_atlas` 只是首次图集创建日志，不是主菜单可交互时间；命令生成、原生库准备、登录及启动器准备时间不包含在 Java 进程阶段计时内。

@@ -305,6 +305,8 @@
                                           ToolTip="{DynamicResource Setup.Launch.Advanced.GpuPreference.ToolTip}" />
                         <local:MyCheckBox Height="28" Text="{DynamicResource Setup.Launch.Advanced.UseJavaExe}" x:Name="CheckAdvanceNoJavaw" Tag="LaunchAdvanceNoJavaw"  Change="CheckBoxChange"
                                           ToolTip="{DynamicResource Setup.Launch.Advanced.UseJavaExe.ToolTip}" />
+                        <local:MyCheckBox Height="28" Text="{DynamicResource Setup.Launch.Advanced.PrefetchFiles}" x:Name="CheckAdvancePrefetchFiles" Tag="LaunchAdvancePrefetchFiles"  Change="CheckBoxChange"
+                                          ToolTip="{DynamicResource Setup.Launch.Advanced.PrefetchFiles.ToolTip}" />
                         <local:MyCheckBox Height="28" Text="{DynamicResource Setup.Launch.Advanced.DisableLwjglUnsafeAgent}" x:Name="CheckAdvanceDisableLwjglUnsafeAgent" Tag="LaunchAdvanceDisableLwjglUnsafeAgent"  Change="CheckBoxChange"
                                           ToolTip="{DynamicResource Setup.Launch.Advanced.DisableLwjglUnsafeAgent.ToolTip}" />
                         <local:MyCheckBox Height="28" Text="{DynamicResource Setup.Launch.Advanced.DisableCrashAnalysis}" x:Name="CheckAdvanceDisableCrashAnalysis" Tag="LaunchAdvanceDisableCrashAnalysis" Change="CheckBoxChange"

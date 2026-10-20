@@ -17,7 +17,9 @@ if not a.java:
 java = Path(a.java)
 javac = java.with_name('javac.exe' if os.name == 'nt' else 'javac')
 sources = Path(__file__).parent / 'test'
-with tempfile.TemporaryDirectory(prefix='pcl-moon-loader-tests-', dir=os.environ.get('PI_SCRATCH_DIR')) as temp:
+scratch = os.environ.get('PI_SCRATCH_DIR') or str(Path(__file__).resolve().parents[2] / 'artifacts/test/startup-agent')
+Path(scratch).mkdir(parents=True, exist_ok=True)
+with tempfile.TemporaryDirectory(prefix='pcl-moon-loader-tests-', dir=scratch) as temp:
     work = Path(temp)
     classes = work / 'classes'
     classes.mkdir()
@@ -27,14 +29,19 @@ with tempfile.TemporaryDirectory(prefix='pcl-moon-loader-tests-', dir=os.environ
         jar.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nPremain-Class: AgentBoundaryTest\nCan-Retransform-Classes: true\n\n')
         for file in classes.glob('AgentBoundaryTest*.class'):
             jar.write(file, file.name)
-    def run(test, mode, flags=(), pre_agent=False):
+    # Run against a scratch copy: the agent writes its helper JAR beside the agent file,
+    # and the shipped Resources directory must stay clean.
+    agent = work / 'agent' / a.agent.name
+    agent.parent.mkdir()
+    shutil.copy2(a.agent.resolve(), agent)
+    def run(test, mode, flags=(), pre_agent=False, extra_args=()):
         directory = work / (test + '-' + mode)
         directory.mkdir()
         command = [str(java)]
         if pre_agent:
             command += ['-javaagent:' + str(fixture) + '=' + str(directory)]
-        command += ['-javaagent:' + str(a.agent.resolve()), '-Djava.io.tmpdir=' + str(directory), *flags,
-                    '-cp', str(classes), test, str(directory)]
+        command += ['-javaagent:' + str(agent), '-Djava.io.tmpdir=' + str(directory), *flags,
+                    '-cp', str(classes), test, str(directory), *extra_args]
         print('TEST', test, mode, flush=True)
         subprocess.run(command, check=True, timeout=35)
     for test in ('LookupTest', 'ClassPathCacheTest'):
@@ -43,6 +50,10 @@ with tempfile.TemporaryDirectory(prefix='pcl-moon-loader-tests-', dir=os.environ
         run(test, 'all-off', ['-Dpclmoon.startup.disabled=true'])
     run('AgentBoundaryTest', 'agent-order', ['-Dpclmoon.startup.metrics=true'], pre_agent=True)
     run('TimeoutTest', 'timer', ['-Dpclmoon.startup.durationMs=1000'])
-    run('ForgeReadCacheTest', 'raw-read', ['-Dpclmoon.startup.metrics=true', '-Xverify:all'])
+    # Second run must reuse the same content-named helper beside the agent, not create another.
+    run('ForgeDirectReadTest', 'gating', ['-Dpclmoon.startup.metrics=true', '-Xverify:all'],
+        extra_args=[str(agent)])
+    run('ForgeDirectReadTest', 'gating-again', ['-Dpclmoon.startup.metrics=true', '-Xverify:all'],
+        extra_args=[str(agent)])
     run('ForgeFastReadTest', 'direct-read', ['-Dpclmoon.startup.metrics=true', '-Xverify:all'])
-print('PASS: all 10 startup-agent regression modes')
+print('PASS: all 11 startup-agent regression modes')

@@ -287,4 +287,6 @@ Ce que vous pouvez essayer
     <sys:String x:Key="Download.Comp.Category.Energy">Énergie</sys:String>
     <sys:String x:Key="Download.Comp.Category.Entities">Entités</sys:String>
     <sys:String x:Key="Download.Comp.Category.Equipment">Équipement</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles">Prélecture des fichiers du jeu avant le lancement</sys:String>
+    <sys:String x:Key="Setup.Launch.Advanced.PrefetchFiles.ToolTip">Pendant le lancement, lit en arrière-plan les fichiers de mods et autres dans le cache système avec une priorité d'E/S faible, réduisant l'attente disque lors d'un démarrage à froid (par exemple le premier lancement après l'allumage). Ignoré automatiquement si la mémoire disponible est faible. Désactivez cette option si cela semble plus lent avec un disque dur mécanique.</sys:String>
 </ResourceDictionary>
