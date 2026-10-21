@@ -81,7 +81,7 @@
                             <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
                                 <Button Click="NativeVersions_Click" Content="{DynamicResource Hybrid.VersionList}" Style="{StaticResource Hybrid.QuietButton}" Foreground="{StaticResource Hybrid.Accent}" />
                                 <Button x:Name="NativeVersionSettings" Click="NativeVersionSettings_Click" Content="{DynamicResource Hybrid.VersionSettings}" Style="{StaticResource Hybrid.QuietButton}" IsEnabled="False" AutomationProperties.AutomationId="Native.Hero.VersionSettings" />
-                                <Button x:Name="NativeVersionFolder" Click="NativeVersionFolder_Click" Content="版本文件夹" Style="{StaticResource Hybrid.QuietButton}" IsEnabled="False" AutomationProperties.AutomationId="Native.Hero.VersionFolder" />
+                                <Button x:Name="NativeVersionFolder" Click="NativeVersionFolder_Click" Content="{DynamicResource Hybrid.VersionFolder}" Style="{StaticResource Hybrid.QuietButton}" IsEnabled="False" AutomationProperties.AutomationId="Native.Hero.VersionFolder" />
                             </WrapPanel>
                         </Grid>
                     </Grid>

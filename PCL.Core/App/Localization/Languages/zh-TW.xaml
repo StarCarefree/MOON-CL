@@ -3611,6 +3611,7 @@
     <sys:String x:Key="Hybrid.NoVersions">暫無本機版本</sys:String>
     <sys:String x:Key="Hybrid.VersionList">版本清單</sys:String>
     <sys:String x:Key="Hybrid.VersionSettings">版本設定</sys:String>
+    <sys:String x:Key="Hybrid.VersionFolder">版本資料夾</sys:String>
     <sys:String x:Key="Hybrid.Account">帳號與登入</sys:String>
     <sys:String x:Key="Hybrid.NotLoggedIn">未登入</sys:String>
     <sys:String x:Key="Hybrid.EmptyGameTitle">下一段旅程，從這裡開始</sys:String>

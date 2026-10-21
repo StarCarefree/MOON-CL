@@ -3611,6 +3611,7 @@
     <sys:String x:Key="Hybrid.NoVersions">No local versions yet</sys:String>
     <sys:String x:Key="Hybrid.VersionList">Version list</sys:String>
     <sys:String x:Key="Hybrid.VersionSettings">Version settings</sys:String>
+    <sys:String x:Key="Hybrid.VersionFolder">Version folder</sys:String>
     <sys:String x:Key="Hybrid.Account">Account and login</sys:String>
     <sys:String x:Key="Hybrid.NotLoggedIn">Not signed in</sys:String>
     <sys:String x:Key="Hybrid.EmptyGameTitle">Your next journey starts here</sys:String>
