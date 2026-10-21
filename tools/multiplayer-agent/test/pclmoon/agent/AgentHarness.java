@@ -223,6 +223,16 @@ public final class AgentHarness {
             check(MinecraftBridge.provider(i, m).discover().client == c, "instrumentation initialized singleton discovery");
             Client.INSTANCE = null;
             check(MinecraftBridge.provider(i, m).discover() == null, "null singleton means waiting");
+            // Forge EventBus 变换器按 TCCL 解析父类：discover 必须把调用线程的 TCCL 换成客户端类加载器
+            final ClassLoader[] seen = new ClassLoader[1];
+            Thread probe = new Thread(new Runnable() { public void run() {
+                Thread.currentThread().setContextClassLoader(new URLClassLoader(new URL[0], null));
+                try { MinecraftBridge.provider(i, m).discover(); }
+                catch (Exception failure) { throw new RuntimeException(failure); }
+                seen[0] = Thread.currentThread().getContextClassLoader();
+            }});
+            probe.start(); probe.join(10000);
+            check(seen[0] == Client.class.getClassLoader(), "discover must set TCCL to the game class loader");
         }
         try (Client c = new Client()) {
             MinecraftBridge b = new MinecraftBridge(c, mappings(Connect5.class));

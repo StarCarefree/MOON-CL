@@ -69,7 +69,7 @@ agent    -> STATE\t<requestId或空>\t<state>\t<base64(address)>\t<base64(messag
 
 ## 反射兼容范围与安全边界
 
-发现仅用 `Instrumentation.getAllLoadedClasses()`，匹配已知 client 类名/映射后的 runtime 名。使用反射 `sun.misc.Unsafe.staticFieldBase/staticFieldOffset/getObjectVolatile` 读取静态同类型非空单例存储，避免 `Field.get` 或 getInstance 触发 Minecraft 类初始化；不依赖 Java 22+ 已移除的 `shouldBeInitialized`。读到非空后，所有游戏状态采样仍在 Minecraft Executor 执行。VM 禁止这些内部 API 时返回 unsupported；Java 25 可能产生 Unsafe 弃用警告，此 API 是明确的未来兼容限制。
+发现仅用 `Instrumentation.getAllLoadedClasses()`，匹配已知 client 类名/映射后的 runtime 名。使用反射 `sun.misc.Unsafe.staticFieldBase/staticFieldOffset/getObjectVolatile` 读取静态同类型非空单例存储，避免 `Field.get` 或 getInstance 触发 Minecraft 类初始化；不依赖 Java 22+ 已移除的 `shouldBeInitialized`。读到非空后，所有游戏状态采样仍在 Minecraft Executor 执行。发现线程在反射读取字段前会把 TCCL 设为客户端类的加载器，保证 Forge 事件变换器等按 TCCL 解析父类的机制能工作。VM 禁止这些内部 API 时返回 unsupported；Java 25 可能产生 Unsafe 弃用警告，此 API 是明确的未来兼容限制。
 
 支持的角色名包括：
 

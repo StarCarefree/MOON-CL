@@ -21,6 +21,9 @@ final class MinecraftBridge {
             public MinecraftBridge discover() throws Exception {
                 for (Class<?> c : instrumentation.getAllLoadedClasses()) {
                     if (!isClient(c, mappings)) continue;
+                    // 反射会连带加载字段类型；Forge EventBus 变换器按线程 TCCL 解析父类，
+                    // 本线程 TCCL 必须是游戏类加载器，否则事件类缺无参构造而崩。
+                    Thread.currentThread().setContextClassLoader(c.getClassLoader());
                     // Read the singleton storage without triggering <clinit>, including on Java 22+.
                     Object singleton = null;
                     for (Field f : c.getDeclaredFields()) {
