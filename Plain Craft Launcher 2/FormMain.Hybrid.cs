@@ -17,6 +17,7 @@ public partial class FormMain
     private DispatcherTimer? _hybridTimer;
     private bool? _hybridGameLayout;
     private string? _hybridVersionPath;
+    private string? _hybridVersionsFolder;
     private HybridRooms HybridRoomsView => HybridMultiplayerView.Rooms;
     private bool _hybridShellStale;
 
@@ -214,7 +215,9 @@ public partial class FormMain
             ModLoader.LoaderFolderRun(ModInstanceList.mcInstanceListLoader, folder,
                 ModLoader.LoaderFolderRunType.RunOnUpdated, 1, @"versions\");
         var versionsLoaded = ModInstanceList.mcInstanceListLoader.State == ModBase.LoadState.Finished;
-        HybridSidebarView.SetVersionsLoaded(versionsLoaded);
+        if (versionsLoaded) _hybridVersionsFolder = folder;
+        // 同一文件夹后台重载（如下载写入 versions）时保留上次列表，只在首次加载或切换文件夹时隐藏
+        HybridSidebarView.SetVersionsLoaded(versionsLoaded || !string.IsNullOrEmpty(folder) && string.Equals(_hybridVersionsFolder, folder, StringComparison.OrdinalIgnoreCase));
         if (versionsLoaded)
         {
             var prefix = string.IsNullOrEmpty(folder) ? null : Path.GetFullPath(Path.Combine(folder, "versions")) + Path.DirectorySeparatorChar;

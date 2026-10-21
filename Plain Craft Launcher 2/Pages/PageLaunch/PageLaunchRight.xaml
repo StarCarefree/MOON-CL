@@ -6,6 +6,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="../../Modules/HybridUi/HybridTheme.xaml" /></ResourceDictionary.MergedDictionaries>
             <Style x:Key="Dashboard.Button" TargetType="Button" BasedOn="{StaticResource Hybrid.QuietButton}">
+                <Setter Property="BorderBrush" Value="{StaticResource Hybrid.Line}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">

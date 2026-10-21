@@ -254,7 +254,7 @@ public partial class HybridSidebar : UserControl
         _versionListHover = false;
         RefreshActivity();
     }
-    private static string VersionLine(McInstance instance)
+    internal static string VersionLine(McInstance instance)
     {
          var release = PackReleaseWatcher.NoticeText(instance.PathInstance);
          var intro = PackIdentityStore.TryRead(instance.PathInstance)?.SidebarLine;

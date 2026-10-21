@@ -148,11 +148,20 @@ public partial class PageLaunchRight
             case "library":
                 var versions = DashboardInstances().OrderByDescending(instance => States.Instance.Starred[instance.PathInstance]).ThenBy(instance => instance.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
                 foreach (var instance in versions.Take(6))
-                    panel.Children.Add(DashboardInstanceButton(instance, (States.Instance.Starred[instance.PathInstance] ? "★ 收藏  ·  " : "") + (instance.Desc ?? "选择版本")));
+                {
+                    var starred = States.Instance.Starred[instance.PathInstance];
+                    var versionLine = HybridSidebar.VersionLine(instance);
+                    panel.Children.Add(DashboardInstanceButton(instance, (starred ? "★ 收藏  ·  " : "") + (string.IsNullOrEmpty(versionLine) ? "选择版本" : versionLine)));
+                }
                 if (versions.Length == 0) panel.Children.Add(DashboardText("这里还没有游戏。安装一个版本，开始你的第一次冒险。", 13, true));
                 var browse = DashboardButton(versions.Length == 0 ? "安装游戏  ↗" : $"管理全部 {versions.Length} 个版本  ↗", () => DashboardNavigate(versions.Length == 0 ? "download" : "versions"));
                 browse.Foreground = DashboardBrush("Hybrid.Accent");
                 browse.HorizontalAlignment = HorizontalAlignment.Left;
+                browse.Margin = new Thickness(0, 4, 0, 0);
+                browse.Height = 32;
+                browse.Padding = new Thickness(8, 0, 8, 0);
+                browse.Background = Brushes.Transparent;
+                browse.BorderBrush = Brushes.Transparent;
                 panel.Children.Add(browse);
                 break;
         }
@@ -171,17 +180,28 @@ public partial class PageLaunchRight
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
             row.Children.Add(image);
         }
-        var text = new StackPanel();
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = DashboardText(instance.Name, 13);
         title.FontWeight = FontWeights.SemiBold;
+        title.TextWrapping = TextWrapping.NoWrap;
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
         text.Children.Add(title);
-        text.Children.Add(DashboardText(detail, 11, true));
+        if (!string.IsNullOrWhiteSpace(detail))
+        {
+            var line = DashboardText(detail, 11, true);
+            line.TextWrapping = TextWrapping.NoWrap;
+            line.TextTrimming = TextTrimming.CharacterEllipsis;
+            line.Margin = new Thickness(0, 2, 0, 0);
+            text.Children.Add(line);
+        }
         Grid.SetColumn(text, 1);
         row.Children.Add(text);
         var button = DashboardButton(row, () => SelectDashboardInstance(instance));
         button.Height = double.NaN;
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        button.Padding = new Thickness(4, 0, 4, 0);
+        button.Padding = new Thickness(10, 0, 10, 0);
+        button.Margin = new Thickness(0, 0, 0, 6);
+        button.Background = new SolidColorBrush(Color.FromRgb(0x20, 0x22, 0x26));
         button.IsEnabled = !_dashboardEditing;
         button.ToolTip = "选择版本；使用右侧启动按钮开始游戏";
         return button;

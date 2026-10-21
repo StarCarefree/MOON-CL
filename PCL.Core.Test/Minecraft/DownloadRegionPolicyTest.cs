@@ -29,8 +29,18 @@ public sealed class DownloadRegionPolicyTest
 
     private static HttpClient Client(Handler handler) => new(handler);
 
+    private Func<CancellationToken, Task<string?>>? _originalDivert;
+
     [TestInitialize]
-    public void Setup() => DownloadRegionPolicy.ResetCache();
+    public void Setup()
+    {
+        DownloadRegionPolicy.ResetCache();
+        _originalDivert = DownloadRegionPolicy.DetectMinecraftDivertAsync;
+        DownloadRegionPolicy.DetectMinecraftDivertAsync = _ => Task.FromResult<string?>(null);
+    }
+
+    [TestCleanup]
+    public void Cleanup() => DownloadRegionPolicy.DetectMinecraftDivertAsync = _originalDivert!;
 
     [TestMethod]
     public void CloudflareTraceParsesLoc()
@@ -90,10 +100,17 @@ public sealed class DownloadRegionPolicyTest
     [TestMethod]
     public async Task ThrowsWhenCn()
     {
+        var divertCalls = 0;
+        DownloadRegionPolicy.DetectMinecraftDivertAsync = _ =>
+        {
+            divertCalls++;
+            return Task.FromResult<string?>(null);
+        };
         var handler = new Handler(_ => Text("fl=1\nloc=CN\n"));
         var ex = await Assert.ThrowsExactlyAsync<DownloadRegionBlockedException>(
             () => DownloadRegionPolicy.EnsureAllowedAsync(Client(handler), CancellationToken.None));
         StringAssert.Contains(ex.Message, "中国大陆");
+        Assert.AreEqual(1, divertCalls);
     }
 
     [TestMethod]
@@ -131,5 +148,58 @@ public sealed class DownloadRegionPolicyTest
             () => DownloadRegionPolicy.EnsureAllowedAsync(http, CancellationToken.None));
         await DownloadRegionPolicy.EnsureAllowedAsync(http, CancellationToken.None);
         Assert.AreEqual(4, calls); // 首次三家全失败，第二次首源即返回 JP
+    }
+
+    [TestMethod]
+    public async Task CnButDivertedIsAllowed()
+    {
+        DownloadRegionPolicy.DetectMinecraftDivertAsync = _ => Task.FromResult<string?>("fake-ip");
+        var handler = new Handler(_ => Text("fl=1\nloc=CN\n"));
+        await DownloadRegionPolicy.EnsureAllowedAsync(Client(handler), CancellationToken.None);
+    }
+
+    [TestMethod]
+    public async Task UnknownButDivertedIsAllowed()
+    {
+        DownloadRegionPolicy.DetectMinecraftDivertAsync = _ => Task.FromResult<string?>("经代理 127.0.0.1:7890");
+        var handler = new Handler(req => req.RequestUri!.Host switch
+        {
+            "www.cloudflare.com" => throw new HttpRequestException("down"),
+            "api.ip.sb" => Text("not json"),
+            _ => Text("<html>"),
+        });
+        await DownloadRegionPolicy.EnsureAllowedAsync(Client(handler), CancellationToken.None);
+    }
+
+    [TestMethod]
+    public async Task NonCnSkipsDivertCheck()
+    {
+        var divertCalls = 0;
+        DownloadRegionPolicy.DetectMinecraftDivertAsync = _ =>
+        {
+            divertCalls++;
+            return Task.FromResult<string?>("fake-ip");
+        };
+        var handler = new Handler(_ => Text("fl=1\nloc=HK\n"));
+        await DownloadRegionPolicy.EnsureAllowedAsync(Client(handler), CancellationToken.None);
+        Assert.AreEqual(0, divertCalls);
+    }
+
+    [TestMethod]
+    public void IsFakeIpMatchesRange()
+    {
+        Assert.IsTrue(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("198.18.0.1")));
+        Assert.IsTrue(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("198.19.255.255")));
+        Assert.IsTrue(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("::ffff:198.18.0.65")));
+        Assert.IsFalse(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("198.17.255.255")));
+        Assert.IsFalse(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("198.20.0.1")));
+        Assert.IsFalse(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("150.171.110.105")));
+        Assert.IsFalse(DownloadRegionPolicy.IsFakeIp(IPAddress.Parse("2001:db8::1")));
+    }
+
+    [TestMethod]
+    public void GetRouteSourceForLoopback()
+    {
+        Assert.AreEqual(IPAddress.Loopback, DownloadRegionPolicy.GetRouteSource(IPAddress.Loopback));
     }
 }

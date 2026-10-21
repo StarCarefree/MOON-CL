@@ -357,7 +357,7 @@ progress::-moz-progress-bar { background: var(--gold); }
 .rec { position: relative; }
 .rec.selected { background: #2a241c; border-color: var(--gold); }
 .rec.selected::before { content: ""; position: absolute; left: 4px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--gold); }
-.rec:hover:not(:disabled) { border-color: #6a5434; }
+.rec:hover:not(:disabled):not(.selected) { background: #201d19; border-color: #6a5434; }
 .thumb, .card-art {
   position: relative;
   flex: none;
@@ -411,7 +411,13 @@ progress::-moz-progress-bar { background: var(--gold); }
  .card-open { flex-direction: column; }
  .rec-open { align-items: center; gap: 8px; }
  .card.selected { background: #241f1a; border-color: var(--gold); }
- .card:hover { border-color: #6a5434; }
+ .card { transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease; }
+ .card:hover:not(.selected) { background: #201d19; border-color: #6a5434; box-shadow: 0 6px 18px #00000040, inset 0 1px 0 #ffffff0a; }
+ .card.selected:hover { box-shadow: 0 6px 18px #00000040; }
+ .card-open:hover:not(:disabled), .rec-open:hover:not(:disabled) { background: transparent; border-color: transparent; }
+ .card-open:active:not(:disabled), .rec-open:active:not(:disabled) { transform: none; }
+ .card-art img { transition: transform 160ms ease; }
+ .card:hover .card-art img { transform: scale(1.04); }
 .card-art { height: 108px; border-radius: var(--radius) var(--radius) 0 0; }
 .card-body {
   display: flex;
