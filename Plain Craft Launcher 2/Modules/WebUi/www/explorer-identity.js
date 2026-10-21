@@ -39,7 +39,27 @@
   }
   function merge(mcl, encyclopedia, platforms) {
     const covered = new Set(encyclopedia.flatMap(item => [...keys(item)]));
-    return [...mcl, ...encyclopedia, ...platforms.filter(item => ![...keys(item)].some(key => covered.has(key)))];
+    const filtered = platforms.filter(item => ![...keys(item)].some(key => covered.has(key)));
+    // 按来源分桶做 round-robin：mcmod → curseforge → mcl → modrinth → 其他 source 按首次出现顺序
+    const buckets = [[...encyclopedia], [], [...mcl], []];
+    const extra = new Map();
+    for (const item of filtered) {
+      const bucket = item.source === "curseforge" ? buckets[1] : item.source === "modrinth" ? buckets[3] : null;
+      if (bucket) bucket.push(item);
+      else {
+        if (!extra.has(item.source)) extra.set(item.source, []);
+        extra.get(item.source).push(item);
+      }
+    }
+    const queues = [...buckets, ...extra.values()];
+    const result = [];
+    for (let i = 0; ; i++) {
+      let any = false;
+      for (const bucket of queues) {
+        if (i < bucket.length) { result.push(bucket[i]); any = true; }
+      }
+      if (!any) return result;
+    }
   }
   const api = Object.freeze({ projectLink, keys, merge });
   root.ExplorerIdentity = api;

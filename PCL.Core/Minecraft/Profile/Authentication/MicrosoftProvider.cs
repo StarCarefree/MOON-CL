@@ -29,7 +29,7 @@ public sealed class MicrosoftProvider : IAuthenticateProvider
     {
         _clientId = string.IsNullOrWhiteSpace(clientId) ? Secrets.MSOAuthClientId : clientId;
         if (string.IsNullOrWhiteSpace(_clientId))
-            throw new InvalidOperationException("Microsoft OAuth client id is not configured.");
+            throw new InvalidOperationException("此构建未配置微软登录 Client ID（构建时需设置 PCL_MS_CLIENT_ID）。");
     }
 
     public async Task<DeviceCodeData> GetDeviceCodeAsync(CancellationToken token)

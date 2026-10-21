@@ -209,10 +209,14 @@ function Invoke-DotNetPublish([string]$DotNetExe, [string]$OutDir) {
         "-p:RuntimeIdentifier=$rid",
         "-p:Platform=$platform",
         ('-p:OutputPath=' + (Get-BuildOutputDirectory)),
+        "-p:PclSecretsStampFile=$($script:SecretsStampFile)",
         '-o', $OutDir,
         '--nologo'
     )
-    if ($DisableBuildServers) { $publishArgs += '--disable-build-servers' }
+    # 有密钥时必须禁用编译服务器：生成器读的是服务器进程自己的环境变量
+    if ($DisableBuildServers -or -not [string]::IsNullOrWhiteSpace($env:PCL_WRITE_SECRET)) {
+        $publishArgs += '--disable-build-servers'
+    }
     Write-Step ("dotnet " + ($publishArgs -join ' '))
     & $DotNetExe @publishArgs
     Assert-LastExitCode 'dotnet publish'
@@ -429,6 +433,44 @@ function Invoke-SingleExeSelfCheck {
     Write-Host 'SELF-CHECK OK'
 }
 
+function Initialize-Secrets {
+    # dot-source 本地密钥文件；生成器跳过空值，留空等于不设置
+    $secretsLocal = Join-Path $PSScriptRoot 'secrets.local.ps1'
+    if (Test-Path -LiteralPath $secretsLocal -PathType Leaf) {
+        . $secretsLocal
+        $env:PCL_WRITE_SECRET = '1'
+        $names = @(Get-ChildItem env: | Where-Object { $_.Name.StartsWith('PCL_') -and $_.Name -ne 'PCL_WRITE_SECRET' } |
+            Sort-Object Name | ForEach-Object {
+                '{0}={1}' -f $_.Name, $(if ([string]::IsNullOrWhiteSpace($_.Value)) { '空' } else { '已设置' })
+            })
+        Write-Step ('已加载 secrets.local.ps1：' + ($names -join '，'))
+    }
+
+    # 密钥戳：内容随密钥集合变化，用于触发增量构建重新编译
+    $stampDir = [System.IO.Path]::GetFullPath((Join-Path (Get-BuildOutputDirectory) '..'))
+    New-Item -ItemType Directory -Force -Path $stampDir | Out-Null
+    $script:SecretsStampFile = Join-Path $stampDir 'secrets.stamp'
+    if ([string]::IsNullOrWhiteSpace($env:PCL_WRITE_SECRET)) {
+        $stampContent = 'none'
+    }
+    else {
+        $pairs = @(Get-ChildItem env: | Where-Object {
+                $_.Name.StartsWith('PCL_') -and $_.Name -ne 'PCL_WRITE_SECRET' -and -not [string]::IsNullOrWhiteSpace($_.Value)
+            } | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $stampContent = ([System.BitConverter]::ToString(
+                $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($pairs -join "`n")))).Replace('-', '').ToLowerInvariant()
+        }
+        finally { $sha.Dispose() }
+    }
+    # 只在内容变化时才写，保留 mtime 避免不必要的重新编译
+    if (-not (Test-Path -LiteralPath $script:SecretsStampFile -PathType Leaf) -or
+        [System.IO.File]::ReadAllText($script:SecretsStampFile) -ne $stampContent) {
+        [System.IO.File]::WriteAllText($script:SecretsStampFile, $stampContent)
+    }
+}
+
 function Main {
     $totalWatch = [System.Diagnostics.Stopwatch]::StartNew()
     if ($Architecture -ne 'x64' -and $Architecture -ne 'arm64') {
@@ -447,6 +489,7 @@ function Main {
     Write-Step "dotnet=$dotnet"
     Write-Step '框架依赖单文件：不自包含、不修剪、原生库打进启动器。外层不再压缩，也不把数据接到 exe 尾部。'
     Write-Step ("构建输出: {0}" -f (Get-BuildOutputDirectory))
+    Initialize-Secrets
     Invoke-TimedStep 'dotnet publish' { Invoke-DotNetPublish $dotnet $publishDir }
     $launcher = Join-Path $publishDir 'Plain Craft Launcher 2.exe'
     Invoke-TimedStep '校验原生库' { Assert-NoMissingLibraries $publishDir $launcher }

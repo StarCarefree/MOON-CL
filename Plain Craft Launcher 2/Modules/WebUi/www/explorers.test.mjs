@@ -23,7 +23,9 @@ try {
  assert.equal(await page.locator('#source-modrinth').isChecked(),false); assert.equal(await page.locator('#include-mcmod').isChecked(),true);
  assert.equal(await page.locator('.explorer-option input').first().getAttribute('id'),'source-mcl');
  await send(snapshot([sre,index])); let cfReq=await last('curseforge'); await reply(cfReq,[cf]);
- assert.equal(await page.locator('#cards [data-pack-id]').nth(1).getAttribute('data-pack-id'),index.id);
+ // round-robin：curseforge 桶在 mcl 桶之前，[cf, sre, index]
+ assert.equal(await page.locator('#cards [data-pack-id]').nth(0).getAttribute('data-pack-id'),cf.id);
+ assert.equal(await page.locator('#cards [data-pack-id]').nth(2).getAttribute('data-pack-id'),index.id);
  await page.locator('#source-modrinth').check(); let mrReq=await last('modrinth'); await reply(mrReq,[mr]);
  assert.equal(await page.locator('#source-curseforge').isChecked(),true); assert.equal(await card(cf.id).count(),1); assert.equal(await card(mr.id).count(),1);
  await page.locator('#next-page').click(); cfReq=await last('curseforge'); assert.equal(cfReq.page,2);

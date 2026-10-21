@@ -350,3 +350,6 @@ MaskFiles/
 Plain Craft Launcher 2/Resources/pcl-moon-startup-helper-*.jar
 # Local agent notes
 /AGENTS.md
+
+# Local secrets for single-exe publish
+scripts/secrets.local.ps1

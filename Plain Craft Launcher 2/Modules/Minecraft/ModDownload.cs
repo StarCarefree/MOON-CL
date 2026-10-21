@@ -2030,8 +2030,8 @@ public static class ModDownload
             }
             catch (Exception ex)
             {
-                // 镜像源可能随机爆炸，忽略就好
-                if (!ex.Message.ContainsF("mcimirror")) exs += ex.Message + "\r\n";
+                // 镜像源可能随机爆炸，忽略就好（异常消息不含 URL，按请求的源判断）
+                if (!Source.Key.ContainsF("mcimirror")) exs += ex.Message + "\r\n";
             }
 
         throw new Exception(exs);
@@ -2098,7 +2098,7 @@ public static class ModDownload
             }
             catch (Exception ex)
             {
-                if (!ex.Message.ContainsF("mcimirror")) exs += ex.Message + "\r\n";
+                if (!Source.Key.ContainsF("mcimirror")) exs += ex.Message + "\r\n";
             }
 
         throw new Exception(exs);

@@ -2358,7 +2358,7 @@ function renderAssociationStatus() {
   ui["association-status"].hidden = !shown;
   if (!shown) return;
   const paused = association.pausedKey === associationScope();
-  setText("association-message", state.link !== "live" ? "连接启动器后可核对百科关联项目。" : paused ? `百科关联尚未核对完成：${association.error}；未确认的关联不会按名称猜测。` : association.active || associationCandidates().length ? "正在按限速核对百科项目链接，确认后移除对应的 CF / Modrinth 条目…" : "已按已确认的百科项目链接合并显示，MCL 目录优先。");
+  setText("association-message", state.link !== "live" ? "连接启动器后可核对百科关联项目。" : paused ? `百科关联尚未核对完成：${association.error}；未确认的关联不会按名称猜测。` : association.active || associationCandidates().length ? "正在按限速核对百科项目链接，确认后移除对应的 CF / Modrinth 条目…" : "已按已确认的百科项目链接合并显示，各来源轮流排列。");
   ui["association-retry"].hidden = !paused;
   ui["association-retry"].disabled = state.link !== "live" || !!association.active;
 }
