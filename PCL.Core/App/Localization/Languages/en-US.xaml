@@ -2843,7 +2843,7 @@
     <!-- Setup.Launch.Memory -->
 
     <sys:String x:Key="Setup.Launch.Memory.Auto">Auto</sys:String>
-    <sys:String x:Key="Setup.Launch.Memory.Auto.ToolTip">Dynamically adjust the memory allocated to the game based on the installed mods and available system memory.</sys:String>
+    <sys:String x:Key="Setup.Launch.Memory.Auto.ToolTip">Dynamically adjust the memory allocated to the game based on the installed mods and available system memory, up to 12 GB.</sys:String>
     <sys:String x:Key="Setup.Launch.Memory.AvailableSuffix">Available: {0} GiB</sys:String>
     <sys:String x:Key="Setup.Launch.Memory.GameAllocation">Game allocation</sys:String>
     <sys:String x:Key="Setup.Launch.Memory.Max">Maximum memory (-Xmx)</sys:String>

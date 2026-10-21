@@ -8,6 +8,7 @@ using PCL.Core.App.Configuration;
 using PCL.Core.Utils.OS;
 using PCL.Core.UI;
 using PCL.Core.App.Localization;
+using PCL.Core.Minecraft.Launcher;
 
 namespace PCL;
 
@@ -525,6 +526,27 @@ public partial class PageSetupLaunch
     }
 
     /// <summary>
+    ///     自动配置下应分配给游戏的内存。单位为 GB，上限 <see cref="GameMemoryAuto.MaxGb"/>。
+    /// </summary>
+    internal static double GetAutoRam(McInstance? version)
+    {
+        var ramAvailable =
+            Math.Round((double)KernelInterop.GetAvailablePhysicalMemoryBytes() / 1024 / 1024 / 1024 * 10) / 10;
+        if (version is not null && !version.IsLoaded)
+            version.Load();
+        int? modCount = null;
+        if (version is not null && version.Modable)
+        {
+            // 可安装 Mod 的实例
+            var modDir = new DirectoryInfo(version.PathIndie + @"mods\");
+            modCount = modDir.Exists ? modDir.GetFiles().Length : 0;
+        }
+
+        var hasOptiFine = version is not null && version.Info.HasOptiFine;
+        return GameMemoryAuto.Calculate(ramAvailable, modCount, hasOptiFine);
+    }
+
+    /// <summary>
     ///     获取当前设置的 RAM 值。单位为 GB。
     /// </summary>
     public static double GetRam(McInstance version, bool useVersionJavaSetup, bool? is32BitJava = default)
@@ -535,62 +557,8 @@ public partial class PageSetupLaunch
 
         var ramGive = default(double);
         if (Config.Launch.MemoryAllocationMode == 0)
-        {
             // 自动配置
-            var ramAvailable =
-                Math.Round((double)KernelInterop.GetAvailablePhysicalMemoryBytes() / 1024 / 1024 / 1024 * 10) / 10;
-            // 确定需求的内存值
-            double ramMininum; // 无论如何也需要保证的最低限度内存
-            double ramTarget1; // 估计能勉强带动了的内存
-            double ramTarget2; // 估计没啥问题了的内存
-            double ramTarget3; // 放一百万个材质和 Mod 和光影需要的内存
-            if (version is not null && !version.IsLoaded)
-                version.Load();
-            if (version is not null && version.Modable)
-            {
-                // 可安装 Mod 的实例
-                var modDir = new DirectoryInfo(version.PathIndie + @"mods\");
-                var modCount = modDir.Exists ? modDir.GetFiles().Length : 0;
-                ramMininum = 0.5d + modCount / 150d;
-                ramTarget1 = 1.5d + modCount / 90d;
-                ramTarget2 = 2.7d + modCount / 50d;
-                ramTarget3 = 4.5d + modCount / 25d;
-            }
-            else if (version is not null && version.Info.HasOptiFine)
-            {
-                // OptiFine 实例
-                ramMininum = 0.5d;
-                ramTarget1 = 1.5d;
-                ramTarget2 = 3d;
-                ramTarget3 = 5d;
-            }
-            else
-            {
-                // 普通实例
-                ramMininum = 0.5d;
-                ramTarget1 = 1.5d;
-                ramTarget2 = 2.5d;
-                ramTarget3 = 4d;
-            }
-
-            var ramStages = new[]
-            {
-                (Delta: ramTarget1, Ratio: 1d),
-                (Delta: ramTarget2 - ramTarget1, Ratio: 0.7d),
-                (Delta: ramTarget3 - ramTarget2, Ratio: 0.4d),
-                (Delta: ramTarget3, Ratio: 0.15d)
-            };
-            foreach (var (RamDelta, RamRatio) in ramStages)
-            {
-                ramGive += Math.Min(ramAvailable * RamRatio, RamDelta);
-                ramAvailable -= RamDelta / RamRatio;
-                if (ramAvailable < 0.1d)
-                    break;
-            }
-
-            // 不低于最低值
-            ramGive = Math.Round(Math.Max(ramGive, ramMininum), 1);
-        }
+            ramGive = GetAutoRam(version);
         else
         {
             // 手动配置

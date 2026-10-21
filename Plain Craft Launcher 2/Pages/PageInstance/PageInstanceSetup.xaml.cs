@@ -468,74 +468,8 @@ public partial class PageInstanceSetup
         // 使用当前实例的设置
         var ramGive = default(double);
         if (Config.Instance.MemorySolution[instancePath] == 0)
-        {
             // 自动配置
-            var ramAvailable =
-                Math.Round((double)(KernelInterop.GetAvailablePhysicalMemoryBytes() / 1024 / 1024 / 1024 * 10)) / 10;
-            // 确定需求的内存值
-            double ramMininum; // 无论如何也需要保证的最低限度内存
-            double ramTarget1; // 估计能勉强带动了的内存
-            double ramTarget2; // 估计没啥问题了的内存
-            double ramTarget3; // 安装过多附加组件需要的内存
-            if (version is not null && !version.IsLoaded)
-                version.Load();
-            if (version is not null && version.Modable)
-            {
-                // 可安装 Mod 的实例
-                var modDir = new DirectoryInfo(version.PathIndie + @"mods\");
-                var modCount = modDir.Exists ? modDir.GetFiles().Length : 0;
-                ramMininum = 0.5d + modCount / 150d;
-                ramTarget1 = 1.5d + modCount / 90d;
-                ramTarget2 = 2.7d + modCount / 50d;
-                ramTarget3 = 4.5d + modCount / 25d;
-            }
-            else if (version is not null && version.Info.HasOptiFine)
-            {
-                // OptiFine 实例
-                ramMininum = 0.5d;
-                ramTarget1 = 1.5d;
-                ramTarget2 = 3d;
-                ramTarget3 = 5d;
-            }
-            else
-            {
-                // 普通实例
-                ramMininum = 0.5d;
-                ramTarget1 = 1.5d;
-                ramTarget2 = 2.5d;
-                ramTarget3 = 4d;
-            }
-
-            double ramDelta;
-            // 预分配内存，阶段一，0 ~ T1，100%
-            ramDelta = ramTarget1;
-            ramGive += Math.Min(ramAvailable, ramDelta);
-            ramAvailable -= ramDelta;
-            if (ramAvailable >= 0.1d)
-            {
-                // 预分配内存，阶段二，T1 ~ T2，70%
-                ramDelta = ramTarget2 - ramTarget1;
-                ramGive += Math.Min(ramAvailable * 0.7d, ramDelta);
-                ramAvailable -= ramDelta / 0.7d;
-                if (ramAvailable >= 0.1d)
-                {
-                    // 预分配内存，阶段三，T2 ~ T3，40%
-                    ramDelta = ramTarget3 - ramTarget2;
-                    ramGive += Math.Min(ramAvailable * 0.4d, ramDelta);
-                    ramAvailable -= ramDelta / 0.4d;
-                    if (ramAvailable >= 0.1d)
-                    {
-                        // 预分配内存，阶段四，T3 ~ T3 * 2，15%
-                        ramDelta = ramTarget3;
-                        ramGive += Math.Min(ramAvailable * 0.15d, ramDelta);
-                        ramAvailable -= ramDelta / 0.15d;
-                    }
-                }
-            }
-
-            // 不低于最低值
-            ramGive = Math.Round(Math.Max(ramGive, ramMininum), 1);
-        }
+            ramGive = PageSetupLaunch.GetAutoRam(version);
         else
         {
             // 手动配置

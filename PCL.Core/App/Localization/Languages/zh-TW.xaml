@@ -2787,7 +2787,7 @@
     <!-- Setup.Launch.Memory -->
 
     <sys:String x:Key="Setup.Launch.Memory.Auto">自動設定</sys:String>
-    <sys:String x:Key="Setup.Launch.Memory.Auto.ToolTip">根據安裝的模組量與電腦剩餘記憶體，動態調整為遊戲分配的記憶體</sys:String>
+    <sys:String x:Key="Setup.Launch.Memory.Auto.ToolTip">根據安裝的模組量與電腦剩餘記憶體，動態調整為遊戲分配的記憶體，最多 12 GB</sys:String>
     <sys:String x:Key="Setup.Launch.Memory.AvailableSuffix">可用 {0} GiB</sys:String>
     <sys:String x:Key="Setup.Launch.Memory.GameAllocation">遊戲分配</sys:String>
     <sys:String x:Key="Setup.Launch.Memory.Max">最大記憶體（-Xmx）</sys:String>

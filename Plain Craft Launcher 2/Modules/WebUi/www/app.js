@@ -522,7 +522,8 @@ function syncButtons(parent, items, className, activate) {
     }
     const parts = node._parts;
     const featured = parent === ui["recommend-list"] && item.id === featuredPack()?.id;
-    const selected = featured || item.id === (catalog.viewedId || selectedId());
+    // 网格卡片不标记选中项，只保留悬停效果
+    const selected = featured || (parent !== ui.cards && item.id === (catalog.viewedId || selectedId()));
     node.classList.toggle("selected", selected);
     node.classList.toggle("pinned", false);
     node.setAttribute("aria-pressed", String(selected));
