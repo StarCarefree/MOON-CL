@@ -123,7 +123,7 @@ public sealed partial class PromoteService
         var process = Process.GetProcessById(int.Parse(pid));
         // 验证来源
         var mainProcessPath = Path.GetFullPath(process.MainModule!.FileName);
-        if (!string.Equals(mainProcessPath, Basics.ExecutablePath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(mainProcessPath, Basics.ProcessExecutablePath, StringComparison.OrdinalIgnoreCase))
         {
             Context.Error("来源验证失败，正在退出");
             return;
@@ -188,7 +188,7 @@ public sealed partial class PromoteService
     {
         // 启动提权进程
         _promoteProcess = ProcessInterop.Start(
-            Basics.ExecutablePath, $"promote {Basics.CurrentProcessId}", true);
+            Basics.ProcessExecutablePath, $"promote {Basics.CurrentProcessId}", true);
         if (_promoteProcess is null)
         {
             Context.Warn("提权进程启动失败");

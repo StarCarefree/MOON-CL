@@ -119,7 +119,7 @@ public partial class PageLaunchLeft
                     ModBase.Log("[Launch] Minecraft 文件夹无效，该文件夹已不存在：" + ModFolder.mcFolderSelected,
                         ModBase.LogLevel.Debug);
                 ModFolder.mcFolderListLoader.WaitForExit(isForceRestart: true);
-                States.Game.SelectedFolder = ModFolder.mcFolderList[0].Location.Replace(ModBase.exePath, "$");
+                States.Game.SelectedFolder = ModFolder.DefaultFolder().Location.Replace(ModBase.exePath, "$");
             }
 
             ModBase.Log("[Launch] Minecraft 文件夹：" + ModFolder.mcFolderSelected);

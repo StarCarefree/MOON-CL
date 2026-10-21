@@ -274,8 +274,9 @@ public partial class PageSelectLeft : IRefreshable
 
             if (ModFolder.mcFolderList.Count == 0)
                 throw new ArgumentNullException("没有可用的 Minecraft 文件夹");
-            States.Game.SelectedFolder = ModFolder.mcFolderList[0].Location.Replace(ModBase.exePath, "$");
-            ((MyListItem)ModMain.frmSelectLeft.PanList.Children[1]).Checked = true;
+            var defaultFolder = ModFolder.DefaultFolder();
+            States.Game.SelectedFolder = defaultFolder.Location.Replace(ModBase.exePath, "$");
+            ((MyListItem)ModMain.frmSelectLeft.PanList.Children[ModFolder.mcFolderList.IndexOf(defaultFolder) + 1]).Checked = true;
         }
         catch (Exception ex)
         {

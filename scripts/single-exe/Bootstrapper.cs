@@ -372,6 +372,9 @@ internal static class Program
             psi.EnvironmentVariables["DOTNET_TC_QuickJit"] = "1";
             psi.EnvironmentVariables["DOTNET_TC_QuickJitForLoops"] = "1";
             psi.EnvironmentVariables["DOTNET_ReadyToRun"] = "1";
+            // 外壳与解压目录路径，让内层程序把数据目录定位到外壳所在目录
+            psi.EnvironmentVariables["PCL_MOON_HOST_EXE"] = Process.GetCurrentProcess().MainModule.FileName;
+            psi.EnvironmentVariables["PCL_MOON_HOST_PAYLOAD"] = Path.GetDirectoryName(exe);
             if (clearRoot)
             {
                 string[] names = new string[] { "DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_ARM64", "DOTNET_ROOT_X86" };

@@ -46,6 +46,7 @@ Assert-True 'skip-does-not-download' ($stub.Contains('跳过并启动') -and $st
 Assert-True 'secrets-local-file' $publish.Contains('secrets.local.ps1')
 Assert-True 'secrets-stamp-prop' ($publish.Contains('PclSecretsStampFile') -and $publish.Contains('secrets.stamp'))
 Assert-True 'secrets-auto-disable-build-servers' ($publish.Contains('-or -not [string]::IsNullOrWhiteSpace($env:PCL_WRITE_SECRET)') -and $publish.Contains('--disable-build-servers'))
+Assert-True 'host-exe-env' ($stub.Contains('PCL_MOON_HOST_EXE') -and $stub.Contains('PCL_MOON_HOST_PAYLOAD'))
 
 $ctorStart = $stub.IndexOf('public ConsentForm(')
 $ctorEnd = $stub.IndexOf('private static string Describe(')

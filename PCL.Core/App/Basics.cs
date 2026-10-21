@@ -59,9 +59,17 @@ public static class Basics
     public static int CurrentProcessId { get; } = CurrentProcess.Id;
 
     /// <summary>
-    /// 当前进程可执行文件的绝对路径。
+    /// 实际进程可执行文件路径（经单 exe 外壳启动时为解压目录中的内层程序）。
     /// </summary>
-    public static string ExecutablePath { get; } = Environment.ProcessPath!;
+    public static string ProcessExecutablePath { get; } = Environment.ProcessPath!;
+
+    /// <summary>
+    /// 当前进程可执行文件的绝对路径；经单 exe 外壳启动时为外壳 exe。
+    /// </summary>
+    public static string ExecutablePath { get; } = ResolveHostExecutable(
+        Environment.GetEnvironmentVariable("PCL_MOON_HOST_EXE"),
+        Environment.GetEnvironmentVariable("PCL_MOON_HOST_PAYLOAD"),
+        ProcessExecutablePath) ?? ProcessExecutablePath;
 
     /// <summary>
     /// 当前进程可执行文件所在的目录。若有需求，请使用 <see cref="Path.Combine(string[])"/> 而不是自行拼接路径。
@@ -77,6 +85,25 @@ public static class Basics
     /// 当前进程可执行文件的名称，不含扩展名。
     /// </summary>
     public static string ExecutableNameWithoutExtension { get; } = Path.GetFileNameWithoutExtension(ExecutablePath);
+
+    /// <summary>
+    /// 校验单 exe 外壳注入的环境变量：只有 payload 与进程 exe 的父目录一致（即被外壳拉起的
+    /// 内层程序及其自我重启）才采用外壳路径；继承了环境变量的其他进程一律忽略。
+    /// </summary>
+    internal static string? ResolveHostExecutable(string? host, string? payload, string processPath)
+    {
+        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(payload) || !File.Exists(host))
+            return null;
+        var processParent = Path.GetDirectoryName(processPath);
+        if (string.IsNullOrEmpty(processParent)) return null;
+        var payloadDir = Path.GetFullPath(payload)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var processDir = Path.GetFullPath(processParent)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(payloadDir, processDir, StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFullPath(host)
+            : null;
+    }
 
     /// <summary>
     /// 当前进程包括第一个参数（文件名）的完整命令行参数。

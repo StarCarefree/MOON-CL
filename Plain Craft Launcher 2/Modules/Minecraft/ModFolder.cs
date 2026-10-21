@@ -23,6 +23,14 @@ public static class ModFolder
     /// </summary>
     public static List<McFolder> mcFolderList = new();
 
+    /// <summary>
+    ///     没有有效选择时的默认文件夹：优先启动器同目录的 .minecraft，其次同目录下的其他 MC 文件夹，否则取列表第一个。
+    /// </summary>
+    public static McFolder DefaultFolder() =>
+        mcFolderList.FirstOrDefault(f => string.Equals(f.Location, ModBase.exePath + @".minecraft\", StringComparison.OrdinalIgnoreCase))
+        ?? mcFolderList.FirstOrDefault(f => f.Location?.StartsWith(ModBase.exePath, StringComparison.OrdinalIgnoreCase) == true)
+        ?? mcFolderList[0];
+
     public class McFolder // 必须是 Class，否则不是引用类型，在 ForEach 中不会得到刷新
     {
         public enum Types
